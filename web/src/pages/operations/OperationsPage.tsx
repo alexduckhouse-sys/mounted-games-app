@@ -75,6 +75,7 @@ function OperationsPageContent() {
   const [sectionId, setSectionId] = useState<number | null>(competition.sections[0]?.id ?? null);
   const [seed, setSeed] = useState('1');
   const [preview, setPreview] = useState<DrawPreview | null>(null);
+  const [previous, setPrevious] = useState<DrawPreview | null>(null);
   const [round, setRound] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
   const toast = useToast();
@@ -116,6 +117,7 @@ function OperationsPageContent() {
         `/competitions/${competition.id}/sections/${sectionId}/draw/preview`,
         { seed: parsedSeed },
       );
+      setPrevious(preview);
       setPreview(data);
       setRound(0);
       setSheet(null);
@@ -209,12 +211,18 @@ function OperationsPageContent() {
       <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={() => { reloadCompetition(); void loadReadiness(); }} />
 
       {loadError && (!readiness || tool !== null) && <Notice actionLabel={t('common.tryAgain')} onAction={() => void loadReadiness()}>{loadError}</Notice>}
-      {!tool && loadingReadiness && !readiness && <p role="status" className="rf-note">{t('ops.page.checkingDetails')}</p>}
-
-      {!tool && (
-        <BeforeTheDayHub competition={competition} readiness={readiness} groups={groups} mayDuplicate={mayDuplicate} refreshFailed={loadError !== null && readiness !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} />
+      {!tool && loadingReadiness && !readiness && (
+        <div role="status" className="ops-skel" aria-busy="true">
+          <span className="sr-only">{t('ops.page.checkingDetails')}</span>
+          {[0, 1, 2, 3].map((row) => <span key={row} className="mg-skel ops-skel-row" aria-hidden="true" />)}
+        </div>
       )}
 
+      {!tool && !(loadingReadiness && !readiness) && (
+        <div key="hub" className="ops-fade"><BeforeTheDayHub competition={competition} readiness={readiness} groups={groups} mayDuplicate={mayDuplicate} refreshFailed={loadError !== null && readiness !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} /></div>
+      )}
+
+      {tool && tool !== 'draw' && <div key={tool} className="ops-fade">
       {tool === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
 
       {tool === 'protests' && (
@@ -238,15 +246,16 @@ function OperationsPageContent() {
       {tool === 'print' && <div className="ops-tools ops-flat"><PrintSheetsPanel competitionId={String(competition.id)} /></div>}
       {tool === 'results' && <div className="ops-tools ops-flat"><ResultsBookTab competitionId={String(competition.id)} /></div>}
       {tool === 'duplicate' && mayDuplicate && <DuplicateEventPanel competition={competition} />}
+      </div>}
 
       {tool === 'draw' && (
-        <section aria-label={t('ops.page.sectionDraw')}>
+        <section aria-label={t('ops.page.sectionDraw')} className="ops-fade">
           {competition.sections.length === 0 && <RefineNote>{t('ops.page.addSectionFirst')}</RefineNote>}
           {!preview && sheet !== 'draw' && (
             <DrawSettingsForm sections={competition.sections} sectionId={sectionId} seed={seed} previewing={previewing} onSection={changeSection} onSeed={changeSeed} onPreview={() => void previewDraw()} />
           )}
           {drawError && <Notice>{drawError}</Notice>}
-          {preview && <DrawResult preview={preview} round={round} onRound={setRound} onNewSeed={newSeed} busy={previewing} />}
+          {preview && <DrawResult preview={preview} previous={previous} round={round} onRound={setRound} onNewSeed={newSeed} busy={previewing} />}
         </section>
       )}
 

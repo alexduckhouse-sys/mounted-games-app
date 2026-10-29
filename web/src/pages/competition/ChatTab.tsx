@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Lock, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -15,7 +15,6 @@ import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
-import { useDockAction } from '../../components/TickerContext';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { activeLocale, tr } from '../../i18n/translate';
 
@@ -136,12 +135,6 @@ function ChatTabSession() {
   const latest = listed.slice(desktop ? 0 : -3).reverse();
 
   const activeStreams = streams.filter((stream) => stream.status !== 2);
-  // Organisers: the stream's status and controls open from the dock; with no dock they stay in the card on the page.
-  const [streamOpen, setStreamOpen] = useState(false);
-  const closeStream = useCallback(() => setStreamOpen(false), []);
-  const dockFocusRef = useRef<HTMLElement | null>(null);
-  const streamDocked = useDockAction(canPost ? { label: t('teams.stream.controls'), icon: 'settings', onClick: () => setStreamOpen(true) } : null);
-  const streamNotSetUp = canManageStream && streamingChecked && !streamingEnabled;
   const liveNow = activeStreams.length > 0;
   // Organisers make announcements here; non-organisers cannot make announcements (they message organisers on /contact).
   const canCompose = canModerate;
@@ -345,11 +338,11 @@ function ChatTabSession() {
 
       {canPost ? (
         <>
-          {(!streamDocked || activeStreams.length > 0) && <div className="live-col live-col-rail">
+          <div className="live-col live-col-rail">
             <div className="mg-section-head live-stream-head"><h2>{t('teams.stream.stream')}</h2></div>
-            {!streamDocked && <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={streamNotSetUp} onSaved={reload} />}
+            <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
             {activeStreams.length > 0 && <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={null} competitionName={competition.name} publicLayout />}
-          </div>}
+          </div>
           <div className="live-col live-col-main">
             {announcementsSection}
           </div>
@@ -364,11 +357,6 @@ function ChatTabSession() {
             {announcementsSection}
           </div>
         </>
-      )}
-
-      {canPost && streamDocked && streamOpen && (
-        <StreamSettingsOverlay competitionId={competition.id} fallback={competition.streamUrl ?? null} canBroadcast={canBroadcast} canEditStream={canManageStream} onSaved={reload} onClose={closeStream}
-          returnFocusRef={dockFocusRef} controls={{ active: activeStreams[0] ?? null, streamingNotSetUp: streamNotSetUp }} />
       )}
 
       {allOpen && (
@@ -503,39 +491,29 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
   const [editing, setEditing] = useState(false);
   const closeSettings = useCallback(() => setEditing(false), []);
   const changeRef = useRef<HTMLButtonElement>(null);
+  const streamName = active ? active.caption || `${active.arenaName} · ${active.angleName}` : fallback ? 'Competition stream' : 'No stream is set';
   return <div className="staff-stream-wrap">
-    <StreamStatus active={active} fallback={fallback}>
+    <div className="staff-stream mg-card">
+      <span className="staff-stream-thumb"><Video aria-hidden="true" /></span>
+      <span className="staff-stream-copy"><strong>{active ? 'Stream is on' : fallback ? 'Stream link is set' : 'Stream hasn’t started'}</strong><span>{streamName}</span></span>
       {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
         : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
-    </StreamStatus>
-    <StreamActions active={active} competitionId={competitionId} canBroadcast={canBroadcast} />
+    </div>
+    {canBroadcast && (
+      <div className="staff-stream-actions">
+        {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
+        {active
+          ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
+          : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
+      </div>
+    )}
     {streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }
 
-/** The stream's state in one line: on, link only, or not started. */
-function StreamStatus({ active, fallback, children }: { active: LiveStream | null; fallback: string | null; children?: ReactNode }) {
-  const streamName = active ? active.caption || `${active.arenaName} · ${active.angleName}` : fallback ? 'Competition stream' : 'No stream is set';
-  return <div className="staff-stream mg-card">
-    <span className="staff-stream-thumb"><Video aria-hidden="true" /></span>
-    <span className="staff-stream-copy"><strong>{active ? 'Stream is on' : fallback ? 'Stream link is set' : 'Stream hasn’t started'}</strong><span>{streamName}</span></span>
-    {children}
-  </div>;
-}
-
-function StreamActions({ active, competitionId, canBroadcast }: { active: LiveStream | null; competitionId: number; canBroadcast: boolean }) {
-  if (!canBroadcast) return null;
-  return <div className="staff-stream-actions">
-    {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
-    {active
-      ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
-      : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
-    <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
-  </div>;
-}
-
-function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef, controls }: {
+function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef }: {
   competitionId: number;
   fallback: string | null;
   canBroadcast: boolean;
@@ -543,8 +521,6 @@ function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditS
   onSaved: () => void;
   onClose: () => void;
   returnFocusRef: RefObject<HTMLElement | null>;
-  /** Set when the overlay opens from the dock: it then also holds the stream's status and the links the page card used to show. */
-  controls?: { active: LiveStream | null; streamingNotSetUp: boolean };
 }) {
   const { ref: dialogRef, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
   useDialogFocus(dialogRef, onClose, '[aria-label="Close stream settings"]', returnFocusRef);
@@ -552,11 +528,8 @@ function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditS
     <div ref={dialogRef} {...handlers} style={style} className={`staff-stream-dialog${dragging ? ' is-dragging' : ''}`} role="dialog" aria-modal="true" aria-label="Stream settings">
       <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>Stream settings</h2><button type="button" className="mg-icon-btn" aria-label="Close stream settings" onClick={onClose}><X aria-hidden="true" /></button></div>
-      {controls && <StreamStatus active={controls.active} fallback={fallback} />}
-      {controls && <StreamActions active={controls.active} competitionId={competitionId} canBroadcast={canBroadcast} />}
-      {controls?.streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}
       {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />Change camera</Link>}
-      {canEditStream && <CompStreamEditor competition={{ id: competitionId, streamUrl: fallback }} canEditStream={canEditStream} onSaved={onSaved} />}
+      <CompStreamEditor competition={{ id: competitionId, streamUrl: fallback }} canEditStream={canEditStream} onSaved={onSaved} />
     </div>
   </div>;
 }

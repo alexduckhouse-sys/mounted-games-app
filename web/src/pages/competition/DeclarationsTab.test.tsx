@@ -236,7 +236,7 @@ describe('DeclarationsTab: the dec form', () => {
     expect(addBar()).toHaveTextContent('Add rider 1');
     await user.click(addBar());
     expect(within(screen.getByRole('region', { name: 'Add a rider' })).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
-    await user.click(within(screen.getByRole('region', { name: 'Add a rider' })).getByRole('button', { name: 'Close' }));
+    await user.keyboard('{Escape}'); // on a phone the panel is a sheet with no Close button
     expect(screen.queryByRole('region', { name: 'Add a rider' })).not.toBeInTheDocument();
   });
 
@@ -257,7 +257,7 @@ describe('DeclarationsTab: the dec form', () => {
     await fillTeam(user);
     // The reserve slot opens after the fifth rider; leaving it empty is fine.
     expect(screen.getByRole('region', { name: 'Add a non-riding reserve' })).toBeInTheDocument();
-    await user.click(within(screen.getByRole('region', { name: 'Add a non-riding reserve' })).getByRole('button', { name: 'Close' }));
+    await user.keyboard('{Escape}');
     expect(addBar()).toHaveTextContent('Add a reserve');
     expect(screen.getByText('Agree to the terms to send it.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Team complete' })).toBeInTheDocument();

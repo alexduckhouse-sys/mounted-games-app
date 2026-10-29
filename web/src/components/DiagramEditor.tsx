@@ -213,7 +213,7 @@ export function DiagramEditor({ value, onChange }: Props) {
               >
                 {slotLabel(t, s, model.poleCount)}
                 {count > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-amber-500 text-white text-[10px] leading-[18px] text-center">{count}</span>
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-amber-400 text-slate-900 text-[10px] font-bold leading-[18px] text-center">{count}</span>
                 )}
               </button>
             );

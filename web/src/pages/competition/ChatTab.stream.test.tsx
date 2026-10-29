@@ -6,9 +6,6 @@ import { api } from '../../api';
 import type { CompetitionDetail, LiveStream } from '../../types';
 import { chat, competition, session } from '../../test/factories';
 import { deferred, flush } from '../../test/streamFakes';
-import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
-import { TickerProvider } from '../../components/TickerContext';
-import { TopBarTicker } from '../../components/TopBarTicker';
 
 const context = vi.hoisted(() => ({ detail: null as CompetitionDetail | null, streams: [] as LiveStream[], enabled: false, organiser: true, roles: [] as string[], streamUrl: 'https://youtu.be/old' as string | null, messages: [] as unknown[], reload: vi.fn() }));
 import { autoConfirm } from '../../test/confirm';
@@ -381,26 +378,4 @@ it('swipes the all-announcements sheet down to close it', async () => {
   fireEvent.touchMove(dialog, { touches: [{ clientY: 260 }] });
   fireEvent.touchEnd(dialog, { changedTouches: [{ clientY: 260 }] });
   expect(screen.queryByRole('dialog', { name: 'All announcements' })).toBeNull();
-});
-
-it('gives organisers one dock button that opens the stream status, links and settings in the overlay', async () => {
-  context.roles = ['Admin']; context.enabled = true;
-  render(<MemoryRouter><CurrentCompetitionProvider><TickerProvider><ChatTab /><TopBarTicker /></TickerProvider></CurrentCompetitionProvider></MemoryRouter>); await act(flush);
-  // The card is gone from the page; the announcements stay.
-  expect(screen.queryByText('Stream link is set')).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Go live' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Stream controls' }));
-  const overlay = screen.getByRole('dialog', { name: 'Stream settings' });
-  expect(within(overlay).getByText('Stream link is set')).toBeVisible();
-  expect(within(overlay).getByRole('link', { name: 'Go live' })).toHaveAttribute('href', '/competitions/1/broadcast');
-  expect(within(overlay).getByRole('link', { name: 'Replays' })).toBeInTheDocument();
-  expect(within(overlay).getByRole('link', { name: 'Commentary desk' })).toHaveAttribute('href', '/competitions/1/commentary');
-  expect(within(overlay).getByPlaceholderText('https://youtu.be/… or https://twitch.tv/channel')).toBeVisible();
-});
-
-it('puts nothing in the dock for the public', async () => {
-  context.roles = [];
-  render(<MemoryRouter><CurrentCompetitionProvider><TickerProvider><ChatTab /><TopBarTicker /></TickerProvider></CurrentCompetitionProvider></MemoryRouter>); await act(flush);
-  expect(screen.queryByRole('button', { name: 'Stream controls' })).toBeNull();
 });

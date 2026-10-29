@@ -179,7 +179,7 @@ export const screen: AreaCatalogue<typeof en> = {
   'screen.colour.pink': 'Pinc',
   'screen.colour.custom': 'Lliw personol',
   'screen.qr.title': 'Rhannu gyda chodau QR',
-  'screen.qr.description': 'Dewiswch beth i’w rannu: y dudalen canlyniadau gyhoeddus, y sgrin deledu neu ddesg y sylwebydd. Mae dolenni’r sgorwyr dan Sgorwyr a thîm.',
+  'screen.qr.description': 'Dewiswch beth i’w rannu: y dudalen canlyniadau gyhoeddus, y sgrin deledu neu ddesg y sylwebydd. Mae dolenni’r sgorwyr yn Cyn y diwrnod › Pobl a chodau QR.',
   'screen.qr.tablist': 'Categorïau codau QR',
   'screen.qr.tabScorer': 'Dolenni QR gwirfoddolwyr a sgorwyr (dim mewngofnodi)',
   'screen.qr.tabScreens': 'Codau QR sgriniau, system sain a gwylwyr',

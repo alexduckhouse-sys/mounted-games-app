@@ -310,7 +310,7 @@ function ShopHeader() {
   const { competition } = useCompetition();
   const start = new Date(competition.startDate);
   const when = Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
-  usePageHeader({ title: t('site.shop.eventShopOne'), subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: '/shop', backLabel: t('site.shop.backToShop') });
+  usePageHeader({ title: t('site.shop.eventShopOne'), subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('entries.page.backToDetails') });
   return null;
 }
 

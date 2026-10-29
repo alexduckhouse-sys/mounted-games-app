@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useT } from '../../../i18n/LanguageContext';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { GripButton } from '../../../components/GripButton';
+import { useRowDrag } from '../../../hooks/useRowDrag';
+import { moveItem } from '../../../lib/creatorRaces';
 import {
   arenaOf, hatbandsFor, lanesOfArena, MAX_LANES, HATBAND_COLOURS, type CreatorDraft,
 } from '../../../lib/creatorDraft';
@@ -44,7 +46,7 @@ function BandFields({ name, hex, onName, onHex }: { name: string; hex: string; o
 
 /**
  * The hatbands, one for each lane in order, as many as the biggest arena has lanes. Each has any name and any colour.
- * Rows move up and down, and a ⋯ menu changes a colour or removes one.
+ * Rows are put in order by dragging the six-dot grip (or the arrow keys while it has focus), and a ⋯ menu changes a colour or removes one.
  */
 export function HatbandEditor({ draft, change }: { draft: CreatorDraft; change: (patch: Partial<CreatorDraft>) => void }) {
   const t = useT();
@@ -54,28 +56,26 @@ export function HatbandEditor({ draft, change }: { draft: CreatorDraft; change: 
   const [adding, setAdding] = useState<{ name: string; hex: string } | null>(null);
   const save = (next: string[]) => change({ laneHatbands: next, noHatbands: next.length === 0 });
 
-  const move = (i: number, by: number) => {
-    const next = [...list];
-    [next[i], next[i + by]] = [next[i + by], next[i]];
+  const { grab, keys, lifted, rowStyle } = useRowDrag();
+  const onMove = (from: number, to: number) => {
     setEditing(null);
-    save(next);
+    save(moveItem(list, from, to));
   };
 
   return (
     <div role="group" aria-label={t('admin.creator.hat.heading')}>
       <SmallHead>{t('admin.creator.hat.heading')}</SmallHead>
-      <div className="cw-card">
+      <div className="cw-card" data-row-list="">
         {list.map((stored, i) => {
           const name = hatbandName(stored) || t('admin.creator.hat.lane', { n: i + 1 });
           const open = editing?.index === i;
           return (
             <div key={i}>
-              <div className="cw-row" style={{ gap: 8 }}>
+              <div className="cw-row" data-race-row="" data-lifted={lifted(i)} style={{ gap: 8, ...rowStyle(i) }}>
+                <GripButton label={t('admin.creator.hat.move', { name })} onPointerDown={(e) => { setEditing(null); grab(e, i, list.length, onMove); }} onKeyDown={(e) => keys(e, i, list.length, onMove)} />
                 <span className="cw-lane" aria-hidden="true">{i + 1}</span>
                 <span className="cw-dot" aria-hidden="true" style={dotStyle(stored)} />
                 <span className="cw-grow cw-t1">{name}</span>
-                <button type="button" className="cw-ib" aria-label={t('admin.creator.hat.moveUp', { name })} disabled={i === 0} onClick={() => move(i, -1)}><ChevronUp className="h-[18px] w-[18px]" aria-hidden="true" /></button>
-                <button type="button" className="cw-ib" aria-label={t('admin.creator.hat.moveDown', { name })} disabled={i === list.length - 1} onClick={() => move(i, 1)}><ChevronDown className="h-[18px] w-[18px]" aria-hidden="true" /></button>
                 <RefineMenu label={t('admin.creator.hat.moreFor', { name })} items={[
                   { label: t('admin.creator.hat.change'), onSelect: () => { setAdding(null); setEditing({ index: i, name: hatbandName(stored), hex: hatbandHex(stored) }); } },
                   { label: t('admin.creator.remove'), danger: true, onSelect: () => { setEditing(null); save(list.filter((_, j) => j !== i)); } },
