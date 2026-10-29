@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { activeLocale, tr } from '../../i18n/translate';
 import type { DeclarationForm } from '../../types';
-import { RefineDisclosure, RefineList, RefineNote, RefineSheet } from '../refine/Refine';
+import { RefineDisclosure, RefineList, RefineNote } from '../refine/Refine';
+import { Sheet } from '../../components/Sheet';
 import type { RiderSwap, TeamEntry } from './types';
 import { apiMessage, isOffline, newRequestId, statusOf } from './types';
 import { Notice } from '../../components/Notice';
@@ -25,14 +26,25 @@ function swapLine(swap: RiderSwap): string {
   return tr('ops2.swap.inFor', { incoming, out });
 }
 
-/** Bring a reserve in for a rider on the team's current declaration, or record a Referee-approved emergency replacement. */
-export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapped }: {
+interface SwapProps {
   competitionId: number;
   team: TeamEntry;
   canWrite: boolean;
   onClose: () => void;
   onSwapped: (message: string) => void;
-}) {
+}
+
+/** Bring a reserve in for a rider on the team's current declaration, or record a Referee-approved emergency replacement. */
+export function RiderSwapSheet(props: SwapProps) {
+  const t = useT();
+  return (
+    <Sheet title={t('ops2.swap.title', { name: props.team.teamName })} onClose={props.onClose}>
+      {({ close }) => <SwapForm {...props} close={close} />}
+    </Sheet>
+  );
+}
+
+function SwapForm({ competitionId, team, canWrite, onSwapped, close }: SwapProps & { close: (after?: () => void) => void }) {
   const t = useT();
   const [form, setForm] = useState<DeclarationForm | null | undefined>(undefined);
   const [history, setHistory] = useState<RiderSwap[]>([]);
@@ -104,7 +116,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
         requestId,
       });
       onSwapped(`${team.teamName}: ${swapLine(data)}.`);
-      onClose();
+      close();
     } catch (failure) {
       const status = statusOf(failure);
       setError(isOffline(failure)
@@ -117,7 +129,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
   }
 
   return (
-    <RefineSheet title={t('ops2.swap.title', { name: team.teamName })} onClose={onClose}>
+    <>
       {form === undefined && !loadError && <p role="status" className="rf-note">{t('ops2.swap.loading')}</p>}
       {loadError && <Notice actionLabel={t('common.tryAgain')} onAction={() => void load()}>{loadError}</Notice>}
       {form === null && <RefineNote>{t('ops2.swap.noDec')}</RefineNote>}
@@ -128,13 +140,16 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
         <form className="ops-form" onSubmit={(event) => void submit(event)}>
           <fieldset className="ops-pick">
             <legend>{t('ops2.swap.out')}</legend>
+            <RefineList as="div">
             {riding.map((rider) => (
               <label key={rider.id} className="rf-row ops-check"><input type="radio" name="swap-out" checked={outId === rider.id} onChange={() => setOutId(rider.id)} /> <span className="rf-grow">{rider.fullName}{rider.isCaptain ? ` (${t('ops2.swap.captain')})` : ''}</span></label>
             ))}
+            </RefineList>
           </fieldset>
           {reserves.length > 0 && (
             <fieldset className="ops-pick">
               <legend>{t('ops2.swap.in')}</legend>
+              <RefineList as="div">
               {reserves.map((rider) => (
                 <label key={rider.id} className="rf-row ops-check"><input type="radio" name="swap-in" checked={inId === rider.id} onChange={() => setInId(rider.id)} /> <span className="rf-grow">{rider.fullName}</span></label>
               ))}
@@ -142,31 +157,32 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
                 <input type="radio" name="swap-in" checked={inId === 0} onChange={() => setInId(0)} />
                 <span className="rf-grow">{t('ops2.swap.emergency')}</span>
               </label>
+              </RefineList>
             </fieldset>
           )}
           {isEmergency && (
             <div className="flex flex-col gap-2">
-              <label className="rf-fld">{t('ops2.swap.repRider')}
+              <label className="kit-sheet-field">{t('ops2.swap.repRider')}
                 <input placeholder={t('ops2.swap.repRiderPh')} value={replacementRider} onChange={(event) => setReplacementRider(event.target.value)} />
               </label>
-              <label className="rf-fld">{t('ops2.swap.repPony')}
+              <label className="kit-sheet-field">{t('ops2.swap.repPony')}
                 <input placeholder={t('ops2.swap.repPonyPh')} value={replacementPony} onChange={(event) => setReplacementPony(event.target.value)} />
               </label>
             </div>
           )}
-          <label className="rf-fld">{form.isLocked || isEmergency ? t('ops2.panel.reasonLabel') : t('ops2.panel.reasonOptional')}
+          <label className="kit-sheet-field">{form.isLocked || isEmergency ? t('ops2.panel.reasonLabel') : t('ops2.panel.reasonOptional')}
             <textarea className="ops-note-input" placeholder={isEmergency ? t('ops2.swap.reasonPh') : undefined} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
           </label>
           {form.isLocked && (
-            <label className="rf-row ops-check">
+            <RefineList as="div"><label className="rf-row ops-check">
               <input type="checkbox" checked={override} onChange={(event) => setOverride(event.target.checked)} />
               <span className="rf-grow">{t('ops2.swap.override')}<span className="rf-t2">{t('ops2.swap.lockedDec')}</span></span>
-            </label>
+            </label></RefineList>
           )}
           {error && <Notice>{error}</Notice>}
-          <div className="rf-actions">
-            <button type="button" className="rf-btn" onClick={onClose}>{t('common.cancel')}</button>
-            <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy || !canWrite || outId == null || effectiveInId == null || !emergencyReady}>{busy ? t('ops2.swap.swapping') : t('ops2.panel.swap')}</button>
+          <div className="kit-acts">
+            <button type="button" className="kit-pill" onClick={() => close()}>{t('common.cancel')}</button>
+            <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !canWrite || outId == null || effectiveInId == null || !emergencyReady}>{busy ? t('ops2.swap.swapping') : t('ops2.panel.swap')}</button>
           </div>
         </form>
       )}
@@ -189,6 +205,6 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
           </RefineList>
         </div>
       )}
-    </RefineSheet>
+    </>
   );
 }

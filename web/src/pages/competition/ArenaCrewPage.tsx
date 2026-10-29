@@ -5,6 +5,8 @@ import { useT } from '../../i18n/LanguageContext';
 import type { MessageKey } from '../../i18n/en/index.ts';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { loadRaceTemplates, sessionFormat } from '../../lib/raceTemplates';
 import {
   buildOfflineArenaCrewPropSheet,
@@ -35,7 +37,7 @@ function Group({ title, items, tone }: { title: string; items: string[]; tone: '
   const colour = tone === 'in' ? '--mg-ok' : tone === 'out' ? '--mg-elim' : '--mg-muted';
   return (
     <section className="rounded-[10px] bg-[rgb(var(--mg-subtle))] p-3.5" style={{ borderLeft: `6px solid rgb(var(${colour}))` }} aria-label={title}>
-      <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: `rgb(var(${colour}))` }}>{title}</h3>
+      <h3 className="text-sm font-bold" style={{ color: `rgb(var(${colour}))` }}>{title}</h3>
       {items.length === 0
         ? <p className="mt-1 text-lg text-[rgb(var(--mg-muted))]">{t('desk.commentary.nothing')}</p>
         : <ul className="mt-1 space-y-1.5">{items.map((item) => <li key={item} className="text-xl font-semibold leading-snug text-[rgb(var(--mg-ink))]">{item}</li>)}</ul>}
@@ -134,6 +136,21 @@ export function ArenaCrewPage() {
     setParams(merged, { replace: true });
   }
 
+  // With the ticker dock the three choices live in one sheet opened from the filters button; without it they stay inline.
+  const [choosing, setChoosing] = useState(false);
+  const docked = useDockAction(raceSessions.length > 0 ? { label: t('desk.commentary.pickWhat'), icon: 'filters', count: filter === 'all' ? 0 : 1, onClick: () => setChoosing(true) } : null);
+
+  const pickRows = (
+    <div className="mg-card overflow-hidden divide-y divide-[rgb(var(--mg-rule-soft))]">
+      <PickRow label={t('desk.commentary.pickSession')} value={String(session?.id ?? '')} onPick={(id) => choose({ session: Number(id) })}
+        options={raceSessions.map((s) => ({ value: String(s.id), label: `${s.name}${s.arenaName ? ` · ${s.arenaName}` : ''}` }))} />
+      <PickRow label={t('desk.commentary.pickHeat')} value={String(heat?.id ?? '')} onPick={(id) => choose({ heat: Number(id) })}
+        options={heats.map((h) => ({ value: String(h.id), label: heatName(h) }))} />
+      <PickRow label={t('desk.commentary.pickZone')} value={filter} onPick={(key) => setFilter(key as ArenaCrewZoneFilter)}
+        options={ZONE_FILTERS.map((z) => ({ value: z.key, label: t(z.label) }))} />
+    </div>
+  );
+
   if (raceSessions.length === 0) {
     return <p className="mg-card p-4 text-base">{t('desk.commentary.noRaceSessions')}</p>;
   }
@@ -141,14 +158,8 @@ export function ArenaCrewPage() {
   return (
     <div className="space-y-4 pb-8">
       {/* Three settings rows, each opening a bottom sheet: one control per choice rather than boxes and a row of pills. */}
-      <div className="mg-card overflow-hidden divide-y divide-[rgb(var(--mg-rule-soft))]">
-        <PickRow label={t('desk.commentary.pickSession')} value={String(session?.id ?? '')} onPick={(id) => choose({ session: Number(id) })}
-          options={raceSessions.map((s) => ({ value: String(s.id), label: `${s.name}${s.arenaName ? ` · ${s.arenaName}` : ''}` }))} />
-        <PickRow label={t('desk.commentary.pickHeat')} value={String(heat?.id ?? '')} onPick={(id) => choose({ heat: Number(id) })}
-          options={heats.map((h) => ({ value: String(h.id), label: heatName(h) }))} />
-        <PickRow label={t('desk.commentary.pickZone')} value={filter} onPick={(key) => setFilter(key as ArenaCrewZoneFilter)}
-          options={ZONE_FILTERS.map((z) => ({ value: z.key, label: t(z.label) }))} />
-      </div>
+      {!docked && pickRows}
+      {docked && choosing && <Sheet title={t('desk.commentary.pickWhat')} onClose={() => setChoosing(false)}>{pickRows}</Sheet>}
 
       {offline && <p role="status" className="rounded-[10px] bg-[rgb(var(--mg-info-bg))] px-3 py-2 text-sm text-[rgb(var(--mg-info-ink))]">{t('desk.commentary.offline')}</p>}
 

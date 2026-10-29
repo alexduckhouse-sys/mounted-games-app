@@ -39,6 +39,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Admin:Key", AdminKey);
         // Tests sign in far more often than the production limits allow.
         builder.UseSetting("RateLimits:AuthPerMinute", "100000");
+        builder.UseSetting("RateLimits:AuthPerIpPerMinute", "100000");
         builder.UseSetting("RateLimits:AccountsPerIp", "100000");
         builder.UseSetting("RateLimits:WritesPerMinute", "100000");
         builder.UseSetting("RateLimits:PublicReadsPerMinute", "100000");
@@ -61,6 +62,7 @@ public class ApiFactory : WebApplicationFactory<Program>
             services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Services.Streaming.StreamSweeper)));
 
             services.Remove(services.Single(d => d.ImplementationType == typeof(IpRetentionSweeper)));
+            services.Remove(services.Single(d => d.ImplementationType == typeof(CompetitionDataRetentionSweeper)));
             services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Hubs.LiveSessionSweeper)));
 
             services.AddTransient<IStartupFilter, TestIpStartupFilter>();

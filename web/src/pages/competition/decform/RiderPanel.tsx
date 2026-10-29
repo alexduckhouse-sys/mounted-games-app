@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { isUnder18 } from '../../../lib/riderPrivacy';
 import { Field } from '../../auth/Field';
 import { useT } from '../../../i18n/LanguageContext';
 import { NumberField } from '../../../components/NumberField';
 import { Notice } from '../../../components/Notice';
-import { riderIssues, type DecRider } from '../../../lib/decForm';
+import { parseDob, riderIssues, type DecRider } from '../../../lib/decForm';
 import {
   asked, breach, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
 } from '../../../lib/decFormConfig';
 import type { SavedRider } from '../../../types';
+import { Sheet } from '../../../components/Sheet';
+import { useIsDesktop } from '../../../hooks/useMediaQuery';
 import '../../../components/sitePages.css';
 
 interface Props {
@@ -34,12 +37,12 @@ interface Props {
 const wide = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches;
 
 /**
- * The rider panel: a side panel on a laptop and a bottom sheet on a phone. It is the same markup both ways;
- * the classes decide where it sits. Pick a saved rider to fill every field, or type a new one.
+ * The rider panel: a side panel on a laptop and the shared bottom sheet on a phone, around the same fields. Pick a saved rider to fill every field, or type a new one.
  * It asks only what the competition's dec form setup asks for.
  */
 export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, onRemove, config = STANDARD_CONFIG }: Props) {
   const t = useT();
+  const desktop = useIsDesktop();
   const nameRef = useRef<HTMLInputElement>(null);
   /** A label that says when an answer can be skipped. */
   const labelOf = (text: string, requirement: Requirement) =>
@@ -68,16 +71,9 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
   const setExtra = (patch: Partial<ExtraAnswers>) => onChange({ extra: { ...extra, ...patch } });
   const setCustom = (id: string, value: string) => setExtra({ custom: { ...extra.custom, [id]: value } });
 
-  return (
+  // The fields and buttons, shared by the phone sheet and the laptop side panel.
+  const body = () => (
     <>
-      <button type="button" aria-hidden="true" tabIndex={-1} onClick={onClose} className="fixed inset-0 z-40 bg-[rgb(var(--mg-overlay)/0.55)] lg:hidden" />
-      <section aria-label={title}
-        className="z-50 flex flex-col gap-4 bg-[rgb(var(--mg-surface))] p-4 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:max-h-[88vh] max-lg:overflow-y-auto max-lg:rounded-t-2xl max-lg:pb-[calc(20px+env(safe-area-inset-bottom))] max-lg:shadow-[0_-12px_32px_rgb(var(--mg-overlay)/0.25)] lg:sticky lg:top-6 lg:gap-[18px] lg:rounded-xl lg:border-[1.5px] lg:border-[rgb(var(--mg-heading))] lg:p-6">
-        <div className="flex items-center gap-3">
-          <h2 className="mg-display flex-1 text-[26px] font-bold leading-tight text-[rgb(var(--mg-heading))] lg:text-[28px]">{title}</h2>
-          <button ref={closeRef} type="button" className="mg-icon-btn" aria-label={t('common.close')} onClick={onClose}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
-        </div>
-
         {!editing && choices.length > 0 && (
           <div className="flex flex-col gap-2">
             <span id="dec-saved-riders" className="text-sm font-semibold text-[rgb(var(--mg-body))]">{t('entries.rider.pickSaved')}</span>
@@ -98,6 +94,12 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
           </div>
         )}
 
+        <div className="sp-row">
+          <span className="sp-grow"><span className="sp-t1">Show surname as initial only on public start lists and results</span><span className="sp-t2">For example, Oliver S.</span></span>
+          <button type="button" role="switch" aria-label="Show surname as initial only on public start lists and results" aria-checked={form.useInitialOnly} className="rf-sw"
+            onClick={() => onChange({ useInitialOnly: !form.useInitialOnly, privacyChoiceMade: true })}><span aria-hidden="true" /></button>
+        </div>
+
         <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-3">
           <Field label={t('entries.rider.rider')}>
             {({ id }) => (
@@ -112,7 +114,10 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
               {({ id }) => (
                 <div className="mg-field" data-invalid={dobBad}>
                   <input id={id} value={form.dob} placeholder="dd/mm/yyyy" inputMode="numeric" autoComplete="off" aria-invalid={dobBad}
-                    onChange={(e) => onChange({ dob: e.target.value.replace(/[^\d/]/g, '').slice(0, 10) })} />
+                    onChange={(e) => {
+                      const dob = e.target.value.replace(/[^\d/]/g, '').slice(0, 10);
+                      onChange({ dob, ...(!form.privacyChoiceMade && isUnder18(parseDob(dob)) ? { useInitialOnly: true } : {}) });
+                    }} />
                 </div>
               )}
             </Field>
@@ -121,7 +126,12 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
             <Field label={labelOf(t('entries.rider.yearOfBirth'), config.dob)} error={issues.invalid.birthYear}>
               {({ id }) => (
                 <div className="mg-field" data-invalid={!!issues.invalid.birthYear}>
-                  <NumberField id={id} value={extra.birthYear} placeholder="2014" autoComplete="off" onChange={(e) => setExtra({ birthYear: e.target.value })} />
+                  <NumberField id={id} value={extra.birthYear} placeholder="2014" autoComplete="off" onChange={(e) => {
+                    const birthYear = e.target.value;
+                    const year = Number(birthYear);
+                    const age = new Date().getFullYear() - year;
+                    onChange({ extra: { ...extra, birthYear }, ...(!form.privacyChoiceMade && /^\d{4}$/.test(birthYear) && age >= 0 && age <= 18 ? { useInitialOnly: true } : {}) });
+                  }} />
                 </div>
               )}
             </Field>
@@ -255,11 +265,12 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
           </div>
         )}
 
+        {asked(config.medicalNotes) && <p id="medical-privacy-note" className="sp-note">Shared with the people authorised to manage this team’s declaration and the event organisers, who can pass it to first-aiders when needed. Deleted automatically after the event: after 7 days, or 14 days from the start if no end date is set.</p>}
         {asked(config.medicalNotes) && (
           <Field label={labelOf(t('entries.rider.medical'), config.medicalNotes)}>
             {({ id }) => (
               <div className="mg-field !items-start">
-                <textarea id={id} value={extra.medicalNotes} maxLength={1000} placeholder={t('entries.rider.medicalPlaceholder')} onChange={(e) => setExtra({ medicalNotes: e.target.value })} />
+                <textarea aria-describedby="medical-privacy-note" id={id} value={extra.medicalNotes} maxLength={1000} placeholder={t('entries.rider.medicalPlaceholder')} onChange={(e) => setExtra({ medicalNotes: e.target.value })} />
               </div>
             )}
           </Field>
@@ -273,7 +284,25 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
           {editing && onRemove && <button type="button" className="sp-red shrink-0" onClick={onRemove}>{reserve ? t('entries.rider.removeReserve') : t('entries.rider.removeRider')}</button>}
           <button type="button" className="mg-btn mg-btn-primary min-w-0 flex-1" disabled={!ready} onClick={onCommit}>{addLabel}</button>
         </div>
-      </section>
     </>
+  );
+
+  if (!desktop) {
+    return (
+      <Sheet title={title} onClose={onClose}>
+        {() => <div role="region" aria-label={title} className="flex flex-col gap-4">{body()}</div>}
+      </Sheet>
+    );
+  }
+
+  return (
+    <section aria-label={title}
+      className="z-50 flex flex-col gap-4 bg-[rgb(var(--mg-surface))] p-4 lg:sticky lg:top-6 lg:gap-[18px] lg:rounded-xl lg:border-[1.5px] lg:border-[rgb(var(--mg-heading))] lg:p-6">
+      <div className="flex items-center gap-3">
+        <h2 className="mg-display flex-1 text-[26px] font-bold leading-tight text-[rgb(var(--mg-heading))] lg:text-[28px]">{title}</h2>
+        <button ref={closeRef} type="button" className="mg-icon-btn" aria-label={t('common.close')} onClick={onClose}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
+      </div>
+      {body()}
+    </section>
   );
 }

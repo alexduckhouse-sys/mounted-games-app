@@ -16,7 +16,7 @@ const data = vi.hoisted(() => ({ sections: [] as unknown[] }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./context')>()),
-  useCompetition: () => ({ competition: { ...competition(), sections: data.sections }, reload: vi.fn() }),
+  useCompetition: () => ({ competition: { ...competition({ startDate: '2099-06-01' }), sections: data.sections }, reload: vi.fn() }),
 }));
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({

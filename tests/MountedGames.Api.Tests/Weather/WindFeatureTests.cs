@@ -9,6 +9,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
@@ -86,6 +87,104 @@ public class WindFeatureTests : IClassFixture<WindRetryApiFactory>
         var score = await client.PostAsJsonAsync($"/api/races/{race}/results", new SubmitRaceResultsRequest(places, [], ExpectedProgrammeRevision: 1));
         score.EnsureSuccessStatusCode();
         var heat = await score.ReadAsync<HeatDto>(); Assert.Equal(2, heat.Races[0].Results.First(r => r.TeamId == a.TeamIds[0]).Points);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplacementRace_QueuedStartAndFinishKeepRevisionAndTapTimes(bool scorerLink)
+    {
+        var (a, race, admin, replacement) = await Arrange();
+        var start = DateTime.UtcNow.AddMinutes(-30);
+        var finish = start.AddMinutes(3);
+        await f.WithDbAsync(async db =>
+        {
+            var competition = (await db.Competitions.FindAsync(a.CompetitionId))!;
+            competition.StartDate = start.Date;
+            competition.EndDate = finish.Date;
+            await db.SaveChangesAsync();
+        });
+        var prefix = $"/api/competitions/{a.CompetitionId}";
+        var preview = await (await admin.PostAsJsonAsync(prefix + "/wind-review/preview",
+            new WindPreviewRequest(a.SessionId, race, replacement))).ReadAsync<WindPreviewDto>();
+        (await admin.PostAsJsonAsync(prefix + "/race-changes", new WindApplyRequest(a.SessionId, race, replacement,
+            preview.Fingerprint, Guid.NewGuid().ToString(), preview.Authority, "Replacement approved.", true))).EnsureSuccessStatusCode();
+
+        var client = admin;
+        if (scorerLink)
+        {
+            var response = await admin.PostAsJsonAsync(prefix + "/scorer-links",
+                new { label = "Synthetic scorer", arenaName = "All arenas" });
+            response.EnsureSuccessStatusCode();
+            var created = await response.ReadAsync<CreatedScorerLinkDto>();
+            client = f.CreateClient();
+            client.DefaultRequestHeaders.Add(MountedGames.Api.Auth.ScorerLinkTokens.Header, created.Token);
+        }
+        var raceUrl = scorerLink ? $"/api/scorer/races/{race}" : $"/api/races/{race}";
+        var places = new[] { new FinishingPlaceDto(a.TeamIds[0], 1, false), new FinishingPlaceDto(a.TeamIds[1], 2, false) };
+
+        // An old offline Start cannot start the replacement, and rejection must be a conflict rather than a server error.
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(raceUrl + "/start",
+            new RaceClockRequest(start, ExpectedProgrammeRevision: 0))).StatusCode);
+        await f.WithDbAsync(async db => Assert.Null((await db.Races.FindAsync(race))!.StartedAt));
+        var started = await (await client.PostAsJsonAsync(raceUrl + "/start",
+            new RaceClockRequest(start, ExpectedProgrammeRevision: 1))).ReadAsync<RaceDto>();
+        Assert.Equal(1, started.ProgrammeRevision);
+        Assert.True(started.StartIsExplicit);
+        Assert.Equal(start, started.StartedAt);
+
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(raceUrl + "/results",
+            new SubmitRaceResultsRequest(places, [], ExpectedProgrammeRevision: 0, FinishedAt: finish))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(raceUrl + "/results",
+            new SubmitRaceResultsRequest(places, [], ExpectedProgrammeRevision: 1, FinishedAt: start.AddSeconds(-1)))).StatusCode);
+        await f.WithDbAsync(async db => Assert.False(await db.Results.AnyAsync(r => r.RaceId == race)));
+
+        var queuedScore = new SubmitRaceResultsRequest(places, [], ExpectedProgrammeRevision: 1, FinishedAt: finish);
+        var heat = await (await client.PostAsJsonAsync(raceUrl + "/results", queuedScore)).ReadAsync<HeatDto>();
+        var saved = Assert.Single(heat.Races, r => r.Id == race);
+        Assert.Equal(1, saved.ProgrammeRevision);
+        Assert.Equal(start, saved.StartedAt);
+        Assert.Equal(finish, saved.FinishedAt);
+        Assert.True(saved.StartIsExplicit);
+        Assert.True(saved.IsComplete);
+        Assert.Equal(2, saved.Results.Count);
+
+        // Retrying either queued request must keep the completed result and its recorded times.
+        (await client.PostAsJsonAsync(raceUrl + "/results", queuedScore)).EnsureSuccessStatusCode();
+        var lateStart = await (await client.PostAsJsonAsync(raceUrl + "/start",
+            new RaceClockRequest(start, ExpectedProgrammeRevision: 1))).ReadAsync<RaceDto>();
+        Assert.Equal(start, lateStart.StartedAt);
+        Assert.Equal(finish, lateStart.FinishedAt);
+        Assert.True(lateStart.IsComplete);
+        await f.WithDbAsync(async db =>
+        {
+            Assert.Equal(1, (await db.Set<RaceScoreState>().SingleAsync(s => s.RaceId == race)).Revision);
+            Assert.Single(await db.Set<RaceScoreEvent>().Where(e => e.RaceId == race).ToListAsync());
+        });
+    }
+
+    [Fact]
+    public async Task ReplacementRace_ClashResolutionRequiresReviewedProgrammeRevision()
+    {
+        var (a, race, admin, replacement) = await Arrange();
+        var prefix = $"/api/competitions/{a.CompetitionId}";
+        var preview = await (await admin.PostAsJsonAsync(prefix + "/wind-review/preview",
+            new WindPreviewRequest(a.SessionId, race, replacement))).ReadAsync<WindPreviewDto>();
+        (await admin.PostAsJsonAsync(prefix + "/race-changes", new WindApplyRequest(a.SessionId, race, replacement,
+            preview.Fingerprint, Guid.NewGuid().ToString(), preview.Authority, "Replacement approved.", true))).EnsureSuccessStatusCode();
+        var places = new[] { new FinishingPlaceDto(a.TeamIds[0], 1, false), new FinishingPlaceDto(a.TeamIds[1], 2, false) };
+        (await admin.PostAsJsonAsync($"/api/races/{race}/results", new SubmitRaceResultsRequest(places, [], ExpectedProgrammeRevision: 1))).EnsureSuccessStatusCode();
+        var incoming = new[] { new FinishingPlaceDto(a.TeamIds[1], 1, false), new FinishingPlaceDto(a.TeamIds[0], 2, false) };
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"/api/races/{race}/results",
+            new SubmitRaceResultsRequest(incoming, [], ExpectedProgrammeRevision: 1))).StatusCode);
+        foreach (int? revision in new int?[] { null, 0 })
+            Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"/api/races/{race}/clash/resolve",
+                new { useIncoming = true, expectedProgrammeRevision = revision })).StatusCode);
+        await f.WithDbAsync(async db => Assert.Equal(1, (await db.Set<RaceScoreState>().SingleAsync(s => s.RaceId == race)).Revision));
+        var resolved = await (await admin.PostAsJsonAsync($"/api/races/{race}/clash/resolve",
+            new { useIncoming = true, expectedProgrammeRevision = 1 })).ReadAsync<HeatDto>();
+        Assert.Equal(1, resolved.Races.Single(r => r.Id == race).Results.Single(r => r.TeamId == a.TeamIds[1]).Placing);
+        await f.WithDbAsync(async db => Assert.Equal(2, (await db.Set<RaceScoreState>().SingleAsync(s => s.RaceId == race)).Revision));
     }
 
     [Fact]

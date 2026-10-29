@@ -35,6 +35,23 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
 
     // ---- current ----
 
+    [Theory]
+    [InlineData("current?lat=1&lon=2")]
+    [InlineData("forecast?lat=1&lon=2&date=2030-06-01")]
+    [InlineData("at?lat=1&lon=2&when=2030-06-01T14:00:00Z")]
+    public async Task WeatherFailuresKeepFallbacksWithoutExposingInternalDetails(string path)
+    {
+        Reset();
+        _f.Http.Throw("open-meteo");
+        var (_, body) = await GetJsonAsync($"/api/weather/{path}");
+        Assert.False(body.TryGetProperty("detail", out _));
+        Assert.True(body.TryGetProperty("fallback", out _));
+        Assert.DoesNotContain("stubbed", body.GetRawText());
+        var clients = _f.Services.GetRequiredService<IHttpClientFactory>();
+        Assert.Equal(TimeSpan.FromSeconds(5), clients.CreateClient("weather").Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(5), clients.CreateClient("geocoding").Timeout);
+    }
+
     [Fact]
     public async Task Current_PassesThroughUpstreamJson()
     {
@@ -62,7 +79,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal("weather_unavailable", body.GetProperty("error").GetString());
         Assert.Equal(15, body.GetProperty("fallback").GetProperty("temperature_2m").GetInt32());
-        Assert.Contains("stubbed network failure", body.GetProperty("detail").GetString());
+        Assert.False(body.TryGetProperty("detail", out _));
     }
 
     [Fact]

@@ -50,9 +50,17 @@ describe('TeamsTab trainers', () => {
 
   it('lets an organiser put a club trainer in charge of a team', async () => {
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: 'Change trainer for Oak A' }));
     await waitFor(() => expect(optionLabels(screen.getByLabelText('Trainer for Oak A'))).toContain('Pat Trainer'), { timeout: 5000 });
     chooseOption(screen.getByLabelText('Trainer for Oak A'), 'tr-1');
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/1', { trainerUserId: 'tr-1' }));
+  });
+
+  it('fetches a club\'s trainers only when the picker is opened', async () => {
+    render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    expect(api.get).not.toHaveBeenCalledWith('/clubs/7/trainers');
+    await userEvent.click(screen.getByRole('button', { name: 'Change trainer for Oak A' }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/clubs/7/trainers'));
   });
 
   it('shows no trainer line at all when the viewer cannot organise', () => {
@@ -65,6 +73,7 @@ describe('TeamsTab trainers', () => {
   it('says so when the change cannot be saved', async () => {
     vi.mocked(api.put).mockRejectedValue(new Error('offline'));
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: 'Change trainer for Oak A' }));
     await waitFor(() => expect(optionLabels(screen.getByLabelText('Trainer for Oak A'))).toContain('Pat Trainer'), { timeout: 5000 });
     chooseOption(screen.getByLabelText('Trainer for Oak A'), 'tr-1');
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t change the trainer. Check your signal and try again.');

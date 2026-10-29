@@ -287,7 +287,7 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
   it('returns the validation error when importing invalid JSON or storage error when full', () => {
     expect(importCompetitionOutbox('not-json')).toEqual({
       ok: false,
-      error: 'That backup could not be read. Check that the whole JSON backup was copied.',
+      error: 'That backup couldn’t be read. Check you copied the whole message and try again.',
     });
 
     const backup = JSON.stringify([queued(1)]);
@@ -304,7 +304,7 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
     Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true, writable: true });
 
     await expect(shareOrCopyOutboxBackup(1, 'Spring Opener')).resolves.toBe('shared');
-    expect(shareMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Spring Opener — offline score backup' }));
+    expect(shareMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Spring Opener: offline score backup' }));
 
     shareMock.mockRejectedValueOnce(new Error('dismissed'));
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
@@ -319,4 +319,14 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true, writable: true });
     await expect(shareOrCopyOutboxBackup(1)).resolves.toBe('unavailable');
   });
+});
+
+
+it('rejects a cross-programme backup without writing or flushing retained scores', () => {
+  seed(queued(1, { expectedProgrammeRevision: 0 }));
+  const before = localStorage.getItem(KEY);
+  const imported = queued(1, { expectedProgrammeRevision: 1, queuedAt: '2026-06-01T13:00:00Z' });
+  expect(importCompetitionOutbox(JSON.stringify([imported]))).toEqual({ ok: false, error: expect.stringContaining('different race programme') });
+  expect(localStorage.getItem(KEY)).toBe(before);
+  expect(post).not.toHaveBeenCalled();
 });

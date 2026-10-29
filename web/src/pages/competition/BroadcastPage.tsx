@@ -106,6 +106,8 @@ function BroadcastStudio() {
   const [sound, setSound] = useState(true);
   const [windFilter, setWindFilter] = useState(false);
   const [qualityPreset, setQualityPreset] = useState<StreamQualityPreset>('1080p');
+  const qualityPresetRef = useRef(qualityPreset);
+  useEffect(() => { qualityPresetRef.current = qualityPreset; }, [qualityPreset]);
   const [cameraZoom, setCameraZoom] = useState<number>(1);
   const [screenDimmed, setScreenDimmed] = useState(false);
   const [inspectingClip, setInspectingClip] = useState<SavedReplayClip | null>(null);
@@ -158,6 +160,7 @@ function BroadcastStudio() {
     void hydrateSavedReplays(competition.id);
     const next = createStreamPublisher(competition.id, browserPublisherDependencies());
     publisher.current = next;
+    void next.setQualityPreset(qualityPresetRef.current);
     const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
     return () => { unsubscribe(); next.dispose(); setBroadcasting(false); };
   }, [competition.id]);
@@ -626,7 +629,7 @@ function BroadcastStudio() {
       {screenDimmed && (
         <DimmedLock
           label={t('desk.stream.bc.dimmedLabel')}
-          className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
+          className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/50 select-none"
           onUnlock={() => setScreenDimmed(false)}
         >
           <Lock className="h-8 w-8" />

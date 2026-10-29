@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BarChart3, ChevronLeft, Download, Mic, Monitor, Printer, QrCode as QrCodeIcon } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from '../eventTools/eventToolsTypes';
 import type { PrintableEntries, ResultsBook } from '../eventTools/resultsBookTypes';
 import { EntriesView, ResultsBookView } from '../eventTools/ResultsBookView';
@@ -22,7 +23,7 @@ import type { CompetitionDetail, ScorerLink } from '../../types';
 import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { useToast } from '../../components/Toast';
-import { getStoredCards } from '../competition/ScoringParts';
+import { OfficialResultsDownload } from './OfficialResultsDownload';
 import { competitionDateText } from '../../lib/competitionDates';
 
 /** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
@@ -64,6 +65,7 @@ export default function PrintEventPage() {
 }
 
 function PrintView({ competitionId, view, initialSponsorMode = false }: { competitionId: string; view: View; initialSponsorMode?: boolean }) {
+  const { canOrganise } = useAuth();
   const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | PrintableTackCheck | { competition: CompetitionDetail } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -77,7 +79,6 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   const [printing, setPrinting] = useState(false);
   const [linksLoadedId, setLinksLoadedId] = useState<string | null>(null);
   const loadingLinks = view === 'posters' && linksLoadedId !== String(competitionId ?? '');
-  const [exportingResults, setExportingResults] = useState(false);
   const toast = useToast();
   const [searchParams] = useSearchParams();
   const sessionId = view === 'draw' || view === 'score-sheets' || view === 'results' ? parseSessionId(searchParams.get('sessionId')) : null;
@@ -158,6 +159,9 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   if (!data) return <p className="mg-card p-4" role="status">{tr('ops2.print.preparing')}</p>;
   const competition = data.competition;
   const reference = competition.competitionNumber?.trim() || null;
+  // The sheets are public, but the kiosk, PA desk, posters, official pack and sponsor report are for the event's organisers.
+  // The printable data doesn't say who made the event, so any signed-in organiser role (or a member of its team) counts; the API decides the rest.
+  const organiser = canOrganise() || canOrganise({ id: competition.id });
   const showQr = !sponsorMode && QR_VIEWS.includes(view);
 
   const totalSections = compDetail?.sections?.length
@@ -189,145 +193,31 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     window.print();
   }
 
-  async function exportOfficialResultsCsv() {
-    if (!competitionId) return;
-    setExportingResults(true);
-    try {
-      // Referee cards live on the teams: fetch the competition if the page hasn't already (only posters and the sponsor report do).
-      const detail = compDetail ?? (await api.get<CompetitionDetail>(`/competitions/${competitionId}`)).data;
-      const [resultsRes, sheetsRes] = await Promise.all([
-        api.get<PrintableResults>(`/event-tools/competitions/${competitionId}/print/results`).catch(() => null),
-        api.get<PrintableScoreSheets>(`/event-tools/competitions/${competitionId}/print/score-sheets`).catch(() => null),
-      ]);
 
-      const storedCards: Record<number, 'yellow' | 'red' | null> = { ...getStoredCards(Number(competitionId)) };
-      const teamMap = new Map<number, string>();
-      if (detail.teams) {
-        for (const t of detail.teams) {
-          teamMap.set(t.id, t.displayName);
-          if (t.refereeCard === 'yellow' || t.refereeCard === 'red') {
-            storedCards[t.id] = t.refereeCard;
-          }
-        }
-      }
-      const header = [
-        'Section',
-        'Session',
-        'Heat',
-        'Race',
-        'Type',
-        'Rank',
-        'Team',
-        'Club / Bib',
-        'Points',
-        'Card',
-        'Notes',
-      ];
-      const rows: (string | number)[][] = [];
-
-      if (resultsRes?.data?.sections) {
-        for (const section of resultsRes.data.sections) {
-          for (const res of section.results ?? []) {
-            teamMap.set(res.teamId, res.teamName);
-            const card = storedCards[res.teamId];
-            const cardLabel = card ? (card === 'yellow' ? 'Yellow card' : 'Red card') : '';
-            rows.push([
-              section.sectionName,
-              'Finals / Overall',
-              '',
-              '',
-              'Standings',
-              res.rank,
-              res.teamName,
-              res.clubName,
-              res.totalPoints,
-              cardLabel,
-              res.bonusPoints ? `Bonus: ${res.bonusPoints}` : '',
-            ]);
-          }
-        }
-      }
-
-      if (sheetsRes?.data?.heats) {
-        for (const heat of sheetsRes.data.heats) {
-          for (const race of heat.races ?? []) {
-            for (const team of race.teams ?? []) {
-              teamMap.set(team.teamId, team.teamName);
-              const card = storedCards[team.teamId];
-              const cardLabel = card ? (card === 'yellow' ? 'Yellow card' : 'Red card') : '';
-              rows.push([
-                heat.sectionName || '',
-                heat.sessionName || '',
-                heat.label || '',
-                race.name || '',
-                'Heat Race',
-                team.placing ?? '',
-                team.teamName,
-                team.bib ?? '',
-                scoreText(team),
-                cardLabel,
-                team.status ? (statusLetter(team.eliminated, team.status) ?? '') : '',
-              ]);
-            }
-          }
-        }
-      }
-
-      const cardEntries = Object.entries(storedCards).filter(([, c]) => !!c);
-      if (cardEntries.length > 0) {
-        for (const [teamIdStr, card] of cardEntries) {
-          const tId = Number(teamIdStr);
-          rows.push([
-            '',
-            '',
-            '',
-            '',
-            'Referee Card Incident',
-            '',
-            teamMap.get(tId) ?? `Team #${tId}`,
-            '',
-            '',
-            card === 'yellow' ? 'Yellow card' : 'Red card',
-            'Card recorded in scoring sheet',
-          ]);
-        }
-      }
-
-      const compName = competition?.name || 'competition';
-      downloadCsv(`${safeFilename(compName)}-official-results-pack.csv`, toCsv(header, rows));
-    } catch (caught) {
-      toast.show(message(caught));
-    } finally {
-      setExportingResults(false);
-    }
-  }
 
   return (
     <article className="event-print-page">
       {toast.node}
       <div className="event-print-controls mb-5 flex flex-wrap items-center gap-2">
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/details`}><ChevronLeft className="h-4 w-4" />{tr('ops2.print.eventDetails')}</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />{tr('ops2.print.tvKiosk')}</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />{tr('ops2.print.paDesk')}</Link>
-        <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
-          <QrCodeIcon className="h-4 w-4" />{tr('ops2.print.view.posters')}
-        </Link>
-        <button
-          type="button"
-          onClick={() => void exportOfficialResultsCsv()}
-          disabled={exportingResults}
-          className="mg-btn mg-btn-secondary"
-        >
-          <Download className="h-4 w-4" />{exportingResults ? tr('ops2.print.exporting') : tr('ops2.print.officialPack')}
-        </button>
-        <button
-          type="button"
-          aria-pressed={sponsorMode}
-          onClick={() => setSponsorMode((v) => !v)}
-          className="mg-btn mg-btn-secondary"
-        >
-          <BarChart3 className="h-4 w-4" />{tr('ops2.print.sponsorReport')}
-        </button>
+        {organiser && (
+          <>
+            <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />{tr('ops2.print.tvKiosk')}</Link>
+            <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />{tr('ops2.print.paDesk')}</Link>
+            <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
+              <QrCodeIcon className="h-4 w-4" />{tr('ops2.print.view.posters')}
+            </Link>
+            <OfficialResultsDownload competitionId={Number(competitionId)} className="mg-btn mg-btn-secondary" />
+            <button
+              type="button"
+              aria-pressed={sponsorMode}
+              onClick={() => setSponsorMode((v) => !v)}
+              className="mg-btn mg-btn-secondary"
+            >
+              <BarChart3 className="h-4 w-4" />{tr('ops2.print.sponsorReport')}
+            </button>
+          </>
+        )}
         <button className="mg-btn mg-btn-primary" disabled={printing} onClick={() => void printPage()}><Printer className="h-4 w-4" />{tr('ops2.print.print')}</button>
         {sessionId && !sponsorMode && (
           <span className="flex items-center gap-2 text-sm text-[rgb(var(--mg-muted))]">
@@ -336,7 +226,8 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           </span>
         )}
       </div>
-      <header className="event-print-header">
+      {/* The poster sheets carry their own name and date, so the page header above them would push the first one onto a second sheet. */}
+      <header className={`event-print-header${view === 'posters' && !sponsorMode ? ' event-print-header-posters' : ''}`}>
         <div className="event-print-header-text">
           <p className="event-print-kicker">{tr('common.mountedGames')}</p>
           <h1>{competition.name}</h1>
@@ -569,7 +460,7 @@ function QrPostersSection({
   posterLinks,
   loadingLinks,
 }: {
-  competition: CompetitionDetail | { id: number; name: string; location?: string | null; startDate: string; endDate?: string | null; what3Words?: string | null; latitude?: number | null; longitude?: number | null };
+  competition: CompetitionDetail | { id: number; name: string; location?: string | null; startDate: string; endDate?: string | null; what3Words?: string | null; postcode?: string | null; latitude?: number | null; longitude?: number | null };
   scorerLinks: ScorerLink[];
   /** Fresh links with their QR addresses; null until the sheet has been printed. */
   posterLinks: PosterLink[] | null;
@@ -606,6 +497,12 @@ function QrPostersSection({
               <span className="font-semibold">{tr('ops2.print.p.venueLoc')}</span>
               <p className="text-sm font-medium">{competition.location || tr('ops2.print.p.locDetails')}</p>
             </div>
+            {competition.postcode && (
+              <div>
+                <span className="font-semibold">{tr('ops2.print.p.postcode')}</span>
+                <p className="font-mono text-sm font-bold">{competition.postcode}</p>
+              </div>
+            )}
             {competition.what3Words && (
               <div>
                 <span className="font-semibold">{tr('ops2.print.p.w3w')}</span>
@@ -650,11 +547,7 @@ function QrPostersSection({
             <p className="mx-auto max-w-lg text-sm text-[rgb(var(--mg-body))]">
               {tr('ops2.print.p.toCreate')}
             </p>
-            <ol className="mx-auto mt-3 max-w-md list-decimal pl-5 text-left text-sm text-[rgb(var(--mg-body))]">
-              <li>{tr('ops2.print.p.step1a')}<strong>{tr('ops2.print.p.step1b')}</strong> &gt; <strong>{tr('ops2.print.p.step1c')}</strong>{tr('ops2.print.p.end')}</li>
-              <li>{tr('ops2.print.p.step2a')}<strong>{tr('ops2.print.p.arenaScorer')}</strong>, <strong>{tr('ops2.print.p.tripod')}</strong>{tr('ops2.print.p.step2b')}<strong>{tr('ops2.print.p.scorerStream')}</strong>{tr('ops2.print.p.end')}</li>
-              <li>{tr('ops2.print.p.step3a')}<strong>{tr('ops2.print.p.createLink')}</strong>{tr('ops2.print.p.step3b')}</li>
-            </ol>
+            <p className="mx-auto mt-3 max-w-md text-sm text-[rgb(var(--mg-body))]">{tr('ops2.print.p.steps')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">

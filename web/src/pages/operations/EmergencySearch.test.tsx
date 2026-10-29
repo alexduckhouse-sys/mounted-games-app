@@ -23,7 +23,7 @@ describe('EmergencySearch', () => {
   it('lists nobody until something is typed, and says searches are recorded', () => {
     render(<EmergencySearch competitionId={7} />);
     expect(screen.getByText(/Every search is recorded/)).toBeInTheDocument();
-    expect(screen.getByText(/Nothing is listed until you do/)).toBeInTheDocument();
+    expect(screen.getByText(/Type at least 2 letters/)).toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalled();
   });
 
@@ -39,6 +39,7 @@ describe('EmergencySearch', () => {
     expect(api.get).toHaveBeenCalledWith('/competitions/7/emergency-contacts', { params: { q: 'Ava' } });
     expect(screen.getByText('Ava Test on Biscuit')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /07700 900123/ })).toHaveAttribute('href', 'tel:07700900123');
+    fireEvent.click(screen.getByRole('button', { name: /Ava Test on Biscuit/ }));
     expect(screen.getByRole('link', { name: /\+44 7700 900456/ })).toHaveAttribute('href', 'tel:+447700900456');
     expect(screen.getByText('Medical notes: Asthma')).toBeInTheDocument();
   });
@@ -47,9 +48,10 @@ describe('EmergencySearch', () => {
     vi.mocked(api.get).mockResolvedValue({ data: [entry({ emergencyContactPhone: null, trainerName: null, trainerPhone: null, ponyName: null, isReserve: true, medicalNotes: null }), entry({ riderEntryId: 2, emergencyContactName: null, emergencyContactPhone: null })] });
     render(<EmergencySearch competitionId={7} />);
     await type('Ava');
-    expect(screen.getByText(/Pat Test · no number/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Pat Test · no number/).length).toBeGreaterThan(0);
     expect(screen.getByText('Ava Test (reserve)')).toBeInTheDocument();
-    expect(screen.queryByText('Coach')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Ava Test \(reserve\)/ }));
+    expect(screen.queryByText('Coach')).not.toBeInTheDocument();
   });
 
   it('says when nobody matches', async () => {

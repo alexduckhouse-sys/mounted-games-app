@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,12 +41,41 @@ beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue({ data: { token: 'test-token', expiresAt: '2099-01-01T00:00:00Z', user: profile } });
 });
 
+describe('SignUpPage layout', () => {
+  it('puts the three roles in one card with a tick on the chosen one and a hint on each', async () => {
+    mount();
+    const radios = screen.getAllByRole('radio');
+    expect(new Set(radios.map((radio) => radio.parentElement)).size).toBe(1);
+    expect(radios[0].parentElement).toHaveClass('mg-card');
+    expect(radios[1]).toHaveAccessibleDescription('Organise competitions and send in declarations');
+    expect(radios[2]).toHaveAccessibleDescription('Run a club and approve its trainers');
+    await userEvent.click(radios[1]);
+    expect(radios[1].querySelector('svg')).toHaveClass('opacity-100');
+    expect(radios[2].querySelector('svg')).toHaveClass('opacity-0');
+  });
+
+  it('floats the club suggestions over the form instead of pushing it down', async () => {
+    mount();
+    await userEvent.type(screen.getByLabelText('Club / team name'), 'Sto');
+    const list = screen.getByRole('group', { name: 'Club suggestions' });
+    expect(list).toHaveClass('absolute', 'z-20');
+    expect(list.parentElement).toHaveClass('relative');
+  });
+
+  it('gives the privacy link a full-size tap target and notes caps lock under the password', () => {
+    mount();
+    expect(screen.getByRole('link', { name: 'How we use your information' })).toHaveClass('min-h-11');
+    fireEvent.keyDown(screen.getByLabelText('Password'), { key: 'A', modifierCapsLock: true });
+    expect(screen.getByText('Caps lock is on')).toBeInTheDocument();
+  });
+});
+
 describe('SignUpPage', () => {
   it('asks for a name, email, password, club / team name and role, and nothing else', () => {
     mount();
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeInTheDocument();
     for (const label of ['Your name', 'Email', 'Password', 'Club / team name']) expect(screen.getByLabelText(label)).toBeInTheDocument();
-    expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['Rider or parent', 'Trainer', 'Team manager']);
+    expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('aria-labelledby') && document.getElementById(radio.getAttribute('aria-labelledby')!)?.textContent)).toEqual(['Rider or parent', 'Trainer', 'Team manager']);
     expect(screen.queryByLabelText(/Username/)).not.toBeInTheDocument();
     expect(screen.queryByText(/PBKDF2/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');

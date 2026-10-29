@@ -198,12 +198,12 @@ describe('buildCommentatorBriefing', () => {
     it('measures the cushion above the cutline for those inside it', () => {
       // Cutline 2 with 4 teams: team 2 is inside, first outside is team 3 on 18.
       const b = build({ standings: rows(30, 25, 18, 5), finalistCount: 2 });
-      expect(b.lanes[1].stakesHeadline).toBe('#2 overall (25 pts) — +7 pts above the Top 2 A-Final cutline');
+      expect(b.lanes[1].stakesHeadline).toBe('#2 overall (25 pts), 7 pts clear of the A final cut-off');
     });
 
     it('measures the deficit when close and omits it when far behind', () => {
       const close = build({ standings: rows(30, 25, 20, 5), finalistCount: 2 });
-      expect(close.lanes[2].stakesHeadline).toBe('#3 overall (20 pts) — 5 pts off the Top 2 A-Final cutline');
+      expect(close.lanes[2].stakesHeadline).toBe('#3 overall (20 pts), 5 pts off the A final cut-off');
       const far = build({ standings: rows(50, 40, 20, 5), finalistCount: 2 });
       expect(far.lanes[2].stakesHeadline).toBe('#3 overall (20 pts)');
     });
@@ -219,11 +219,11 @@ describe('buildCommentatorBriefing', () => {
       const h = heat(10, { entries: [entry(3, 1)] });
       const via = (extra: Partial<Parameters<typeof buildCommentatorBriefing>[0]>, sess: Session) =>
         buildCommentatorBriefing({ competitionId: 1, session: sess, heat: h, standings: four, teams: [], ...extra }).lanes[0].stakesHeadline;
-      expect(via({ finalistCount: 3 }, session(1))).toContain('Top 3');
-      expect(via({}, session(1, { lanesPerHeat: 4 }))).toContain('Top 4');
-      expect(via({}, session(1))).toContain('Top 5');
-      expect(via({ finalistCount: 1 }, session(1))).toContain('Top 2');
-      expect(via({ finalistCount: null }, session(1, { lanesPerHeat: 3 }))).toContain('Top 3');
+      expect(via({ finalistCount: 3 }, session(1))).toContain('10 pts clear');
+      expect(via({}, session(1, { lanesPerHeat: 4 }))).toContain('15 pts clear');
+      expect(via({}, session(1))).toContain('19 pts clear');
+      expect(via({ finalistCount: 1 }, session(1))).toContain('10 pts off');
+      expect(via({ finalistCount: null }, session(1, { lanesPerHeat: 3 }))).toContain('10 pts clear');
     });
 
     it('adds talking points for the leader and the teams either side of the cutline, up to six', () => {

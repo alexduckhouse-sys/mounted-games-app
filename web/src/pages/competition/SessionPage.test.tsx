@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MotionConfig } from 'framer-motion';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,13 +36,13 @@ function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = 
     return Promise.resolve({ data: [] });
   });
   const view = (data: CompetitionDetail) => (
-    <MemoryRouter initialEntries={['/competitions/1/session/1']}>
+    <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={['/competitions/1/session/1']}>
       <CompetitionContext.Provider value={{
         competition: data, reload, saveOverlay, streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [],
       }}>
         <Routes><Route path="/competitions/:id/session/:sessionId" element={<SessionPage />} /></Routes>
       </CompetitionContext.Provider>
-    </MemoryRouter>
+    </MemoryRouter></MotionConfig>
   );
   const mounted = render(view(data));
   return { ...mounted, updateCompetition: (next: CompetitionDetail) => mounted.rerender(view(next)) };
@@ -56,10 +57,17 @@ const scoringData = (n = 4) => competition({
 });
 const row = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}, lane`) }).closest('li') as HTMLElement;
 const placed = () => screen.queryAllByLabelText(/^Place \d+$/).length;
-const opened = (raceName: string) => screen.findByRole('region', { name: `Scoring ${raceName}` });
+const opened = async (raceName: string) => {
+  const region = await screen.findByRole('region', { name: `Scoring ${raceName}` });
+  const skip = within(region).queryByRole('button', { name: 'Score without start time' });
+  if (skip) fireEvent.click(skip);
+  return region;
+};
 // Taps a rider and waits until `count` teams are placed. Framer Motion drops an occasional tap when clicks
 // follow each other very quickly in jsdom, so a tap that has not counted is repeated.
 async function tapRider(name: string, count: number) {
+  const skip = screen.queryByRole('button', { name: 'Score without start time' });
+  if (skip) fireEvent.click(skip);
   for (let attempt = 0; attempt < 4 && placed() < count; attempt++) {
     await userEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}, lane`) }));
     try {
@@ -77,6 +85,10 @@ const openOrganiserTools = async () => {
   const sheet = await openTools();
   await userEvent.click(within(sheet).getByRole('button', { name: /Organiser tools/ }));
   return screen.getByRole('dialog', { name: 'Organiser tools' });
+};
+const openAdjustments = async () => {
+  await userEvent.click(within(await screen.findByRole('dialog', { name: 'Organiser tools' })).getByRole('button', { name: 'Score adjustments' }));
+  return screen.getByRole('dialog', { name: 'Score adjustments' });
 };
 const openInfo = async (link: RegExp, dialog: string) => {
   const sheet = await openTools();
@@ -123,7 +135,7 @@ describe('SessionPage', () => {
       expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
       const tools = await openOrganiserTools();
       expect(within(tools).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
-      expect(screen.queryByText('Score record')).not.toBeInTheDocument();
+      expect(screen.queryByText('Score history')).not.toBeInTheDocument();
       expect(screen.queryByText(/Sign off/)).not.toBeInTheDocument();
       expect(screen.queryByText('History')).not.toBeInTheDocument();
     });
@@ -400,7 +412,7 @@ describe('SessionPage', () => {
       fireEvent.keyDown(screen.getByRole('button', { name: /^Rider 3, lane/ }), { key: 'Delete' });
       await tapRider('Rider 2', 2);
       await completeRace();
-      const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
+      const sheet = screen.getByRole('dialog', { name: 'Why are they out?' });
       expect(within(sheet).getByText('Rider 3')).toBeInTheDocument();
       await userEvent.click(within(sheet).getByRole('button', { name: 'Did not start' }));
       await userEvent.click(within(sheet).getByRole('button', { name: 'Save race' }));
@@ -451,7 +463,7 @@ describe('SessionPage', () => {
       await userEvent.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
       await completeRace();
       // Rider 2 is out for not finishing, so the sheet starts on that reason.
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Why were teams eliminated?' })).getByRole('button', { name: 'Save race' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Why are they out?' })).getByRole('button', { name: 'Save race' }));
       expect(outbox()[0].places).toEqual([
         { teamId: 1, place: 1, eliminated: false, refereeNote: 'Quick start' },
         { teamId: 2, place: 0, eliminated: true, status: 3, refereeNote: 'Did not finish' },
@@ -531,7 +543,7 @@ describe('SessionPage', () => {
       await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Make HC' }));
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true }));
       await waitFor(() => expect(reload).toHaveBeenCalled());
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
       await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2', { isHorsConcours: false }));
     });
@@ -573,7 +585,7 @@ describe('SessionPage', () => {
       await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'red' }));
       expect(within(row('Rider 2')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
       await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'yellow' }));
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
@@ -604,7 +616,7 @@ describe('SessionPage', () => {
       await userEvent.click(within(await teamMenu(sheet, 'Rider 1')).getByRole('menuitem', { name: 'Change points' }));
       await userEvent.click(within(sheet).getByRole('button', { name: 'One point fewer for Rider 1' }));
       expect(within(sheet).getByText('2')).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
       expect(row('Rider 1')).toHaveTextContent('2 pts by hand');
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
       await waitFor(() => expect(row('Rider 1')).not.toHaveTextContent('by hand'));
@@ -754,7 +766,7 @@ describe('SessionPage', () => {
       expect(screen.queryByRole('link', { name: /Sessions/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Rules/ })).not.toBeInTheDocument();
       // Nothing sits under the race any more: no details panel, and the tools wait in the sheet.
-      expect(document.querySelector('details')).toBeNull();
+      expect(screen.getByRole('region', { name: /^Scoring/ }).querySelector('details')).toBeNull();
       expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Scorer links' })).not.toBeInTheDocument();
       const tools = await openOrganiserTools();
@@ -810,7 +822,7 @@ describe('SessionPage', () => {
         expect(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: /Lanes for Final/ })).toBeInTheDocument();
       }, { timeout: 5000 });
       await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: /Lanes for Final/ }));
-      const lanes = screen.getByRole('dialog', { name: 'Next round lanes' });
+      const lanes = screen.getByRole('dialog', { name: 'Lanes for Final' });
       expect(lanes).toHaveTextContent('Provisional');
       expect(lanes).toHaveTextContent('A1');
       view.unmount();
@@ -927,6 +939,7 @@ describe('SessionPage', () => {
       });
       mount(tiedComp);
       await openOrganiserTools();
+      await openAdjustments();
 
       await userEvent.selectOptions(screen.getByLabelText('Run-off winner'), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
@@ -936,8 +949,8 @@ describe('SessionPage', () => {
       const customPts = screen.getByLabelText('Custom points');
       await userEvent.clear(customPts);
       await userEvent.type(customPts, '4.5');
-      await userEvent.type(screen.getByLabelText('Override reason'), 'Dead heat');
-      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      await userEvent.type(screen.getByLabelText('Reason'), 'Dead heat');
+      await userEvent.click(screen.getByRole('button', { name: 'Set points' }));
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({
         reason: 'Dead heat',
         places: expect.arrayContaining([
@@ -973,22 +986,23 @@ describe('SessionPage', () => {
       vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
       mount(tiedComp);
       await openOrganiserTools();
+      const adjustments = await openAdjustments();
 
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
-      expect(await screen.findByText('Couldn’t save the run-off result. Check your signal and try again.')).toBeInTheDocument();
+      expect(await within(adjustments).findByText('Couldn’t save the run-off result. Check your signal and try again.')).toBeInTheDocument();
 
       const customPts = screen.getByLabelText('Custom points');
       await userEvent.clear(customPts);
       await userEvent.type(customPts, '2.25');
-      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
-      expect(await screen.findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Set points' }));
+      expect(await within(adjustments).findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
 
       const delta = screen.getByLabelText('Point adjustment');
       await userEvent.clear(delta);
       await userEvent.type(delta, '0.3');
       await userEvent.type(screen.getByLabelText('Adjustment reason'), 'Typo');
       await userEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
-      expect(await screen.findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
+      expect(await within(adjustments).findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
       expect(api.post).not.toHaveBeenCalled();
     });
 
@@ -1000,6 +1014,7 @@ describe('SessionPage', () => {
       mount(scoringData(2));
       await opened('Bending');
       await openOrganiserTools();
+      await openAdjustments();
 
       await userEvent.selectOptions(screen.getByLabelText('Short-handed team'), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Mark team HC (Hors Concours)' }));
@@ -1007,7 +1022,7 @@ describe('SessionPage', () => {
 
       await userEvent.selectOptions(screen.getByLabelText('Under review team'), '2');
       await userEvent.type(screen.getByLabelText('Under review note'), 'Lane interference');
-      await userEvent.click(screen.getByRole('button', { name: 'Flag Under Review' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Flag under review' }));
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/sessions/races/1/results/2/under-review', {
         underReview: true,
         note: 'Lane interference',
@@ -1041,6 +1056,7 @@ describe('SessionPage', () => {
     mount(data);
     await opened('Flag');
     await openOrganiserTools();
+      await openAdjustments();
     expect(screen.getByRole('list', { name: 'Remaining uncompleted races' })).toHaveTextContent('Flag');
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', {
@@ -1061,6 +1077,7 @@ describe('SessionPage', () => {
     const { updateCompetition } = mount(data);
     await opened('Bending');
     await openOrganiserTools();
+    await openAdjustments();
     await userEvent.click(screen.getByRole('button', { name: 'Remove Flag' }));
 
     const changed = structuredClone(data);
@@ -1081,7 +1098,48 @@ describe('SessionPage', () => {
     expect(await screen.findByText('The race programme changed. Refresh and review it.')).toBeVisible();
   });
 
-  describe('Commentator facts, post-race summary modal, and QR Access', () => {
+  describe('Score adjustments and Set up heats sheets', () => {
+    it('opens Score adjustments as the shared sheet with 44px controls, and closes it on Escape or a tap on the dim', async () => {
+      mount(scoringData(2));
+      await opened('Bending');
+      await openOrganiserTools();
+      const sheet = await openAdjustments();
+      expect(sheet).toHaveClass('kit-sheet');
+      expect(within(sheet).getByRole('button', { name: 'Apply adjustment' })).toHaveClass('min-h-11');
+      expect(within(sheet).getByLabelText('Short-handed team')).toHaveClass('min-h-11');
+      fireEvent(sheet, new Event('cancel', { cancelable: true }));
+      expect(screen.queryByRole('dialog', { name: 'Score adjustments' })).toBeNull();
+      const again = await openAdjustments();
+      fireEvent.click(again);
+      expect(screen.queryByRole('dialog', { name: 'Score adjustments' })).toBeNull();
+    });
+
+    it('shows a failed adjustment inside the sheet, not on the page behind it', async () => {
+      vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+      mount(scoringData(2));
+      await opened('Bending');
+      await openOrganiserTools();
+      const sheet = await openAdjustments();
+      await userEvent.type(within(sheet).getByLabelText('Adjustment reason'), 'Late');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Apply adjustment' }));
+      const message = 'Couldn’t save score adjustment. Check your signal and try again.';
+      expect(await within(sheet).findByText(message)).toBeInTheDocument();
+      expect(screen.getAllByText(message)).toHaveLength(1);
+    });
+
+    it('opens Set up heats as the shared sheet with no blurred backdrop, and closes it on Escape', async () => {
+      mount(competition({ teams, sessions: [session(1, { status: 0, heats: [], plannedRaces: ['Sword'] })] }), []);
+      await userEvent.click(screen.getByRole('button', { name: /Set up heats/ }));
+      const sheet = await screen.findByRole('dialog', { name: 'Set up heats' });
+      expect(sheet).toHaveClass('kit-sheet');
+      expect(document.querySelector('.backdrop-blur-sm')).toBeNull();
+      expect(within(sheet).getByRole('button', { name: 'Generate' })).toHaveClass('kit-pill');
+      fireEvent(sheet, new Event('cancel', { cancelable: true }));
+      expect(screen.queryByRole('dialog', { name: 'Set up heats' })).toBeNull();
+    });
+  });
+
+  describe('Commentator facts, post-race summary modal, and QR access', () => {
     it('turns commentator facts on from race tools, shows a line under each team, and opens the post-race toplist & heat table modal after completing a race', async () => {
       const forms: DeclarationForm[] = [
         {
@@ -1097,7 +1155,7 @@ describe('SessionPage', () => {
       const sheet = await openTools();
       await userEvent.click(within(sheet).getByRole('switch', { name: /Commentator facts/ }));
       expect(localStorage.getItem('mg.commentatorScoring.1')).toBe('yes');
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
 
       // Official standings (with the tack bonus) decide the line under each team.
       await waitFor(() => expect(row('Rider 1')).toHaveTextContent('Leading'));
@@ -1202,7 +1260,7 @@ describe('SessionPage', () => {
       await userEvent.click(within(sheet).getByRole('button', { name: /QR access/ }));
       const modal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
       expect(modal).toBeInTheDocument();
-      await userEvent.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
+      await userEvent.click(within(modal).getByRole('button', { name: 'Close' }));
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
       expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
     });
@@ -1249,10 +1307,27 @@ it('clears the in-memory draft and undo action when a race is rerun', async () =
   mount(scoringData(2));
   await opened('Bending');
   await tapRider('Rider 1', 1);
-  const sheet = await openOrganiserTools();
-  // Race controls and the score adjustments panel both offer a re-run in this sheet; the first is the race controls'.
-  await userEvent.click(within(sheet).getAllByRole('button', { name: /Re-run stopped race/ })[0]);
+  await openOrganiserTools();
+  const sheet = await openAdjustments();
+  await userEvent.click(within(sheet).getByRole('button', { name: /Re-run stopped race/ }));
   await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
   expect(screen.queryByLabelText('Place 1')).toBeNull();
   expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+});
+
+// Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
+vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));
+
+it('keeps a flag-down tap and arena details with offline scores', async () => {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  const data = scoringData(2);
+  mount(data);
+  await userEvent.click(screen.getByRole('button', { name: 'Start race · flag down' }));
+  await tapRider('Rider 1', 1);
+  await tapRider('Rider 2', 2);
+  await completeRace();
+  const queued = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]');
+  expect(queued[0]).toMatchObject({ raceId: 1, sessionName: data.sessions[0].name, lanes: { 1: 1, 2: 2 } });
+  expect(Number.isFinite(Date.parse(queued[0].startedAt))).toBe(true);
+  expect(Number.isFinite(Date.parse(queued[0].finishedAt))).toBe(true);
 });

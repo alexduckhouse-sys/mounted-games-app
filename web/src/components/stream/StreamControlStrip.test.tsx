@@ -56,7 +56,7 @@ it('updates mute, pause and zoom controls only after the camera command succeeds
   expect(screen.getByRole('button', { name: 'Resume stream' })).toHaveAttribute('aria-pressed', 'true');
   await click('Resume stream');
   expect(api.post).toHaveBeenLastCalledWith('/competitions/1/streams/1/command', { command: 'pause', value: 'false' });
-  await click('Save 30s Replay');
+  await click('Save 30s replay');
   expect(api.post).toHaveBeenLastCalledWith('/competitions/1/streams/1/command', { command: 'saveReplay', value: '30' });
 });
 
@@ -87,12 +87,12 @@ it('does not send a command when the camera response is malformed', async () => 
 
 it('keeps the current overlay after a conflicting save and translates Up next to its viewer mode', async () => {
   save.mockResolvedValueOnce('conflict'); await show();
-  fireEvent.click(screen.getByRole('button', { name: 'Show Heat Table on Stream' })); await act(async () => {});
-  expect(screen.getByRole('button', { name: 'Hide Stream Overlay' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Show heat table on stream' })); await act(async () => {});
+  expect(screen.getByRole('button', { name: 'Hide stream overlay' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('alert')).toHaveTextContent('The overlay changed on another phone. Check it and try again.');
   fireEvent.click(screen.getByRole('button', { name: 'Show me' }));
-  expect(screen.getByRole('button', { name: 'Hide Stream Overlay' })).toHaveFocus();
-  fireEvent.click(screen.getByRole('button', { name: 'Show Up Next on Stream' })); await act(async () => {});
+  expect(screen.getByRole('button', { name: 'Hide stream overlay' })).toHaveFocus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show up next on stream' })); await act(async () => {});
   expect(save.mock.calls.at(-1)![0](DEFAULT_OVERLAY).look).toMatchObject({ liveCard: 'next', liveSectionId: 5 });
-  expect(screen.getByRole('button', { name: 'Show Up Next on Stream' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Show up next on stream' })).toHaveAttribute('aria-pressed', 'true');
 });

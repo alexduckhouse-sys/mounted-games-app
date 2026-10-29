@@ -7,6 +7,7 @@ import { competitionDateText } from '../../../lib/competitionDates';
 import { copyOfCompetition } from '../../../lib/creatorLoad';
 import { defaultDraft, type CreatorDraft } from '../../../lib/creatorDraft';
 import type { CompetitionDetail, CompetitionSummary } from '../../../types';
+import { SavedStartingPoints } from './SavedStartingPoints';
 import { StepHeading } from './controls';
 
 const TIME_ORDER = (a: CompetitionSummary, b: CompetitionSummary) => b.startDate.localeCompare(a.startDate);
@@ -58,7 +59,6 @@ export function StartStep({ draft, replace }: {
         <div role="group" aria-label={t('admin.creator.start.howToStart')} className="cw-tiles">
           <button type="button" className="cw-tile" aria-pressed={!copying} onClick={fresh}>
             <strong>{t('admin.creator.start.scratch')}</strong>
-            <span className="cw-t2">{t('admin.creator.start.scratchSub')}</span>
             <span className="cw-tick" aria-hidden="true"><Check className="h-3 w-3" strokeWidth={3.5} /></span>
           </button>
           <button type="button" className="cw-tile" aria-pressed={copying} onClick={wantCopy}>
@@ -90,6 +90,7 @@ export function StartStep({ draft, replace }: {
             <p className="cw-note">{t('admin.creator.start.note')}</p>
           </>
         )}
+        <SavedStartingPoints />
       </div>
     </section>
   );

@@ -493,7 +493,8 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
         var rerunScore = await rerunResp.Content.ReadFromJsonAsync<RaceScoreDto>();
         Assert.Empty(rerunScore!.Results);
 
-        // 3. Scoring has started race 2's clock. Only the still-future race 3 can be cancelled.
+        // 3. Start race 2 explicitly. Only the still-future race 3 can be cancelled.
+        (await client.PostAsJsonAsync($"/api/races/{races[1]}/start", new RaceClockRequest(null))).EnsureSuccessStatusCode();
         Assert.Equal(System.Net.HttpStatusCode.Conflict, (await client.DeleteAsync(
             $"/api/competitions/{a.CompetitionId}/sessions/{a.SessionId}/races/{races[1]}")).StatusCode);
         var cancelResp = await client.DeleteAsync(

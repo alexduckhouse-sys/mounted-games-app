@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../api';
@@ -103,4 +104,24 @@ describe('ProtectedRoute', () => {
     renderAt('/admin/secret', []);
     expect(screen.getByText('Home page')).toBeInTheDocument();
   });
+});
+
+
+function PrivateEditor() {
+  const [draft, setDraft] = useState('');
+  return <input aria-label="Private draft" value={draft} onChange={(event) => setDraft(event.target.value)} />;
+}
+
+it.each(['account', 'roles'])('discards in-memory protected drafts when %s changes in another tab', (change) => {
+  signIn(['Admin']);
+  render(<AuthProvider><MemoryRouter><ProtectedRoute roles={['Admin']}><PrivateEditor /></ProtectedRoute></MemoryRouter></AuthProvider>);
+  fireEvent.change(screen.getByLabelText('Private draft'), { target: { value: 'Fake account A private draft' } });
+  const next = JSON.parse(localStorage.getItem('mg.auth')!) as StoredAuth;
+  if (change === 'account') next.user.id = 'fake-account-b';
+  else next.user.roles = ['Admin', 'MasterAdmin'];
+  act(() => {
+    localStorage.setItem('mg.auth', JSON.stringify(next));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'mg.auth' }));
+  });
+  expect(screen.getByLabelText('Private draft')).toHaveValue('');
 });

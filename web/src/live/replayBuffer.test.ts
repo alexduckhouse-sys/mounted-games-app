@@ -318,3 +318,16 @@ it('applies the saved-clip memory byte limit across competitions and on reload',
   const oversized = clip('oversized'); Object.defineProperty(oversized.blob, 'size', { value: 129 * 1024 * 1024 });
   storedClipsDatabase([oversized]); expect(await loadPersistedReplays()).toEqual([]);
 });
+
+it('keeps completed and late closing camera segments only when retention is explicitly enabled', async () => {
+  const { handle, recorders, stream } = setup({ retainOnSwitch: true });
+  handle.start(stream); recorders[0].emit('camera-one'); await vi.advanceTimersByTimeAsync(10_000);
+  recorders[1].emit('camera-one-tail'); await vi.advanceTimersByTimeAsync(2000);
+  handle.start(asMedia(new FakeMediaStream())); await flush();
+  recorders[2].emit('camera-two'); await vi.advanceTimersByTimeAsync(2000);
+  await handle.saveClip('Both cameras', 20);
+  const sources = vi.mocked(encodeReplay).mock.calls[0][0];
+  expect(sources).toHaveLength(3);
+  expect(await sources[0].load()).toBeInstanceOf(Blob); expect(await sources[1].load()).toBeInstanceOf(Blob);
+  expect(handle.chunkCount()).toBe(3); handle.dispose(); await flush(); expect(handle.chunkCount()).toBe(0);
+});

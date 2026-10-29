@@ -6,6 +6,7 @@ import type { Heat, RaceTemplate, Session } from '../../types';
 import { useCompetition } from './context';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { RaceDiagram } from '../../components/RaceDiagram';
 import { RaceRulesSheet, buildRaceRulebooks, type RaceTemplateDetail } from '../../components/RaceRulesSheet';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -127,7 +128,10 @@ export function ArenaPage() {
   };
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const whereRow = (arenas.length > 1 || target) && (
+  // Where you are looking opens from the list button beside the ticker dock; the inline row stays when there is no dock.
+  const hasWhere = arenas.length > 1 || target != null;
+  const docked = useDockAction(hasWhere ? { label: t('teams.arena.where'), icon: 'list', onClick: () => setPickerOpen(true) } : null);
+  const whereRow = hasWhere && !docked && (
     <WhereRow arena={arenas.length > 1 ? selectedArena : ''} target={target} nextHere={target != null && target === currentChoice(choices)} timings={timings} clock={clock} onOpen={() => setPickerOpen(true)} />
   );
   const picker = pickerOpen && (
@@ -247,7 +251,7 @@ export function ArenaPage() {
         </section>
       )}
 
-      <RaceRulesSheet raceName={rulesFor} format={format} open={rulesFor != null} onClose={() => setRulesFor(null)} competitionId={competition.id} />
+      <RaceRulesSheet raceName={rulesFor} format={format} open={rulesFor != null} onClose={() => setRulesFor(null)} />
     </>,
   );
 }

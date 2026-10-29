@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.RateLimiting;
+using MountedGames.Api.Security;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -28,6 +30,8 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
 
     [HttpGet]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<LiveStreamsResponse>> List(int competitionId, CancellationToken ct)
     {
         if (!_options.Enabled) return new LiveStreamsResponse(false, []);

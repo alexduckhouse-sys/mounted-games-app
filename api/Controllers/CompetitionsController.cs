@@ -36,17 +36,21 @@ public class CompetitionsController : ControllerBase
     private readonly ILiveBroadcaster _live;
     private readonly GeocodingService _geocode;
     private readonly PushNotifier? _push;
-    public CompetitionsController(AppDbContext db, ILiveBroadcaster live, GeocodingService geocode, PushNotifier? push = null)
+    private readonly CompetitionSnapshotCache? _snapshots;
+    public CompetitionsController(AppDbContext db, ILiveBroadcaster live, GeocodingService geocode, PushNotifier? push = null,
+        CompetitionSnapshotCache? snapshots = null)
     {
         _db = db;
         _live = live;
         _geocode = geocode;
         _push = push;
+        _snapshots = snapshots;
     }
 
     [HttpGet("/api/geocode")]
     [AllowAnonymous]
     [EnableRateLimiting("geocode")]
+    [PublicRead]
     public async Task<ActionResult<GeocodeResult>> Geocode(
         [FromQuery] string? postcode = null,
         [FromQuery] string? w3w = null,
@@ -98,6 +102,8 @@ public class CompetitionsController : ControllerBase
 
     [HttpGet("picker")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionPickerPage>> Picker(
         [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
         CancellationToken ct = default, [FromQuery] int? year = null,
@@ -114,6 +120,7 @@ public class CompetitionsController : ControllerBase
     [HttpGet("picker/near-you")]
     [AllowAnonymous]
     [EnableRateLimiting(RequestLimits.NearYouPolicy)]
+    [PublicRead]
     public async Task<ActionResult<CompetitionNearYouPage>> NearYou(
         [FromServices] LocationInference locations, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
         [FromQuery] string? sort = null, CancellationToken ct = default)
@@ -154,6 +161,9 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<CompetitionSummary>> List([FromQuery] bool includeArchived = false)
     {
         var q = _db.Competitions
@@ -171,35 +181,17 @@ public class CompetitionsController : ControllerBase
         _db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo);
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<CompetitionDetail>> Get(int id)
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
+    public async Task<ActionResult<CompetitionDetail>> Get(int id, CancellationToken ct = default)
     {
-        var c = await _db.Competitions
-            .AsNoTracking()
-            .AsSplitQuery()
-            .Include(c => c.Sections)
-            .Include(c => c.Teams).ThenInclude(t => t.Club)
-            .Include(c => c.Teams).ThenInclude(t => t.Section)
-            .Include(c => c.Teams).ThenInclude(t => t.Trainer)
-            .Include(c => c.Teams).ThenInclude(t => t.Results)
-            .Include(c => c.Sessions).ThenInclude(s => s.Section)
-            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
-            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
-            .FirstOrDefaultAsync(x => x.Id == id);
-        if (c is null) return NotFound();
-        var signupCounts = await ActiveSignupCountsAsync(id);
-        var capacity = await VenueCapacity.GetCapacityAsync(_db, id);
-
-        return c.ToDto(
-            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
-            c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
-            c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            isDemo: await IsDemoCompetitionAsync(c.Id),
-            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
-            includePaymentDetails: User.Identity?.IsAuthenticated == true,
-            maxStables: capacity.MaxStables,
-            maxHookups: capacity.MaxHookups,
-            stablesRemaining: capacity.StablesRemaining,
-            hookupsRemaining: capacity.HookupsRemaining);
+        var signedIn = User.Identity?.IsAuthenticated == true;
+        var snapshot = signedIn || _snapshots is null
+            ? await CompetitionDetailReader.LoadAsync(_db, id, signedIn, ct)
+            : await _snapshots.ReadAsync(_db, id, true, "anonymous-detail",
+                (db, token) => CompetitionDetailReader.LoadAsync(db, id, false, token), ct, s => s.ValidUntil);
+        return snapshot.Value is { } detail ? detail : NotFound();
     }
 
     /// <summary>
@@ -208,41 +200,17 @@ public class CompetitionsController : ControllerBase
     /// racing in them. The web shows it straight away and swaps in the full timetable when that arrives.
     /// </summary>
     [HttpGet("{id:int}/first-view")]
-    public async Task<ActionResult<CompetitionDetail>> FirstView(int id)
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
+    public async Task<ActionResult<CompetitionDetail>> FirstView(int id, CancellationToken ct = default)
     {
-        var c = await _db.Competitions.AsNoTracking().Include(x => x.Sections).FirstOrDefaultAsync(x => x.Id == id);
-        if (c is null) return NotFound();
-
-        var outline = await _db.Sessions.AsNoTracking()
-            .Where(s => s.CompetitionId == id)
-            .Select(s => new SessionOutline(s.Id, s.ArenaName, s.Status, s.OrderIndex))
-            .ToListAsync();
-        var sessionIds = FirstViewSessionIds(outline);
-        var sessions = await _db.Sessions.AsNoTracking().AsSplitQuery()
-            .Where(s => sessionIds.Contains(s.Id))
-            .Include(s => s.Section)
-            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
-            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
-            .ToListAsync();
-        var teamIds = sessions.SelectMany(s => s.Heats).SelectMany(h => h.Entries).Select(e => e.TeamId).Distinct().ToList();
-        var teams = await _db.Teams.AsNoTracking()
-            .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
-            .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Results)
-            .ToListAsync();
-        var signupCounts = await ActiveSignupCountsAsync(id);
-        var capacity = await VenueCapacity.GetCapacityAsync(_db, id);
-
-        return c.ToDto(
-            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
-            teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
-            sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            isDemo: await IsDemoCompetitionAsync(c.Id),
-            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
-            includePaymentDetails: User.Identity?.IsAuthenticated == true,
-            maxStables: capacity.MaxStables,
-            maxHookups: capacity.MaxHookups,
-            stablesRemaining: capacity.StablesRemaining,
-            hookupsRemaining: capacity.HookupsRemaining);
+        var signedIn = User.Identity?.IsAuthenticated == true;
+        var snapshot = signedIn || _snapshots is null
+            ? await CompetitionDetailReader.LoadAsync(_db, id, signedIn, ct, firstView: true)
+            : await _snapshots.ReadAsync(_db, id, true, "anonymous-first-view",
+                (db, token) => CompetitionDetailReader.LoadAsync(db, id, false, token, firstView: true), ct, s => s.ValidUntil);
+        return snapshot.Value is { } detail ? detail : NotFound();
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -290,6 +258,11 @@ public class CompetitionsController : ControllerBase
         if (!CompetitionFields.TryNormalisePaymentLinkUrl(req.PaymentLinkUrl, out var paymentLinkUrl))
             return BadRequest(new { message = PaymentLinkProblem });
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
+        if (appleUrl is not null && (appleUrl.Length > 500
+            || !Uri.TryCreate(appleUrl, UriKind.Absolute, out var appleUri)
+            || appleUri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(appleUri.Host)
+            || !string.IsNullOrEmpty(appleUri.UserInfo)))
+            return BadRequest(new { message = "Use a full https:// map link with no sign-in details, up to 500 characters." });
         var lat = req.Latitude;
         var lon = req.Longitude;
         if (lat is null || lon is null)
@@ -381,6 +354,11 @@ public class CompetitionsController : ControllerBase
         c.Location = req.Location;
         c.Description = req.Description;
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
+        if (appleUrl is not null && (appleUrl.Length > 500
+            || !Uri.TryCreate(appleUrl, UriKind.Absolute, out var appleUri)
+            || appleUri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(appleUri.Host)
+            || !string.IsNullOrEmpty(appleUri.UserInfo)))
+            return BadRequest(new { message = "Use a full https:// map link with no sign-in details, up to 500 characters." });
         var newLat = req.Latitude;
         var newLon = req.Longitude;
         if (newLat is null || newLon is null)
@@ -678,7 +656,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<IActionResult> DeleteSection(int id, int sectionId, [FromQuery] bool force = false)
     {
         var section = await _db.CompetitionSections
@@ -740,6 +719,9 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet("{id:int}/standings")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id,
         [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
         => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);
@@ -915,7 +897,6 @@ public class CompetitionsController : ControllerBase
         for (var i = 0; i < teamIds.Count; i++)
             _db.FinalsTieOrders.Add(new FinalsTieOrder { CompetitionId = id, TeamId = teamIds[i], Points = total, Position = i + 1, SetByUserId = userId });
         await _db.SaveChangesAsync();
-        StandingsService.Invalidate(id);
         return NoContent();
     }
 
@@ -926,7 +907,6 @@ public class CompetitionsController : ControllerBase
     public async Task<IActionResult> ClearTieOrder(int id, [FromQuery] int[] teamIds)
     {
         await _db.FinalsTieOrders.Where(o => o.CompetitionId == id && teamIds.Contains(o.TeamId)).ExecuteDeleteAsync();
-        StandingsService.Invalidate(id);
         return NoContent();
     }
 
@@ -1027,7 +1007,7 @@ public class CompetitionsController : ControllerBase
                 var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
                 foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
                 {
-                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    var teamName = entry.Team?.DisplayName ?? "Unnamed team";
                     messages.Add((entry.TeamId, new PushPayload(
                         Title: "Finals draw published",
                         Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({teamName})",

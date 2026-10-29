@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
+using MountedGames.Api.Security;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities.Apple;
 using MountedGames.Api.Services.Apple;
@@ -50,6 +51,7 @@ public sealed class AppleWalletController(AppDbContext db, AppleOptions options,
         var pass = await Authorise(type, serial, ct); if (pass == null) return Unauthorized();
         var hash = AppleSecrets.Hash(device); await db.Set<WalletDeviceRegistration>().Where(x => x.WalletPassId == pass.Id && x.DeviceHash == hash).ExecuteDeleteAsync(ct); return Ok();
     }
+    [PublicRead]
     [HttpGet("devices/{device}/registrations/{type}")]
     public async Task<IActionResult> Changed(string device, string type, [FromQuery] string? passesUpdatedSince, CancellationToken ct)
     {
@@ -70,6 +72,7 @@ public sealed class AppleWalletController(AppDbContext db, AppleOptions options,
 
         }, ct);
     }
+    [PublicRead]
     [HttpGet("passes/{type}/{serial}")]
     public async Task<IActionResult> Latest(string type, string serial, CancellationToken ct)
     {

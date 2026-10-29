@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
 import { ChevronLeft, ChevronRight, CloudOff, Keyboard, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
+import { useT } from '../../i18n/LanguageContext';
+import { discardRaceStart, queueRaceStart, useRaceStart } from '../../offline/raceStartOutbox';
 import { useScoringKeys } from '../../hooks/useScoringKeys';
 import type { ScoringKeyAction } from '../../lib/scoringKeys';
 import { ordinal } from '../../lib/toplist';
@@ -10,7 +13,7 @@ import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import { deadHeatPoints, deadHeatSize, isDeadHeat, manualPoints, type PendingPlace } from '../../lib/raceScoring';
 import { pointsForPlace } from '../../lib/queuedView';
-import { summariseRace } from '../../lib/raceSummary';
+import { heatFinishedSentence, heatTotals, summariseRace } from '../../lib/raceSummary';
 import { afterRed, afterYellow, stepPoints, type CardMark } from '../../lib/refereeCards';
 import { ELIMINATED_HAPTIC, getFullColourLanes, getSortByLaneOrder, PREFS_CHANGED_EVENT, setFullColourLanes, triggerScorerHaptic } from '../../lib/userPrefs';
 import { laneFill } from '../../lib/laneFill';
@@ -18,7 +21,7 @@ import { finishingReview, lastLaneLeft, raceLanes } from '../../lib/raceLanes';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
-  EliminationSheet, HeatGrid, NextLanesCard, PullDownDialog, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
+  EliminationSheet, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
   type ScoreOverrideValue,
 } from './ScoringParts';
 import { RaceToolsSheet, type ToolLink, type ToolTeam } from './RaceToolsSheet';
@@ -41,6 +44,7 @@ interface ScoringProps {
   qualifiers: number;
   pending: PendingPlace[];
   canScore: boolean;
+  viaScorerLink?: boolean;
   /** History uses signed-in organiser endpoints; scorer links must not enable it. */
   allowAudit?: boolean;
   queued: QueuedScore[];
@@ -132,13 +136,17 @@ async function attempt(action: () => Promise<void> | void): Promise<void> {
 }
 
 export function ScoringSection({
-  competitionId = null, heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
+  competitionId = null, heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued, viaScorerLink = false,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason, allowAudit = false,
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints, onDeadHeat, onClearDeadHeat,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
   teamFacts, factsOn, onToggleFacts, toolLinks = NO_LINKS,
   onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner, heatTools, protestCompetitionId,
 }: ScoringProps) {
+  const t = useT();
+  const localStart = useRaceStart(activeRace?.id, activeRace?.startIsExplicit ? activeRace.startedAt : null, activeRace?.isComplete, activeRace?.programmeRevision ?? 0);
+  const [skippedStart, setSkippedStart] = useState<number | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -238,7 +246,9 @@ export function ScoringSection({
   const allComplete = races.length > 0 && races.every((r) => r.isComplete || queuedByRace.has(r.id));
   const saved = Boolean(activeRace && (activeRace.isComplete || activeQueued));
   // A saved race is read only until the scorer chooses to edit it.
-  const live = canScore && (!saved || editing);
+  const needsStart = canScore && !saved && activeRace && !localStart
+    && !(activeRace.startIsExplicit && activeRace.startedAt) && skippedStart !== activeRace.id;
+  const live = canScore && (!saved || editing) && !needsStart;
   const canSave = racingRows.length > 0 && (doneCount >= racingRows.length || (isQualifier && placedCount >= Math.min(qualifiers, racingRows.length)));
   const fillRef = useFillScreen(Boolean(activeRace) && !allComplete, activeRace?.id);
   const lanes = activeRace ? raceLanes(heat, laneIdx, laneRules, laneHatbands) : [];
@@ -329,7 +339,7 @@ export function ScoringSection({
         complete();
         return true;
       case 'undo':
-        if (!live || !onUndo) return false;
+        if (!canScore || !onUndo) return false;
         onUndo();
         return true;
       case 'advance':
@@ -354,8 +364,21 @@ export function ScoringSection({
     keyedSays = `${keyedEntry.teamName}, lane ${displayLaneFor(heat, keyedEntry, laneIdx, laneRules)}, ${outcome}`;
   }
 
+  // When the heat's last race goes in, one quiet sentence for screen readers (not on opening a heat that is already done).
+  const [heatSays, setHeatSays] = useState('');
+  const wasComplete = useRef({ heatId: heat.id, done: allComplete });
+  useEffect(() => {
+    const before = wasComplete.current;
+    wasComplete.current = { heatId: heat.id, done: allComplete };
+    if (before.heatId !== heat.id) { setHeatSays(''); return; }
+    if (allComplete && !before.done) {
+      setHeatSays(heatFinishedSentence(heat.label?.trim() || 'Heat', heatTotals(heat, races, races.length - 1, hcTeamIds, tieRule)));
+    }
+  }, [allComplete, heat, races, hcTeamIds, tieRule]);
+
   return (
     <section className="space-y-3">
+      <p className="sr-only" aria-live="polite">{keyedSays || heatSays}</p>
       <div className="sc-main">
         {races.length === 0 && <p className="sc-card sc-pad sc-sub">No races in this heat yet.</p>}
         {activeRace && (
@@ -393,6 +416,16 @@ export function ScoringSection({
               </Notice>
             )}
 
+            {localStart?.error && <Notice>{localStart.error} <button type="button" className="underline" onClick={() => { if (discardRaceStart(activeRace.id, activeRace.programmeRevision ?? 0)) setSkippedStart(activeRace.id); }}>{t('timing.skip')}</button></Notice>}
+            {needsStart && <div className="space-y-2 px-3 py-2 text-center">
+              {startError && <Notice>{startError}</Notice>}
+              <button type="button" className="mg-btn mg-btn-primary" onClick={() => {
+                if (!queueRaceStart(activeRace.id, viaScorerLink, undefined, activeRace.programmeRevision ?? 0)) {
+                  setStartError(t('timing.storage'));
+                } else setStartError(null);
+              }}>{t('timing.start')}</button>
+              <button type="button" className="block w-full min-h-11 text-sm underline" onClick={() => { setSkippedStart(activeRace.id); setStartError(null); }}>{t('timing.skip')}</button>
+            </div>}
             <ul className="sc-rows">
               {rows.map((e) => {
                 const lane = displayLaneFor(heat, e, laneIdx, laneRules);
@@ -427,10 +460,9 @@ export function ScoringSection({
                 <Keyboard className="h-3.5 w-3.5" aria-hidden="true" /> Keypad connected
               </p>
             )}
-            <p className="sr-only" aria-live="polite">{keyedSays}</p>
 
             {live && editing && <p className="sc-hint">Saving again replaces this race’s points.</p>}
-            {live && isQualifier && <p className="sc-hint">The first {qualifiers} home go through; the rest score 1 point each.</p>}
+            {canScore && (!saved || editing) && isQualifier && <p className="sc-hint">The first {qualifiers} home go through; the rest score 1 point each.</p>}
 
             {live && (activeRace.results.length > 0 || activeQueued) && (
               <label className="mt-3 flex flex-col gap-1 text-sm font-semibold">
@@ -448,6 +480,8 @@ export function ScoringSection({
               </div>
             )}
 
+            {needsStart && <button type="button" className="sc-tool-btn" aria-label="Race tools" onClick={() => setToolsOpen(true)}><MoreHorizontal className="h-5 w-5" aria-hidden="true" /></button>}
+            {needsStart && onUndo && <button type="button" className="sc-tool-btn" aria-label={undoLabel} onClick={onUndo}><Undo2 className="h-5 w-5" aria-hidden="true" /></button>}
             {review.length > 0 && (
               <section className="sc-review" aria-label="Finishing order">
                 <h4 className="sc-review-title">Check the order</h4>
@@ -547,21 +581,19 @@ export function ScoringSection({
       )}
       {infoSheet && (
         <RtDialog
-          scrimLabel="Close"
-          label={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? 'Next round lanes' : 'Score history'}
           title={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? (nextLanes?.title ?? 'Next round') : 'Score history'}
           onClose={() => setInfoSheet(null)}
         >
           {infoSheet === 'summary' && summary && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
           {infoSheet === 'lanes' && nextLanes && <NextLanesCard lanes={nextLanes} />}
-          {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} />}
+          {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} teams={heat.entries} />}
         </RtDialog>
       )}
       {protesting && protestCompetitionId != null && (
         <ProtestSheet competitionId={protestCompetitionId} heat={heat} race={activeRace} onClose={() => setProtesting(false)} />
       )}
       {controlsOpen && activeRace && (
-        <RtDialog scrimLabel="Close organiser tools" label="Organiser tools" title="Organiser tools" onClose={() => setControlsOpen(false)}>
+        <RtDialog title="Organiser tools" onClose={() => setControlsOpen(false)}>
           <RaceControlsPanel
             raceName={activeRace.name}
             onAddRace={onAddRace}
@@ -577,18 +609,14 @@ export function ScoringSection({
   );
 }
 
-/** Bottom sheet over the scoring screen: takes focus, closes on Escape and gives focus back. */
-function RtDialog({ label, title, scrimLabel, onClose, children }: { label: string; title: string; scrimLabel: string; onClose: () => void; children: ReactNode }) {
+/** Bottom sheet over the scoring screen: the shared Sheet, so it swipes, closes on Escape and gives focus back. */
+function RtDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="rt-overlay">
-      <button type="button" className="rt-scrim" aria-label={scrimLabel} onClick={onClose} />
-      <PullDownDialog label={label} className="rt-sheet" focus=".sc-link" onClose={onClose}>
-        <div className="rt-head">
-          <span className="rt-title">{title}</span>
-          <button type="button" className="sc-link" onClick={onClose}>Close</button>
-        </div>
+    <Sheet title={title} onClose={onClose}>
+      {({ close }) => (<>
         {children}
-      </PullDownDialog>
-    </div>
+        <div className="kit-acts"><button type="button" className="kit-pill" onClick={() => close()}>Close</button></div>
+      </>)}
+    </Sheet>
   );
 }

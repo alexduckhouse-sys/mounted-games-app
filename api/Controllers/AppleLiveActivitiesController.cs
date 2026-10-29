@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
+using MountedGames.Api.Security;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities.Apple;
 using MountedGames.Api.Services.Apple;
@@ -13,7 +14,7 @@ namespace MountedGames.Api.Controllers;
 public sealed class AppleLiveActivitiesController(AppDbContext db, AppleOptions options, AppleSecrets secrets,
     ArrivalBookingService transactionLock, AppleDeliveryRunner runner, TimeProvider clock) : ControllerBase
 {
-    [HttpGet("availability")] public IActionResult Availability() => Ok(new { liveActivities = options.LiveReady, wallet = options.WalletReady });
+    [HttpGet("availability"), PublicRead, EnableRateLimiting("public-read")] public IActionResult Availability() => Ok(new { liveActivities = options.LiveReady, wallet = options.WalletReady });
     [HttpPost("installations"), EnableRateLimiting("auth")]
     public async Task<ActionResult<NativeInstallationDto>> Create(CancellationToken ct)
     {

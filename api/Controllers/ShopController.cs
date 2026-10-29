@@ -25,28 +25,71 @@ public class ShopController : ControllerBase
     private const string BadImageMessage = "That image isn't a supported picture. Use a JPEG, PNG, WebP or GIF.";
     private const int MaxImageBase64Bytes = 700_000; // ≈500 KB image when base64-encoded
 
+    private static bool IsSupportedImage(string value)
+    {
+        if (!ImageDataUrl.IsMatch(value)) return false;
+        var comma = value.IndexOf(',');
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(value[(comma + 1)..]); }
+        catch (FormatException) { return false; }
+        var actual = Services.Sponsors.SponsorLogos.Detect(bytes);
+        if (bytes.Length >= 6 && (bytes.AsSpan(0, 6).SequenceEqual("GIF87a"u8) || bytes.AsSpan(0, 6).SequenceEqual("GIF89a"u8)))
+            actual = "image/gif";
+        return actual is not null && value[..comma] == $"data:{actual};base64";
+    }
+
     [HttpGet("posts")]
     [AllowAnonymous]
-    public async Task<IEnumerable<ShopPostDto>> List([FromQuery] int take = 50, [FromQuery] bool includeDeleted = false)
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
+    public async Task<IEnumerable<ShopPostDto>> List([FromQuery] int take = 50, [FromQuery] bool includeDeleted = false, [FromQuery] string? imageMode = null)
     {
         take = Math.Clamp(take, 1, 200);
         var isAdmin = User.IsInRole(Roles.Admin);
-        var q = _db.ShopPosts.Include(p => p.Comments).Include(p => p.Reports).AsQueryable();
+        var q = _db.ShopPosts.AsNoTracking();
         if (!includeDeleted || !isAdmin) q = q.Where(p => !p.IsDeleted);
-        var rows = await q.OrderByDescending(p => p.CreatedAt).Take(take).ToListAsync();
-        return rows.Select(r => r.ToDto());
+        return await Summaries(q.OrderByDescending(p => p.CreatedAt).Take(take), imageMode == "urls").ToListAsync(HttpContext.RequestAborted);
     }
 
     [HttpGet("posts/{id:int}")]
     [AllowAnonymous]
-    public async Task<ActionResult<ShopPostDto>> Get(int id)
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
+    public async Task<ActionResult<ShopPostDto>> Get(int id, [FromQuery] string? imageMode = null)
     {
-        var p = await _db.ShopPosts
-            .Include(x => x.Comments).Include(x => x.Reports)
-            .FirstOrDefaultAsync(x => x.Id == id);
+        var p = await Summaries(_db.ShopPosts.AsNoTracking().Where(x => x.Id == id), imageMode == "urls")
+            .FirstOrDefaultAsync(HttpContext.RequestAborted);
         if (p is null) return NotFound();
         if (p.IsDeleted && !User.IsInRole(Roles.Admin)) return NotFound();
-        return p.ToDto();
+        return p;
+    }
+
+    private static IQueryable<ShopPostDto> Summaries(IQueryable<ShopPost> posts, bool imageUrls)
+        => posts.Select(p => new ShopPostDto(p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
+            p.Title, p.Body, p.PriceMinor, p.ContactInfo,
+            imageUrls ? (p.ImageBase64 != null ? "/api/shop/posts/" + p.Id + "/images/0" : null) : p.ImageBase64,
+            p.CreatedAt, p.IsDeleted, p.Comments.Count(c => !c.IsDeleted && !c.IsPrivate), p.Reports.Count));
+
+    // Revalidate on every use so moderation/deletion and replacement also apply to saved URLs.
+    [HttpGet("posts/{id:int}/images/0")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
+    public async Task<IActionResult> Image(int id)
+    {
+        Response.Headers.CacheControl = "private, no-cache";
+        var isAdmin = User.IsInRole(Roles.Admin);
+        var data = await _db.ShopPosts.AsNoTracking().Where(p => p.Id == id && (!p.IsDeleted || isAdmin))
+            .Select(p => p.ImageBase64).FirstOrDefaultAsync(HttpContext.RequestAborted);
+        if (string.IsNullOrEmpty(data) || data.Length > MaxImageBase64Bytes || !IsSupportedImage(data)) return NotFound();
+        var comma = data.IndexOf(',');
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(data[(comma + 1)..]); }
+        catch (FormatException) { return NotFound(); }
+        var contentType = data[5..data.IndexOf(';')];
+        var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
+            $"\"{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))}\"");
+        return File(bytes, contentType, lastModified: null, entityTag: etag);
     }
 
     [HttpPost("posts")]
@@ -69,15 +112,15 @@ public class ShopController : ControllerBase
         var image = req.ImageBase64;
         if (image is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
-        if (!string.IsNullOrEmpty(image) && !ImageDataUrl.IsMatch(image))
+        if (!string.IsNullOrEmpty(image) && !IsSupportedImage(image))
             return BadRequest(new { message = BadImageMessage });
         var post = new ShopPost
         {
             AuthorUserId = userId,
             AuthorName = name.Length > 150 ? name[..150] : name,
             PonyClubName = req.PonyClubName?.Trim(),
-            Title = title,
-            Body = body,
+            Title = ProfanityFilter.Clean(title),
+            Body = ProfanityFilter.Clean(body),
             PriceMinor = req.PriceMinor,
             ContactInfo = req.ContactInfo?.Trim(),
             ImageBase64 = string.IsNullOrEmpty(image) ? null : image,
@@ -96,7 +139,7 @@ public class ShopController : ControllerBase
             return StatusCode(403, new { message = "Posting from this network is blocked." });
         if (req.ImageBase64 is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
-        if (!string.IsNullOrEmpty(req.ImageBase64) && !ImageDataUrl.IsMatch(req.ImageBase64))
+        if (!string.IsNullOrEmpty(req.ImageBase64) && !IsSupportedImage(req.ImageBase64))
             return BadRequest(new { message = BadImageMessage });
         if (req.PriceMinor is < 0 or > 100_000_000)
             return BadRequest(new { message = "Price must be zero or positive." });
@@ -114,8 +157,8 @@ public class ShopController : ControllerBase
         var canEdit = User.IsInRole(Roles.Admin) || (!string.IsNullOrEmpty(userId) && post.AuthorUserId == userId);
         if (!canEdit) return Forbid();
 
-        if (!string.IsNullOrEmpty(title)) post.Title = title;
-        if (!string.IsNullOrEmpty(body)) post.Body = body;
+        if (!string.IsNullOrEmpty(title)) post.Title = ProfanityFilter.Clean(title);
+        if (!string.IsNullOrEmpty(body)) post.Body = ProfanityFilter.Clean(body);
         if (req.PriceMinor.HasValue) post.PriceMinor = req.PriceMinor;
         if (req.ContactInfo is not null) post.ContactInfo = req.ContactInfo.Trim();
         if (req.PonyClubName is not null) post.PonyClubName = req.PonyClubName.Trim();
@@ -142,6 +185,8 @@ public class ShopController : ControllerBase
 
     [HttpGet("posts/{id:int}/comments")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<ShopCommentDto>> Comments(int id)
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -183,7 +228,7 @@ public class ShopController : ControllerBase
             PostId = id,
             AuthorUserId = userId,
             AuthorName = name.Length > 150 ? name[..150] : name,
-            Body = body,
+            Body = ProfanityFilter.Clean(body),
             IsPrivate = req.IsPrivate,
             ToUserId = req.IsPrivate ? (req.ToUserId ?? post.AuthorUserId) : null,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),

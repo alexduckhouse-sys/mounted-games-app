@@ -3,7 +3,7 @@ import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { RoundSearch } from '../../components/RoundSearch';
-import { RefineChoiceRow, RefineNote, RefineSection, RefineSwitchRow } from '../refine/Refine';
+import { RefineChoiceRow, RefineNote, RefineSwitchRow } from '../refine/Refine';
 import { VaccinationRecord } from './vaccinations/VaccinationRecord';
 import { VaccinationSettings } from './vaccinations/VaccinationSettings';
 import { isBoard, latestEvidence, message, type Board, type Pony } from './vaccinations/types';
@@ -42,7 +42,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
     finally { setBusy(false); }
   }
   return <section aria-label={t('vaccinations.title')}>
-    <RefineSection title={t('vaccinations.title')} />
+    <h2 className="sr-only">{t('vaccinations.title')}</h2>
     <RefineNote>{t('vaccinations.intro')}</RefineNote>
     {error && <Notice actionLabel={t('vaccinations.reload')} onAction={() => setAttempt(n => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status">{t('vaccinations.loading')}</p>}

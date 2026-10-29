@@ -1,5 +1,5 @@
 import { EntrantVaccinationCheck } from '../eventTools/vaccinations/EntrantVaccinationCheck';
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, Flag, Shield } from 'lucide-react';
 import { RoundSearch } from '../../components/RoundSearch';
 import { useT } from '../../i18n/LanguageContext';
@@ -38,13 +38,15 @@ const sentOn = (iso: string) => {
  * The dec forms already sent, grouped by age group. Search by team, rider or pony; tap a form to open it in place and
  * see its riders and ponies.
  */
-export function DecFormList({ forms, teams, sections, config, canDelete, onDelete }: {
+export function DecFormList({ forms, teams, sections, config, canDelete, onDelete, summary }: {
   forms: DeclarationForm[];
   teams: Team[];
   sections: CompetitionSection[];
   config: DecFormConfig;
   canDelete: (form: DeclarationForm) => boolean;
   onDelete: (form: DeclarationForm) => void;
+  /** A line shown under the search, such as how many forms are in. */
+  summary?: ReactNode;
 }) {
   const t = useT();
   const [search, setSearch] = useState('');
@@ -78,6 +80,7 @@ export function DecFormList({ forms, teams, sections, config, canDelete, onDelet
   return (
     <section aria-label={t('entries.list.label')} className="flex flex-col">
       {forms.length > 0 && <RoundSearch label={t('entries.list.findLabel')} placeholder={t('entries.list.findPlaceholder')} value={search} onChange={setSearch} />}
+      {summary}
       {forms.length === 0 && <p className="sp-note">{t('entries.list.none')}</p>}
       {forms.length > 0 && groups.length === 0 && <p className="sp-note">{t('entries.list.noMatch', { search: search.trim() })}</p>}
       {groups.map((group) => (

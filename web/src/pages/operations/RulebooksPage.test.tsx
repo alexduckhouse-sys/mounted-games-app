@@ -41,6 +41,19 @@ describe('RulebooksPage', () => {
     expect(screen.queryByText('Keep the changeover clear.')).not.toBeInTheDocument();
   });
 
+  it('narrows the rulebook list from a round search bar', async () => {
+    serve([handbook, junior]);
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole('button', { name: /^Event handbook/ });
+    await user.type(screen.getByRole('searchbox', { name: 'Find a rulebook' }), 'junior');
+    expect(screen.queryByRole('button', { name: /^Event handbook/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Junior rules/ })).toBeInTheDocument();
+    await user.clear(screen.getByRole('searchbox', { name: 'Find a rulebook' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Find a rulebook' }), 'zzz');
+    expect(screen.getByText(/No rulebook matches/)).toBeInTheDocument();
+  });
+
   it('loads a rulebook only when it is chosen, and reuses it afterwards', async () => {
     serve([handbook, junior]);
     const user = userEvent.setup();
@@ -83,7 +96,7 @@ describe('RulebooksPage', () => {
   it('shows a note when no rulebooks exist', async () => {
     serve([]);
     mount();
-    expect(await screen.findByText(/No rulebook has been added yet\./)).toHaveTextContent('See Game rules for how each race is ridden. Use Add rulebook to publish one.');
+    expect(await screen.findByText(/No rulebook has been added yet\./)).toHaveTextContent('See Game rules for how each race is ridden. Use Add a rulebook to add one.');
   });
 
   it('tells a visitor what to do when there is no rulebook, and the Game rules link opens that tab', async () => {
@@ -91,7 +104,7 @@ describe('RulebooksPage', () => {
     auth.admin = false;
     const user = userEvent.setup();
     mount();
-    expect(await screen.findByText(/No rulebook has been added yet\./)).not.toHaveTextContent('Add rulebook');
+    expect(await screen.findByText(/No rulebook has been added yet\./)).not.toHaveTextContent('Add a rulebook');
     await user.click(screen.getByRole('button', { name: 'Game rules' }));
     expect(screen.getByRole('tab', { name: 'Game rules' })).toHaveAttribute('aria-selected', 'true');
   });
@@ -99,7 +112,7 @@ describe('RulebooksPage', () => {
   it('opens an admin editor with plain-text fields', async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole('button', { name: 'Add rulebook' }));
+    await user.click(await screen.findByRole('button', { name: 'Add a rulebook' }));
     expect(screen.getByRole('heading', { name: 'New rulebook' })).toBeInTheDocument();
     expect(screen.getByLabelText('Rulebook text')).toBeInTheDocument();
   });
@@ -107,13 +120,13 @@ describe('RulebooksPage', () => {
   it('lets an admin add a rulebook straight away, and shows no Add button to anyone else', async () => {
     const user = userEvent.setup();
     const page = mount();
-    await user.click(await screen.findByRole('button', { name: 'Add rulebook' }));
+    await user.click(await screen.findByRole('button', { name: 'Add a rulebook' }));
     expect(screen.getByLabelText('Rulebook text')).toBeInTheDocument();
     page.unmount();
     auth.admin = false;
     mount();
     expect(await screen.findByRole('button', { name: /^Event handbook/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add rulebook' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a rulebook' })).not.toBeInTheDocument();
   });
 
   it('saves a new rulebook from the editor', async () => {
@@ -121,7 +134,7 @@ describe('RulebooksPage', () => {
     vi.mocked(api.post).mockImplementation(async () => { serve([handbook, created]); return { data: created }; });
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole('button', { name: 'Add rulebook' }));
+    await user.click(await screen.findByRole('button', { name: 'Add a rulebook' }));
     await user.type(screen.getByLabelText('Title'), 'New');
     await user.type(screen.getByLabelText('Edition'), '1');
     await user.type(screen.getByLabelText('Rulebook text'), 'Body');
@@ -154,7 +167,7 @@ describe('RulebooksPage', () => {
     vi.mocked(api.post).mockRejectedValue({ response: { data: { message: 'That rulebook title and edition already exists.' } }, isAxiosError: true });
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole('button', { name: 'Add rulebook' }));
+    await user.click(await screen.findByRole('button', { name: 'Add a rulebook' }));
     await user.type(screen.getByLabelText('Title'), 'Event handbook');
     await user.type(screen.getByLabelText('Edition'), '2030');
     await user.type(screen.getByLabelText('Rulebook text'), 'Body');
@@ -168,7 +181,7 @@ describe('RulebooksPage', () => {
     mount();
     await user.click(await screen.findByRole('button', { name: /^Event handbook/ }));
     expect(await screen.findByText('Keep the changeover clear.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add rulebook' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a rulebook' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit Event handbook' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete Event handbook' })).not.toBeInTheDocument();
   });
@@ -205,7 +218,7 @@ describe('RulebooksPage', () => {
     expect(screen.getByTestId('header')).toHaveTextContent('Rules|Sample Games|/competitions/7|link');
     expect(screen.queryByText('Back to event')).not.toBeInTheDocument();
     expect(document.querySelector('.rf-hd')).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Add rulebook' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add a rulebook' }));
     expect(screen.getByTestId('header')).toHaveTextContent('New rulebook|');
   });
 
@@ -231,7 +244,7 @@ describe('RulebooksPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Speed Weave' }));
     expect(await screen.findByRole('dialog', { name: 'Speed Weave' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close rules' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('says so when the game rules cannot be loaded or there are none', async () => {

@@ -126,7 +126,7 @@ describe('ScoreOutboxPanel', () => {
       expect(screen.getByRole('button', { name: 'Use mine' })).toBeDisabled();
       await userEvent.type(screen.getByRole('textbox', { name: 'Reason for replacing these results' }), 'Judge checked the finish');
       await userEvent.click(screen.getByRole('button', { name: 'Use mine' }));
-      await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', { places: mine, expected: theirs, reason: 'Judge checked the finish' }, expect.anything()));
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({ places: mine, expected: theirs, reason: 'Judge checked the finish' }), expect.anything()));
     });
 
     it('shows an empty "theirs" when the other results are unknown', () => {
@@ -219,4 +219,14 @@ describe('ScoreOutboxPanel', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
+});
+
+it('offers timing recovery without discarding scores or their conflict check', async () => {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  seed(item(1, { state: 'failed', error: 'Clock outside event', startedAt: '2020-01-01T10:00:00Z', finishedAt: '2020-01-01T10:03:00Z', expected: theirs, reason: 'Checked with referee' }));
+  render(<ScoreOutboxPanel competitionId={1} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Send scores without timing' }));
+  expect(stored()).toEqual([expect.objectContaining({ state: 'waiting', places: mine, expected: theirs, reason: 'Checked with referee', timingOmitted: true })]);
+  expect(stored()[0].startedAt).toBeUndefined();
+  expect(stored()[0].finishedAt).toBeUndefined();
 });

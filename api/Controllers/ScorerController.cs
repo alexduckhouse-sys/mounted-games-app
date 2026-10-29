@@ -14,7 +14,7 @@ namespace MountedGames.Api.Controllers;
 /// <summary>
 /// What a scorer link can do: read its competition's timetable, and enter or replace scores in every arena.
 /// No account, no JWT: <see cref="ScorerLinkAccessAttribute"/> checks the <c>X-Scorer-Token</c> header. There is
-/// deliberately no clock, sign-off, timetable, team, entry or chat action here. A race outside the link's
+/// deliberately no stop-clock, sign-off, timetable, team, entry or chat action here. A race outside the link's
 /// competition is 404, exactly as if it didn't exist. Scores still go through <see cref="ScoringService"/>.
 /// </summary>
 [ApiController]
@@ -88,6 +88,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     /// The save the phone's outbox sends: places plus the results the scorer saw, answered with the heat, or with the
     /// winning heat on a conflict. Same behaviour as the staff endpoint of the same shape.
     /// </summary>
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     [HttpPost("api/scorer/races/{raceId:int}/results")]
     public async Task<ActionResult<HeatDto>> SubmitResults(int raceId, SubmitRaceResultsRequest req, CancellationToken ct)
     {
@@ -101,7 +102,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
-            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel, req.ExpectedProgrammeRevision);
+            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel,
+                expectedProgrammeRevision: req.ExpectedProgrammeRevision, finishedAt: req.FinishedAt);
         }
         catch (ScoreConflictException ex) { return await ConflictAsync(race, ex.Message); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -114,6 +116,28 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         await live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
         await BroadcastSessionAsync(race.Heat.SessionId, competitionId);
         return dto;
+    }
+
+    /// <summary>Record the flag-down time within the scorer link's competition.</summary>
+    [HttpPost("api/scorer/races/{raceId:int}/start")]
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
+    public async Task<ActionResult<RaceDto>> StartRace(int raceId, RaceClockRequest request, CancellationToken ct)
+    {
+        if (Link.Scope == ScorerLink.ScopeCamera) return StatusCode(403);
+        if (!await InScopeAsync(raceId, ct)) return NotFound();
+        try
+        {
+            var race = await scoring.UpdateRaceClockAsync(raceId, true,
+                request.At ?? DateTime.UtcNow, request.At is not null, ct, request.ExpectedProgrammeRevision);
+            await BroadcastAsync(raceId);
+            return race.ToDto();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (ScoringController.IsScoringConcurrency(ex))
+        { return Conflict(new { message = "The race changed on another device. Try again." }); }
     }
 
     /// <summary>Allows a collecting-ring steward or scorer link to update a lane's gate check-in status.</summary>

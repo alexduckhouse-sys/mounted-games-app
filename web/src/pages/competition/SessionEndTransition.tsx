@@ -272,7 +272,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                                 {form.riders.map((r) => (
                                   <li key={r.id} className="text-xs text-[rgb(var(--mg-body))]">
                                     {publicRiderName(r)}
-                                    {r.horseName?.trim() ? ` — ${r.horseName.trim()}` : ''}
+                                    {r.horseName?.trim() ? ` · ${r.horseName.trim()}` : ''}
                                     {r.isReserve && <span className={reserveTag}>Reserve</span>}
                                   </li>
                                 ))}

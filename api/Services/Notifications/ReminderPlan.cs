@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services.Calendar;
 
 namespace MountedGames.Api.Services.Notifications;
@@ -50,7 +51,7 @@ internal static class ReminderPlan
                             if (team is null) continue;
                             Add($"1h:{s.Id}:h{h.Id}:t{team.Id}", s.CompetitionId, heatStart, 60,
                                 "60 minutes until your heat",
-                                $"{team.DisplayName} — {s.Name} ({label}, Lane {entry.LaneIndex}) starts around {NotificationScheduler.UkTime(heatStart):HH:mm}.", usersByTeam[team.Id]);
+                                $"{team.DisplayName} · {s.Name} ({label}, lane {entry.LaneIndex}) starts around {NotificationScheduler.UkTime(heatStart):HH:mm}.", usersByTeam[team.Id]);
                         }
                     }
                 }
@@ -62,11 +63,26 @@ internal static class ReminderPlan
                         .SelectMany(t => usersByTeam[t.Id]).ToHashSet();
                     if (s.Kind == SessionKind.Race && s.Heats.Count > 0)
                         Add($"1h:{s.Id}", s.CompetitionId, scheduled, 60, $"1 hour to {s.Name}",
-                            $"Starts at {NotificationScheduler.UkTime(scheduled):HH:mm} — {s.Section?.DisplayName ?? "—"}.", users);
+                            $"Starts at {NotificationScheduler.UkTime(scheduled):HH:mm} · {s.Section?.DisplayName ?? "—"}.", users);
                     if (s.Kind == SessionKind.Briefing)
                         Add($"brief:{s.Id}", s.CompetitionId, scheduled, 30, "Briefing in 30 minutes", s.Name, users);
                 }
             }
+        }
+        var heatCalls = await db.Set<HeatCall>().AsNoTracking().Where(c => c.CalledAt > now.AddMinutes(-15)
+            && (!competitionId.HasValue || c.Heat!.Session!.CompetitionId == competitionId)).ToListAsync(ct);
+        foreach (var call in heatCalls)
+        {
+            var session = sessions.FirstOrDefault(s => s.Heats.Any(h => h.Id == call.HeatId));
+            var heat = session?.Heats.First(h => h.Id == call.HeatId);
+            if (session is null || heat is null || heat.StartedAt.HasValue || heat.FinishedAt.HasValue
+                || heat.Races.Any(r => r.StartedAt.HasValue || r.IsComplete)) continue;
+            var users = heat.Entries.SelectMany(e => usersByTeam.GetValueOrDefault(e.TeamId) ?? []).ToHashSet();
+            var key = $"collecting-ring:{heat.Id}";
+            var label = heat.Label ?? $"Heat {heat.OrderIndex}";
+            var payload = new PushPayload("Collecting ring call", $"{label} · {session.Name} · {session.ArenaName ?? "Main Arena"}: please go to the collecting ring now.", key, $"/competitions/{session.CompetitionId}/timetable");
+            plans.Add(new(key, session.CompetitionId, call.CalledAt, call.CalledAt.AddMinutes(15),
+                call.CalledAt.Ticks.ToString(), payload, users));
         }
         return plans;
 

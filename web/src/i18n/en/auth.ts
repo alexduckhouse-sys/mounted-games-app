@@ -9,6 +9,7 @@ export const auth = {
   'auth.field.yourName': 'Your name',
   'auth.password.hide': 'Hide password',
   'auth.password.show': 'Show password',
+  'auth.password.capsLock': 'Caps lock is on',
   'auth.createAccount': 'Create an account',
 
   'auth.login.organiserTitle': 'Organiser sign in',
@@ -30,6 +31,9 @@ export const auth = {
   'auth.signup.roleRider': 'Rider or parent',
   'auth.signup.roleTrainer': 'Trainer',
   'auth.signup.roleManager': 'Team manager',
+  'auth.signup.roleRiderHint': 'Follow events, results and your team',
+  'auth.signup.roleTrainerHint': 'Organise competitions and send in declarations',
+  'auth.signup.roleManagerHint': 'Run a club and approve its trainers',
   'auth.signup.asMember': 'a member',
   'auth.signup.asTrainer': 'a trainer',
   'auth.signup.asManager': 'team manager',

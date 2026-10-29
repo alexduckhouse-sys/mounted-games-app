@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
@@ -29,6 +30,8 @@ public class PushController : ControllerBase
     /// <summary>Public — browser fetches this to know which VAPID key to use when subscribing.</summary>
     [HttpGet("vapid-public-key")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public ActionResult<VapidPublicKeyResponse> VapidKey() => new VapidPublicKeyResponse(_vapid.PublicKey);
 
     /// <summary>Upsert a push subscription for the signed-in user.</summary>

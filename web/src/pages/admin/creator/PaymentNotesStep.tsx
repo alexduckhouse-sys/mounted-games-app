@@ -12,11 +12,13 @@ import type { StepProps } from './parts';
  * Payment and rules: where entry fees are paid out (the organiser's club, read-only here), how riders pay for now, notes
  * for riders and the terms, then the switches for cards and the passport check.
  */
-export function PaymentNotesStep({ draft, change, payoutsTo, canSetUpPayouts, canSetPassportCheck }: StepProps<CreatorDraft> & {
+export function PaymentNotesStep({ draft, change, payoutsTo, canSetUpPayouts, canSetPassportCheck, isDemo }: StepProps<CreatorDraft> & {
   payoutsTo: PayoutsTo | null;
   canSetUpPayouts: boolean;
   /** The passport check can be switched on here for a new competition; an existing one has it on its event details page. */
   canSetPassportCheck: boolean;
+  /** A sample competition, whose payments are tests. Real ones say nothing about it. */
+  isDemo?: boolean;
 }) {
   const t = useT();
   const ready = !!payoutsTo?.ready;
@@ -28,7 +30,7 @@ export function PaymentNotesStep({ draft, change, payoutsTo, canSetUpPayouts, ca
           <span className="cw-grow">
             <span className="cw-t1">{t('admin.creator.pay.entryFees')}</span>
             <span className="cw-t2">{payoutsTo ? payoutsLine(payoutsTo) : t('admin.creator.payoutsPending')}</span>
-            <span className="cw-t2">{t('admin.creator.pay.testMode')}</span>
+            {isDemo && <span className="cw-t2">{t('admin.creator.pay.testMode')}</span>}
           </span>
           {!ready && (canSetUpPayouts
             ? <Link to="/me/payouts" className="cw-btn cw-btn-s">{t('admin.creator.pay.setUp')}</Link>

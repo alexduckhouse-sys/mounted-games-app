@@ -1,3 +1,5 @@
+import { HeatCalledBadge } from './reliability/CallUpStrip';
+import { useHeatCalls, type HeatCall } from './reliability/heatCalls';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -15,6 +17,7 @@ import { useFavourites } from '../../hooks/useFavourites';
 import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
+import { hatbandColour } from '../../lib/hatbands';
 import { arenaDelays, isPlannedFinal, lastFinishedRow, sessionOrdinals, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import { HeatRing } from '../../components/HeatRing';
 import { DelaySheet } from './DelaySheet';
@@ -59,6 +62,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const { locale } = useLanguage();
   const title = titleProp ?? t('competition.timetable.title');
   const { competition, reload, updatedAt } = useCompetition();
+  const { calls } = useHeatCalls(competition.id);
   const { canOrganise } = useAuth();
   const favHook = useFavourites() as {
     favourites?: { competitionId: number; teamId: number }[];
@@ -230,11 +234,10 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const filterable = days.length > 1 || showArenaSelect || showSectionSelect;
   const dayLabel = dayLabels(days, locale);
   const sectionLabel = sections.find((s) => String(s.id) === selectedSection)?.label;
-  // With filters the header line says what is showing; otherwise it keeps the competition and update time.
-  const summary = [dayLabel(selectedDay), selectedArena, showSectionSelect ? sectionLabel ?? t('competition.timetable.allAges') : ''].filter(Boolean).join(' · ');
   usePageHeader({
     title,
-    subtitle: filterable ? summary : updated ? `${competition.name} · ${updated}` : competition.name,
+    // What is filtered is shown by the chips under the header and the badge on the dock button, not in this line.
+    subtitle: updated ? `${competition.name} · ${updated}` : competition.name,
     onRefresh: reload,
     refreshLabel: t('competition.timetable.refresh'),
     onEdit: showQualifiers ? () => setDelayOpen(true) : undefined,
@@ -272,9 +275,11 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
           <TimetableEvent
             key={row.key}
             row={row}
+            calls={calls}
             competitionId={competition.id}
             showArena={arenas.length > 1 && !selectedArena && (!sharedArena || !group.title)}
             hasFollowedTeam={Boolean(row.heat?.entries.some((e) => isTeamFav(e.teamId)))}
+            followedLanes={row.heat && row.status !== 'finished' ? row.heat.entries.filter((e) => isTeamFav(e.teamId) && e.laneIndex > 0).map((e) => ({ teamId: e.teamId, teamName: e.teamName, lane: e.laneIndex, hatband: competition.laneHatbands?.[e.laneIndex - 1] ?? null })) : undefined}
           />
         ))}
       </div>
@@ -322,7 +327,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
           </ul>
         )}
         {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.timetable.empty')}</p>}
-        {(hiddenFinished > 0 || showFinished || Boolean(footer)) && (
+        {(hiddenFinished > 0 || showFinished) && (
           <button
             type="button"
             className="mg-text-link self-center"
@@ -332,7 +337,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
             {showFinished ? t('competition.timetable.hideFinished') : t('competition.timetable.showFull')}
           </button>
         )}
-        {showFinished && footer}
+        {footer}
         <SponsorStrip placement="Timetable" />
       </div>
       {sheetOpen && (
@@ -422,11 +427,14 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
 }
 
 /** One timetable line: time, name with a small sub-line, "+N" or "−N" when moved, status colour dot. */
-function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false }: {
+function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam = false, followedLanes }: {
   row: TimetableRow;
+  calls: HeatCall[];
   competitionId: number;
   showArena: boolean;
   hasFollowedTeam?: boolean;
+  /** Where each followed team stands in an upcoming heat: its drawn lane and that lane's hatband. */
+  followedLanes?: { teamId: number; teamName: string; lane: number; hatband: string | null }[];
 }) {
   const t = useT();
   const { session, heat, status, delayMinutes } = row;
@@ -468,7 +476,14 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
         {name}
         {hasFollowedTeam && <Star aria-hidden="true" className="tt-fav-star" size={12} />}
       </strong>
+      {heat && <HeatCalledBadge heatId={heat.id} calls={calls} />}
       {sub && <span className="tt-sub">{sub}</span>}
+      {followedLanes?.map((item) => (
+        <span key={item.teamId} className="tt-sub tt-lane">
+          {item.hatband && <span className="tt-hatband" style={{ background: hatbandColour(item.hatband) }} aria-hidden="true" />}
+          {t('competition.timetable.laneFor', { team: item.teamName, lane: item.lane })}
+        </span>
+      ))}
       {showShift && (
         <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText}</span>
       )}

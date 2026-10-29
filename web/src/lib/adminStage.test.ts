@@ -42,8 +42,8 @@ describe('stageOf', () => {
 describe('stageAction and stageCounts', () => {
   it('offers the next job for each stage', () => {
     expect(stageAction('live', 4)).toEqual({ label: 'Run day', to: '/competitions/4' });
-    expect(stageAction('format', 4)).toEqual({ label: 'On the day', to: '/admin/competitions/4/format' });
-    expect(stageAction('ready', 4).label).toBe('On the day');
+    expect(stageAction('format', 4)).toEqual({ label: 'Before the day', to: '/competitions/4/operations' });
+    expect(stageAction('ready', 4).label).toBe('Before the day');
     expect(stageAction('finished', 4)).toEqual({ label: 'Results', to: '/competitions/4/toplists' });
     expect(stageAction('entries', 4)).toEqual({ label: 'Edit', to: '/admin/competitions/4' });
     expect(stageAction('draft', 4).label).toBe('Edit');

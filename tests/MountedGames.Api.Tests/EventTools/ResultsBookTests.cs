@@ -228,8 +228,8 @@ public class ResultsBookTests : IClassFixture<ApiFactory>
         var entries = await (await w.Owner.GetAsync($"{Base(w.Arena.CompetitionId)}/print/entries")).ReadAsync<PrintableEntriesDto>();
 
         var team = entries.Sections.Single().Teams.Single(t => t.TeamId == w.Arena.TeamIds[0]);
-        // Staff see the full name even for a rider who asked for an initial in public; the same pony name twice is not flagged.
-        Assert.Equal(new[] { "Oliver Smith", "Ava Jones" }, team.Riders.Select(r => r.Name));
+        // Printed lists honour surname privacy too; the same pony name twice is not flagged.
+        Assert.Equal(new[] { "Oliver S.", "Ava Jones" }, team.Riders.Select(r => r.Name));
         Assert.Equal(new[] { "Biscuit", "Biscuit" }, team.Riders.Select(r => r.Pony));
         Assert.True(team.Riders[0].IsCaptain);
         Assert.True(team.Riders[1].IsReserve);

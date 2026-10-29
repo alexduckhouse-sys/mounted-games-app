@@ -16,7 +16,7 @@ vi.mock('../../api', () => ({ api: { get: state.get, post: vi.fn() } }));
 // Stands in for 30 seconds passing (useHeldFor has its own timing test).
 const held = vi.hoisted(() => ({ value: true }));
 vi.mock('../../hooks/useHeldFor', () => ({ useHeldFor: (active: boolean) => active && held.value }));
-// The Tack & Turnout table fetches on its own; it has its own tests.
+// The Tack and turnout table fetches on its own; it has its own tests.
 vi.mock('./TackLeaderboard', () => ({ TackLeaderboard: () => null }));
 vi.mock('./TimetableBoard', () => ({
   TimetableBoard: ({ bandExtra, lead, title }: { bandExtra?: React.ReactNode; lead?: React.ReactNode; title?: string }) => <div><h1>{title}</h1>{bandExtra}{lead}</div>,
@@ -207,7 +207,9 @@ describe('the Show row inside Toplist', () => {
     await pickView(user, 'Totals');
     const totals = screen.getByRole('region', { name: 'Totals' });
     expect(screen.getByText('Top 2 make the final')).toBeVisible();
-    expect(within(totals).getByRole('separator', { name: 'A Final cut-off' })).toBeVisible();
+    // The finals are done in this fixture, so the cut-off line is gone and the table is headed Final results.
+    expect(within(totals).queryByRole('separator', { name: 'A Final cut-off' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Final results' })).toBeVisible();
     await pickView(user, 'By session');
     const table = screen.getByRole('region', { name: 'Points by session' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts']);
@@ -335,7 +337,7 @@ describe('the totals list', () => {
     // Tied teams share the number and a soft tint; no bar and no words.
     const tied = totals.querySelectorAll('li[data-tied="true"]');
     expect([...tied].map((li) => li.getAttribute('data-rank-id'))).toEqual(['2', '3']);
-    expect((tied[0] as HTMLElement).style.background).toBe('rgb(var(--mg-heading) / .07)');
+    expect((tied[0] as HTMLElement).style.boxShadow).toBe('inset 6px 0 0 rgb(var(--mg-heading))');
     expect(within(totals).queryByText(/Joint|run-off/)).toBeNull();
     expect(within(totals).getByText('6 pts needed for the A Final (normal finishes)')).toBeVisible();
     expect(within(totals).queryByText(/races? left/)).toBeNull();
@@ -537,14 +539,14 @@ describe('personalisation, instant optimistic standings and section score finger
     redraw();
     expect(state.get).toHaveBeenCalledTimes(2);
     // A refresh shows the old standings without a notice; it only appears once they have lasted 30 seconds.
-    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    expect(screen.queryByText('Showing the saved toplist while results refresh.')).toBeNull();
     held.value = true;
     redraw();
-    expect(screen.getByText('Showing saved standings while results refresh.')).toBeVisible();
+    expect(screen.getByText('Showing the saved toplist while results refresh.')).toBeVisible();
     expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 3');
     resolveStandings({ data: [standing(1, 40), standing(3, 7), standing(2, 4)], headers: {} });
     await waitFor(() => expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 1'));
-    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    expect(screen.queryByText('Showing the saved toplist while results refresh.')).toBeNull();
 
     state.get.mockResolvedValueOnce({ data: [standing(3, 7), standing(2, 4)], headers: {} });
     const beforeHc = state.value as typeof original;
@@ -569,7 +571,7 @@ it('has no organiser button row: PA desk, TV kiosk and QR codes are in the menu'
   renderTab('/?section=10', {});
   await waitFor(() => expect(state.get).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Organiser quick actions' })).toBeNull();
-  for (const name of [/PA Commentator/, /TV Kiosk/, /QR Access/]) {
+  for (const name of [/PA Commentator/, /TV kiosk/, /QR access/]) {
     expect(screen.queryByRole('link', { name })).toBeNull();
     expect(screen.queryByRole('button', { name })).toBeNull();
   }

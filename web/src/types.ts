@@ -295,6 +295,7 @@ export interface Race {
   orderIndex: number;
   isComplete: boolean;
   startedAt?: string | null;
+  startIsExplicit?: boolean;
   finishedAt?: string | null;
   results: ResultRow[];
   /** An open protest covers this race. Only the flag reaches the public, never the protest. */

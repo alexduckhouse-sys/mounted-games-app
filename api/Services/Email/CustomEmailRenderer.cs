@@ -92,14 +92,14 @@ public static class CustomEmailRenderer
         {
             html.Append("<p style=\"margin:20px 0 0;color:#475569;font-size:13px;\">").Append(EmailHtml.Encode(footerText).Replace("\r\n", "<br>").Replace("\n", "<br>"));
             text.AppendLine(footerText);
-            if (audience == CustomEmailAudience.News)
+            if (CustomEmailAudiences.RequiresConsent(audience))
             {
                 html.Append($" <a href=\"{UnsubscribePlaceholder}\" style=\"color:#475569;\">Unsubscribe</a>");
                 text.AppendLine("Unsubscribe:").AppendLine(UnsubscribePlaceholder);
             }
             html.Append("</p>");
         }
-        else if (audience == CustomEmailAudience.News)
+        else if (CustomEmailAudiences.RequiresConsent(audience))
         {
             html.Append("<p style=\"margin:20px 0 0;color:#475569;font-size:13px;\">You're getting this because you asked to hear about new competitions. ")
                 .Append($"<a href=\"{UnsubscribePlaceholder}\" style=\"color:#475569;\">Unsubscribe</a> at any time.</p>");

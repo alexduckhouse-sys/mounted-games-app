@@ -49,7 +49,7 @@ public record SwapRiderRequest(
     int OutRiderEntryId, int InRiderEntryId, string? Reason, bool OverrideLock, string RequestId);
 
 public record RiderSwapSnapshotDto(
-    int RiderEntryId, string FullName, bool IsReserve, bool IsCaptain, int OrderIndex);
+    int RiderEntryId, string FullName, bool IsReserve, bool IsCaptain, int OrderIndex, string? HorseName = null);
 
 public record RiderSwapDto(
     int Id, int DeclarationFormId, int TeamId, int OutRiderEntryId, int InRiderEntryId,

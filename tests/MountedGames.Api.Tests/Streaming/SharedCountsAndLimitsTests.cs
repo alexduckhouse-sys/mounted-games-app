@@ -86,16 +86,32 @@ public class SharedCountsAndLimitsTests
         using var two = new RedisApiFactory(authPerMinute: 3);
         var ip = $"203.0.113.{Random.Shared.Next(1, 254)}";
         var statuses = new List<HttpStatusCode>();
+        var address = $"nobody-{Guid.NewGuid():N}@example.test";
         for (var i = 0; i < 4; i++)
         {
             var client = (i % 2 == 0 ? one : two).CreateClient();
             client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, ip);
-            var r = await client.PostAsJsonAsync("/api/auth/login", new { email = $"nobody-{Guid.NewGuid():N}@example.test", password = "wrong-password-1" });
+            var r = await client.PostAsJsonAsync("/api/auth/login", new { email = address, password = "wrong-password-1" });
             statuses.Add(r.StatusCode);
         }
 
         Assert.All(statuses.Take(3), s => Assert.NotEqual(HttpStatusCode.TooManyRequests, s));
         Assert.Equal(HttpStatusCode.TooManyRequests, statuses[3]);
+    }
+
+    [RedisFact]
+    public async Task SignInVenueCeiling_IsSharedEvenWhenAccountNamesRotate()
+    {
+        using var one = new RedisApiFactory(authPerIpPerMinute: 3);
+        using var two = new RedisApiFactory(authPerIpPerMinute: 3);
+        var ip = $"2001:db8::{Random.Shared.Next(1, 65535):x}";
+        for (var i = 0; i < 4; i++)
+        {
+            using var client = (i % 2 == 0 ? one : two).CreateClient();
+            client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, ip);
+            var response = await client.PostAsJsonAsync("/api/auth/login", new { email = $"fake-{i}@example.invalid", password = "wrong" });
+            Assert.Equal(i < 3 ? HttpStatusCode.Unauthorized : HttpStatusCode.TooManyRequests, response.StatusCode);
+        }
     }
 
     [RedisFact]

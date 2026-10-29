@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { CompactPageBarProvider, useCompactPageBarState } from '../components/CompactPageBarContext';
 import { UnsubscribePage } from './UnsubscribePage';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -48,5 +49,17 @@ describe('UnsubscribePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/That's done/));
     expect(api.post).toHaveBeenCalledTimes(2);
+  });
+});
+
+function Title() {
+  return <span data-testid="title">{useCompactPageBarState().header?.title}</span>;
+}
+
+describe('UnsubscribePage top bar', () => {
+  it('names the page in the top bar', async () => {
+    render(<MemoryRouter initialEntries={['/unsubscribe?token=abc']}><CompactPageBarProvider><UnsubscribePage /><Title /></CompactPageBarProvider></MemoryRouter>);
+    expect(screen.getByTestId('title')).toHaveTextContent('Competition emails');
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
   });
 });

@@ -383,9 +383,10 @@ public class AdminAccountsTests : IClassFixture<ApiFactory>
         var blocks = await _f.WithDbAsync(db => db.IpBlocks.Where(b => b.BlockedAccountUserId == target.Id).ToListAsync());
         Assert.Equal(2, blocks.Count);
         Assert.All(blocks, b => Assert.StartsWith(IpRetention.HashPrefix, b.IpAddress));
-        var listed = await TextOf(await plain.Client.GetAsync("/api/ip-blocks"));
+        var master = await _f.AdminAsync();
+        var listed = await TextOf(await master.GetAsync("/api/ip-blocks"));
         Assert.DoesNotContain(blocks[0].IpAddress, listed);
-        Assert.Equal(HttpStatusCode.NotFound, (await plain.Client.DeleteAsync($"/api/ip-blocks/{blocks[0].Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await master.DeleteAsync($"/api/ip-blocks/{blocks[0].Id}")).StatusCode);
 
         await plain.Client.DeleteAsync(Block(target.Id));
 

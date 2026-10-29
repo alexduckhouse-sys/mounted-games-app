@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { scorerApi } from './scorerLink';
+import { discardRaceStart, flushRaceStarts, raceStartFor, sendRaceStart } from './raceStartOutbox';
 import type { Heat } from '../types';
 import {
   mergeOutboxBackup,
+  OutboxProgrammeConflict,
   nextToSend,
   outcomeOfError,
   parseOutboxBackup,
@@ -61,10 +63,21 @@ function writeOutbox(next: QueuedScore[]): boolean {
 }
 
 export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]): boolean {
-  const next = change(readOutbox()).map((q) => (q.saveId ? q : { ...q, saveId: crypto.randomUUID() }));
+  const next = change(readOutbox()).map((q) => ({ ...q,
+    saveId: q.saveId ?? crypto.randomUUID(),
+    startedAt: q.timingOmitted ? undefined : q.startedAt ?? raceStartFor(q.raceId, q.expectedProgrammeRevision ?? 0),
+    finishedAt: q.timingOmitted ? undefined : q.finishedAt ?? q.queuedAt,
+  }));
   if (!writeOutbox(next)) return false;
   if (nextToSend(next)) void flushOutbox();
   return true;
+}
+
+/** Explicit recovery after a clock rejection. Keep all scores and conflict checks, omit only timing. */
+export function sendScoreWithoutTiming(raceId: number): boolean {
+  if (!discardRaceStart(raceId)) return false;
+  return updateOutbox((items) => items.map((q) => q.raceId === raceId && q.state === 'failed'
+    ? { ...q, startedAt: undefined, finishedAt: undefined, timingOmitted: true, state: 'waiting', error: undefined } : q));
 }
 
 async function send(item: QueuedScore): Promise<SendOutcome> {
@@ -72,8 +85,9 @@ async function send(item: QueuedScore): Promise<SendOutcome> {
     // A scorer link saves through its own endpoint and token; an account uses the staff endpoint.
     const client = item.viaLink ? scorerApi : api;
     const path = item.viaLink ? `/scorer/races/${item.raceId}/results` : `/races/${item.raceId}/results`;
+    if (item.startedAt) await sendRaceStart(item.raceId, item.startedAt, item.viaLink, item.expectedProgrammeRevision ?? 0);
     const { data } = await client.post<Heat>(path,
-      { places: item.places, expected: item.expected, ...(item.expectedProgrammeRevision != null ? { expectedProgrammeRevision: item.expectedProgrammeRevision } : {}), ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
+      { places: item.places, expected: item.expected, finishedAt: item.finishedAt, ...(item.expectedProgrammeRevision != null ? { expectedProgrammeRevision: item.expectedProgrammeRevision } : {}), ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
     return { kind: 'saved', sessionId: item.sessionId, heat: data };
   } catch (err) {
     return outcomeOfError(err, item.viaLink);
@@ -115,7 +129,7 @@ async function sendWaiting() {
 
 /** Retry whenever the phone may have signal again. Call once at start-up. */
 export function startOutboxSync() {
-  const kick = () => { if (document.visibilityState === 'visible') void flushOutbox(); };
+  const kick = () => { if (document.visibilityState === 'visible') { void flushRaceStarts(); void flushOutbox(); } };
   window.addEventListener('online', kick);
   document.addEventListener('visibilitychange', kick);
   setInterval(kick, 20_000);
@@ -144,7 +158,7 @@ export function exportCompetitionOutbox(competitionId: number, now?: string): st
   return serializeOutboxBackup(readOutbox(), competitionId, now);
 }
 
-export const OUTBOX_IMPORT_ERROR = 'That backup could not be read. Check that the whole JSON backup was copied.';
+export const OUTBOX_IMPORT_ERROR = 'That backup couldn’t be read. Check you copied the whole message and try again.';
 
 /** Validate and merge a JSON backup of offline scores into the active outbox, flushing immediately if online. */
 export function importCompetitionOutbox(
@@ -163,8 +177,13 @@ export function importCompetitionOutbox(
         })();
   const parsed = parseOutboxBackup(raw, options?.fallbackCompetitionId, viaLinkOverride);
   if (!parsed) return { ok: false, error: OUTBOX_IMPORT_ERROR };
-  if (!updateOutbox((current) => mergeOutboxBackup(current, parsed))) {
-    return { ok: false, error: OUTBOX_STORAGE_ERROR };
+  try {
+    if (!updateOutbox((current) => mergeOutboxBackup(current, parsed))) {
+      return { ok: false, error: OUTBOX_STORAGE_ERROR };
+    }
+  } catch (error) {
+    if (error instanceof OutboxProgrammeConflict) return { ok: false, error: error.message };
+    throw error;
   }
   return { ok: true, count: parsed.length };
 }
@@ -175,7 +194,7 @@ export async function shareOrCopyOutboxBackup(
   competitionName?: string,
 ): Promise<'shared' | 'copied' | 'unavailable'> {
   const json = exportCompetitionOutbox(competitionId);
-  const title = competitionName ? `${competitionName} — offline score backup` : 'Offline score backup';
+  const title = competitionName ? `${competitionName}: offline score backup` : 'Offline score backup';
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     try {
       await navigator.share({ title, text: json });

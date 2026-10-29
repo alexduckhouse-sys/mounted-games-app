@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { useToast } from '../../components/Toast';
 import { Chevron, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import {
@@ -44,26 +46,38 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
     setBoard((current) => current && { ...current, sections: current.sections.map((s) => (s.sectionId === section.sectionId ? section : s)) });
 
   const section = board?.sections.find((s) => s.sectionId === sectionId) ?? board?.sections[0] ?? null;
+  // Once an age group is set up, the settings, age group and print link go behind the dock button so stewards land
+  // on the team checklist. Before that (or with no dock) the set-up stays on the page.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const docked = useDockAction(section?.configured ? { label: t('ops3.tc.settingsSheet'), icon: 'settings', onClick: () => setToolsOpen(true) } : null);
+  const inSheet = docked && !!section?.configured;
+  const printLink = <nav aria-label={t('ops3.tc.form')}><RefineList as="div">
+    <Link className="rf-row" to={`/event-tools/${competitionId}/print/tack-check`}>
+      <span className="rf-grow"><span className="rf-t1">{t('ops3.tc.print')}</span><span className="rf-t2">{t('ops3.tc.printSub')}</span></span><Chevron />
+    </Link>
+  </RefineList></nav>;
+  const ageGroup = board && section && board.sections.length > 1 && <label className="rf-fld">{t('ops3.book.ageGroup')}
+    <SelectField value={section.sectionId} onChange={(event) => { setSectionId(Number(event.target.value)); setToolsOpen(false); }}>
+      {board.sections.map((s) => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
+    </SelectField>
+  </label>;
+  const settings = board && section && <SettingsForm key={section.sectionId} competitionId={competitionId} section={section} onSaved={replace} />;
   return <section aria-labelledby="tack-title">
-    <RefineSection title={t('ops3.tc.title')} />
+    {/* The page title above already says Tack check, so the section's heading is for screen readers only. */}
     <h2 id="tack-title" className="sr-only">{t('ops3.tc.title')}</h2>
-    <nav aria-label={t('ops3.tc.form')}><RefineList as="div">
-      <Link className="rf-row" to={`/event-tools/${competitionId}/print/tack-check`}>
-        <span className="rf-grow"><span className="rf-t1">{t('ops3.tc.print')}</span><span className="rf-t2">{t('ops3.tc.printSub')}</span></span><Chevron />
-      </Link>
-    </RefineList></nav>
+    {!inSheet && printLink}
     {error && <Notice className="tools-msg" actionLabel={t('common.tryAgain')} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status" className="rf-note">{t('ops3.tc.loading')}</p>}
     {board && board.sections.length === 0 && <RefineNote>{t('ops3.tc.addGroup')}</RefineNote>}
     {board && section && <div className="tools-form">
-      {board.sections.length > 1 && <label className="rf-fld">{t('ops3.book.ageGroup')}
-        <SelectField value={section.sectionId} onChange={(event) => setSectionId(Number(event.target.value))}>
-          {board.sections.map((s) => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
-        </SelectField>
-      </label>}
-      <SettingsForm key={section.sectionId} competitionId={competitionId} section={section} onSaved={replace} />
+      {!inSheet && ageGroup}
+      {!inSheet && settings}
       {section.configured && section.isEnabled && <Marks key={section.sectionId} competitionId={competitionId} section={section} onSaved={replace} />}
     </div>}
+    {inSheet && toolsOpen && <Sheet title={t('ops3.tc.settingsSheet')} onClose={() => setToolsOpen(false)}>
+      {printLink}
+      <div className="tools-form">{ageGroup}{settings}</div>
+    </Sheet>}
   </section>;
 }
 
@@ -177,23 +191,25 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
       <span className="tools-muted">{summary}</span>
     </div>
     {scored ? (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-hidden">
+        {/* Sectors share what the rider names leave, so the grid never scrolls sideways on a phone. */}
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr>
-              <th scope="col" className="text-left py-1 pr-2">{t('ops3.rider')}</th>
-              {section.sectors.map((sector) => <th key={sector.id} scope="col" className="text-left py-1 px-1">{sector.name}</th>)}
-              <th scope="col" className="text-right py-1 pl-2">{t('ops3.tc.riderTotal')}</th>
+              <th scope="col" className="w-[30%] text-left py-1 pr-2">{t('ops3.rider')}</th>
+              {section.sectors.map((sector) => <th key={sector.id} scope="col" className="break-words text-left py-1 px-1 text-xs leading-tight">{sector.name}</th>)}
+              <th scope="col" className="w-12 text-right py-1 pl-2">{t('ops3.tc.riderTotal')}</th>
             </tr>
           </thead>
           <tbody>
             {riders.map((riderName, riderIndex) => (
               <tr key={`${riderIndex}-${riderName}`} className="border-t border-[rgb(var(--mg-rule-soft))]">
-                <th scope="row" className="py-1.5 pr-2 text-left font-medium">{riderName}</th>
+                <th scope="row" className="break-words py-1.5 pr-2 text-left font-medium">{riderName}</th>
                 {section.sectors.map((sector) => (
                   <td key={sector.id} className="py-1 px-1">
                     <NumberField
                       aria-label={`${riderName} ${sector.name}`}
+                      className="input w-full min-w-0 !px-1 text-center"
                       min={0}
                       max={section.maxPoints}
                       value={grid[sector.id]?.[riderIndex] ?? ''}

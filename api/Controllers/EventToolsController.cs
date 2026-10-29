@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,6 +59,8 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/draw")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<PrintableDrawDto>> PrintableDraw(int competitionId, CancellationToken ct)
     {
         var result = await new PrintableEventService(db).DrawAsync(competitionId, ct);
@@ -65,6 +69,8 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/score-sheets")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<PrintableScoreSheetsDto>> PrintableScoreSheets(int competitionId, CancellationToken ct)
     {
         var result = await new PrintableEventService(db).ScoreSheetsAsync(competitionId, ct);
@@ -73,6 +79,8 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/results")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<PrintableResultsDto>> PrintableResults(
         int competitionId, [FromQuery] int? sessionId = null, CancellationToken ct = default)
     {
@@ -83,6 +91,8 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
     /// <summary>The results book as the public sees it: standings, finals and awards, nothing private.</summary>
     [HttpGet("results-book")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ResultsBookDto>> ResultsBook(int competitionId, [FromServices] ResultsBookService book, CancellationToken ct)
     {
         var result = await book.BuildAsync(competitionId, includePrivate: false, ct);
@@ -102,6 +112,8 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
     /// <summary>Public-safe formatted results summary text ready to copy/paste for social media or press releases.</summary>
     [HttpGet("results-summary")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<PublicResultsSummaryDto>> ResultsSummary(int competitionId, [FromServices] ResultsBookService book, CancellationToken ct)
     {
         var result = await book.BuildPublicSummaryAsync(competitionId, ct);
@@ -127,7 +139,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
         return Ok(archive);
     }
 
-    /// <summary>The entry list with riders and ponies. Staff only, because it shows full rider names.</summary>
+    /// <summary>The staff entry list with riders and ponies. Rider surname privacy settings still apply.</summary>
     [HttpGet("print/entries")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     public async Task<ActionResult<PrintableEntriesDto>> PrintableEntries(int competitionId, CancellationToken ct)
@@ -139,6 +151,8 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("awards")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<SpecialAwardDto>>> Awards(int competitionId, CancellationToken ct)
     {
         if (!await db.Competitions.AnyAsync(c => c.Id == competitionId, ct)) return NotFound();

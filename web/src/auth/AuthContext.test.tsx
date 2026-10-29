@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, type StoredAuth } from '../api';
+import { api, writeStoredAuth, type StoredAuth } from '../api';
 import { unsubscribeFromPush } from '../lib/push';
 import { AuthProvider, useAuth } from './AuthContext';
 
@@ -452,5 +452,25 @@ describe('refreshUser', () => {
     get.mockResolvedValue({ data: stored().user });
     await act(async () => { await result.current.refreshUser(); });
     expect(result.current.user).toBeNull();
+  });
+});
+
+describe('shared-browser auth boundaries', () => {
+  it('drops the mounted account when another tab signs out', async () => {
+    signIn(); const { result } = mount();
+    await act(async () => { localStorage.removeItem('mg.auth'); window.dispatchEvent(new StorageEvent('storage', { key: 'mg.auth' })); });
+    expect(result.current.user).toBeNull();
+  });
+  it('switches the mounted account when another tab signs in', async () => {
+    signIn(); const { result } = mount();
+    await act(async () => { localStorage.setItem('mg.auth', JSON.stringify(stored(['Member'], { id: 'fake-user-b' }))); window.dispatchEvent(new StorageEvent('storage', { key: 'mg.auth' })); });
+    expect(result.current.user?.id).toBe('fake-user-b');
+  });
+  it('clears mounted private views and drafts when the API rejects a session', async () => {
+    signIn(); const { result } = mount();
+    for (const key of ['mg.draft.decform.v3:fake:1:2', 'competitionEditor:new', 'mg.draft.admin-email']) localStorage.setItem(key, 'private fake draft');
+    await act(async () => { writeStoredAuth(null); });
+    expect(result.current.user).toBeNull();
+    expect(Object.keys(localStorage).some((key) => key.startsWith('mg.draft.') || key.startsWith('competitionEditor:'))).toBe(false);
   });
 });

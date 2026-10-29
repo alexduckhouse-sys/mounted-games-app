@@ -1,0 +1,14 @@
+.wind-review-warning { font-family: var(--mg-font-display); font-size: clamp(2rem, 7vw, 3rem); font-weight: 700; line-height: 1.05; margin: 12px 0; }
+.wind-review-recommendations { margin: 8px 0; }
+.wind-review-recommendations h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
+.wind-review-suggestion { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgb(var(--mg-line)); }
+.wind-review-suggestion > div { flex: 1; min-width: 0; }
+.wind-review-suggestion small { opacity: .7; }
+.wind-review-suggestion p { margin-top: 4px; font-weight: 600; overflow-wrap: anywhere; }
+.wind-review-choice, .wind-review-send { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid currentColor; }
+.wind-review-choice:disabled, .wind-review-send:disabled { opacity: .4; }
+.wind-review-compose { display: flex; gap: 10px; align-items: flex-end; margin-top: 20px; }
+.wind-review-compose label { flex: 1; }
+.wind-review-send { margin-bottom: 16px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
+.wind-review-actions { position: sticky; bottom: 0; z-index: 1; padding: 12px 0 4px; align-items: center; background: rgb(var(--mg-surface)); }
+.wind-review-continue { margin-left: auto; }

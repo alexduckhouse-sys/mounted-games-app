@@ -132,6 +132,7 @@ MountedGames.Api.Services.Apple.AppleFeatures.AddAppleFeatures(builder.Services,
 builder.Services.AddHostedService<WindDecisionDelivery>();
 MountedGames.Api.Services.Vaccinations.VaccinationFeature.AddVaccinationChecks(builder.Services);
 builder.Services.AddScoped<MountedGames.Api.Services.Broadcast.BroadcastService>();
+builder.Services.AddSingleton<CompetitionSnapshotCache>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.ResultsBookService>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.EventArchiveService>();
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
@@ -141,8 +142,10 @@ builder.Services.AddScoped<MountedGames.Api.Services.Notifications.ReminderRunne
 builder.Services.AddScoped<EquipmentCalculator>();
 builder.Services.AddHostedService<NotificationScheduler>();
 builder.Services.AddScoped<IpRetention>();
+builder.Services.AddScoped<CompetitionDataRetention>();
 builder.Services.AddScoped<AccountDeletionService>();
 builder.Services.AddHostedService<IpRetentionSweeper>();
+builder.Services.AddHostedService<CompetitionDataRetentionSweeper>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<StreamingOptions>(builder.Configuration.GetSection("Streaming"));
 builder.Services.AddHttpClient(CloudflareSfuClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
@@ -157,7 +160,7 @@ builder.Services.AddHostedService<StreamSweeper>();
 
 builder.Services.AddHttpClient("weather", c =>
 {
-    c.Timeout = TimeSpan.FromSeconds(8);
+    c.Timeout = TimeSpan.FromSeconds(5);
 });
 // Owns its own size-limited cache (weather keys come from query-string coordinates).
 builder.Services.AddSingleton<WeatherCache>(_ => new WeatherCache());
@@ -192,7 +195,7 @@ builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.Lookup
 builder.Services.AddSingleton<MountedGames.Api.Services.Email.IEmailDomainChecker, MountedGames.Api.Services.Email.DnsEmailDomainChecker>();
 builder.Services.AddHttpClient("geocoding", c =>
 {
-    c.Timeout = TimeSpan.FromSeconds(6);
+    c.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddScoped<GeocodingService>();
 
@@ -218,7 +221,11 @@ builder.Services.AddRequestLimits(builder.Configuration);
 builder.Services.AddTrustedProxies(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddScoped<MountedGames.Api.Services.Broadcast.BroadcastCaptureFilter>();
-builder.Services.AddControllers(options => options.Filters.Add<MountedGames.Api.Services.Broadcast.BroadcastCaptureFilter>());
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<MountedGames.Api.Services.Broadcast.BroadcastCaptureFilter>();
+    options.Filters.Add<JsonEtagResultFilter>();
+});
 builder.Services.AddOpenApi();
 var signalR = builder.Services.AddSignalR();
 // With several API instances (Vercel scales the container out), Redis carries hub messages between them.
@@ -353,6 +360,7 @@ app.UseWhen(
 
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<AuthRateLimitIdentityMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 

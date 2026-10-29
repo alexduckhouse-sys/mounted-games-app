@@ -265,7 +265,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           <Video className="h-4 w-4 text-red-600" aria-hidden="true" />
-          <span>Stream &amp; Camera Control</span>
+          <span>Stream and camera controls</span>
           {activeStream ? (
             <span className="mg-badge mg-badge-live text-xs">
               LIVE · {activeStream.angleName} ({activeStream.viewerCount} watching)
@@ -282,7 +282,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
           />
           <button
             type="button"
-            className="btn-ghost min-h-9 px-2.5 text-xs"
+            className="btn-ghost min-h-11 px-2.5 text-xs"
             aria-label="Refresh camera status"
             onClick={() => void loadStreams()}
           >
@@ -300,7 +300,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
               type="button"
               aria-label={`Cut to ${s.angleName}`}
               aria-pressed={activeStream?.id === s.id}
-              className={`min-h-9 rounded-full px-3 font-semibold ${activeStream?.id === s.id ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+              className={`min-h-11 rounded-full px-3 font-semibold ${activeStream?.id === s.id ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
               onClick={() => {
                 setSelectedStreamId(s.id);
                 setMuted(s.audioMuted);
@@ -320,7 +320,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
             type="button"
             aria-label={muted ? 'Unmute camera mic' : 'Mute camera mic'}
             aria-pressed={muted}
-            className={`min-h-9 flex items-center gap-1 rounded-lg px-2.5 font-semibold ${muted ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800'}`}
+            className={`min-h-11 flex items-center gap-1 rounded-lg px-2.5 font-semibold ${muted ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800'}`}
             onClick={() => {
               const next = !muted;
               setMuted(next);
@@ -337,7 +337,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
               type="button"
               aria-label={`Remote zoom ${z}x`}
               aria-pressed={zoom === z}
-              className={`min-h-9 rounded-lg px-2.5 font-bold ${zoom === z ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+              className={`min-h-11 rounded-lg px-2.5 font-bold ${zoom === z ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
               onClick={() => {
                 setZoom(z);
                 void sendCommand('setZoom', String(z));
@@ -353,7 +353,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
               type="button"
               aria-label={`Stream quality ${preset}`}
               aria-pressed={quality === preset}
-              className={`min-h-9 rounded-lg px-2.5 font-semibold ${quality === preset ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+              className={`min-h-11 rounded-lg px-2.5 font-semibold ${quality === preset ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
               onClick={() => {
                 setQuality(preset);
                 void sendCommand('setQualityPreset', preset);
@@ -367,7 +367,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
             type="button"
             aria-label={paused ? 'Resume stream' : 'Pause stream (Back soon)'}
             aria-pressed={paused}
-            className={`min-h-9 flex items-center gap-1 rounded-lg px-2.5 font-semibold ${paused ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'}`}
+            className={`min-h-11 flex items-center gap-1 rounded-lg px-2.5 font-semibold ${paused ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'}`}
             onClick={() => {
               const next = !paused;
               setPaused(next);
@@ -381,7 +381,7 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
           <button
             type="button"
             aria-label="Save 15s camera replay"
-            className="min-h-9 flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 font-semibold text-slate-800"
+            className="min-h-11 flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 font-semibold text-slate-800"
             onClick={() => void sendCommand('saveReplay', '15')}
           >
             <Film className="h-3.5 w-3.5" />
@@ -553,7 +553,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
                 type="button"
                 aria-pressed={angle === name}
                 disabled={live}
-                className={`min-h-9 rounded-full px-3 font-semibold ${angle === name ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+                className={`min-h-11 rounded-full px-3 font-semibold ${angle === name ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
                 onClick={() => setAngle(name)}
               >
                 {name}
@@ -591,7 +591,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
           <CameraLockButtons
             locks={snapshot.cameraLocks}
             className="flex flex-wrap items-center gap-2 text-xs"
-            buttonClassName="min-h-9 rounded-full bg-slate-100 px-3 font-semibold text-slate-800 aria-pressed:bg-brand-600 aria-pressed:text-white"
+            buttonClassName="min-h-11 rounded-full bg-slate-100 px-3 font-semibold text-slate-800 aria-pressed:bg-brand-600 aria-pressed:text-white"
             onChange={(kind, locked) => void change(() => publisher.current?.setCameraLock(kind, locked), 'The camera didn’t accept that. Try again.')}
           />
 
@@ -602,7 +602,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
                 key={preset}
                 type="button"
                 aria-pressed={quality === preset}
-                className={`min-h-9 rounded-full px-3 font-semibold ${quality === preset ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+                className={`min-h-11 rounded-full px-3 font-semibold ${quality === preset ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
                 onClick={() => {
                   setQuality(preset);
                   void publisher.current?.setQualityPreset?.(preset);
@@ -656,7 +656,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
       {dimmed && (
         <DimmedLock
           label="Tripod screen dimmed"
-          className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
+          className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/50 select-none"
           onUnlock={() => setDimmed(false)}
         >
           <Lock className="h-8 w-8" />
@@ -677,10 +677,10 @@ function DimmedLock({ label, className, onUnlock, children }: { label: string; c
       {children}
       <button
         type="button"
-        className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50"
+        className="min-h-11 rounded-full border border-white/20 px-4 py-2 text-xs text-white/50"
         onClick={onUnlock}
       >
-        Double-tap to unlock.
+        Tap to unlock.
       </button>
     </div>
   );
@@ -799,6 +799,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       raceId: activeRace.id,
       competitionId: session.competitionId,
       sessionId: session.id,
+      arenaName: session.arenaName ?? undefined,
+      sessionName: session.name,
+      lanes: Object.fromEntries(heat.entries.map((entry) => [entry.teamId, Number(displayLaneFor(heat, entry, races.findIndex((r) => r.id === activeRace.id), laneRules))])),
       label: `${heat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(heat, places), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
       expected: placingsOf(activeRace.results),
@@ -807,6 +810,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       queuedAt: new Date().toISOString(),
       state: 'waiting',
     };
+    // Keep the same provisional display calculation in the backup, separate from scoring overrides.
+    const previewRace = withQueuedResults(heat, [item], sessionBase).races.find((race) => race.id === item.raceId);
+    item.previewPoints = Object.fromEntries((previewRace?.results ?? []).map((row) => [row.teamId, row.points]));
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
     const nextOutbox = enqueue(outbox, item);
     if (!updateOutbox((list) => enqueue(list, item))) { setSaveError(OUTBOX_STORAGE_ERROR); return false; }
@@ -943,7 +949,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           type="button"
           aria-pressed={commentatorMode}
           onClick={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
-          className={`mg-btn !min-h-9 !px-3 text-xs font-bold ${
+          className={`mg-btn !min-h-11 !px-3 text-xs font-bold ${
             commentatorMode ? 'mg-btn-primary' : 'mg-btn-secondary'
           }`}
         >
@@ -997,7 +1003,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           <div className="flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
             <Mic className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
             <h2 className="mg-display m-0 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-              Live Commentator Facts · {viewHeat.label || 'Current Heat'}
+              Live commentator facts · {viewHeat.label || 'Current Heat'}
             </h2>
           </div>
           {viewHeat.entries.length > 0 && (
@@ -1018,7 +1024,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
                         Lane {displayLaneFor(viewHeat, entry, Math.max(0, races.findIndex((r) => r.id === activeRace?.id)), laneRules)}: {entry.teamName}
                       </span>
                       <span className="font-bold text-[rgb(var(--mg-heading))]">
-                        Available scores: {formatPoints(row?.points ?? 0)} pts (Heat: {formatPoints(heatPts)})
+                        Points so far: {formatPoints(row?.points ?? 0)} (this heat: {formatPoints(heatPts)})
                       </span>
                     </li>
                   );
@@ -1049,6 +1055,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           qualifiers={qualifiersOf(session)}
           pending={shown}
           canScore
+          viaScorerLink
           queued={outbox}
           onClickTeam={clickTeam}
           onToggleElim={toggleElim}
@@ -1072,7 +1079,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
             <>
         <section aria-label="Updated heat table" className="space-y-2">
           <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {postRaceRecap.heat.label || 'Heat'}
+            <Table2 className="h-4 w-4" aria-hidden="true" /> Updated heat table · {postRaceRecap.heat.label || 'Heat'}
           </h3>
           <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
             {postRaceRecap.heat.entries
@@ -1095,7 +1102,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
         </section>
 
         <section aria-label="Updated section toplist" className="space-y-2">
-          <p className="text-xs">These totals cover only the heats available to this link and include queued scores. They are not section standings.</p>
+          <p className="text-xs">These totals only cover heats on this link and include scores waiting to send. They aren’t the official toplist.</p>
           <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
             <Trophy className="h-4 w-4" aria-hidden="true" /> Scores available to this link
           </h3>

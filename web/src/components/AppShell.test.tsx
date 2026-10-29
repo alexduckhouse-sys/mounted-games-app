@@ -22,7 +22,7 @@ vi.mock('../api', async (importOriginal) => ({
 }));
 vi.mock('../weather/weather', () => ({ getWeather: vi.fn() }));
 vi.mock('./ConnectionPill', () => ({ ConnectionPill: () => null }));
-vi.mock('./TopBarTicker', () => ({ TopBarTicker: () => null }));
+vi.mock('./TopBarTicker', () => ({ TopBarTicker: () => <div data-testid="ticker" /> }));
 
 const spring = { id: 4, name: 'Spring Games' };
 const remembered = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify(spring))}; Path=/`; };
@@ -148,5 +148,22 @@ describe('AppShell: the weather line', () => {
     view.unmount();
     mount('/events');
     expect(screen.queryByRole('button', { name: /Thunder likely/ })).toBeNull();
+  });
+});
+
+describe('AppShell: where the ticker dock shows', () => {
+  it.each(['/competitions/4/contact', '/competitions/4/messages/abc', '/admin/competitions/new', '/admin/competitions/4', '/admin/competitions/4/format'])('leaves it off %s', (path) => {
+    remembered();
+    mount(path);
+    expect(screen.queryByTestId('ticker')).toBeNull();
+  });
+
+  it('keeps it on an event page and the competitions list', () => {
+    remembered();
+    const { unmount } = mount('/competitions/4');
+    expect(screen.getByTestId('ticker')).toBeInTheDocument();
+    unmount();
+    mount('/admin/competitions');
+    expect(screen.getByTestId('ticker')).toBeInTheDocument();
   });
 });

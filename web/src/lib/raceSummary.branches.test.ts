@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TieBreakRule, type Heat, type Race, type ResultRow } from '../types';
-import { heatTotals, summariseRace, type SummaryInput } from './raceSummary';
+import { heatFinishedSentence, heatTotals, placeText, summariseRace, type SummaryInput } from './raceSummary';
 
 const TEAMS = [1, 2, 3, 4];
 const none = new Set<number>();
@@ -53,7 +53,7 @@ describe('summariseRace placings and outs', () => {
       row(2, null, 0, { eliminated: true, status: 3 }),
     ]);
     const s = summariseRace(input(h, [r], 0, { notes: { 1: '   ', 2: '  Missed a pot  ' } }))!;
-    expect(s.placings.map((p) => [p.teamName, p.place])).toEqual([['Team A', 1], ['Team B', 2], ['Team 9', 3]]);
+    expect(s.placings.map((p) => [p.teamName, p.place])).toEqual([['Team A', 1], ['Team B', 2], ['Unnamed team', 3]]);
     expect(s.out.map((o) => [o.teamName, o.reason])).toEqual([
       ['Team C', 'Did not start'], ['Team A', 'Eliminated'], ['Team B', 'Missed a pot'],
     ]);
@@ -182,7 +182,7 @@ describe('summariseRace endings', () => {
     const s = summariseRace(input(h, [r0, r1], 1, { hcTeamIds: new Set([1]), qualifiers: 1, notes: { 4: 'Fell off' } }))!;
     expect(s.ending!.heading).toBe('Through to the final');
     expect(s.ending!.lines).toEqual([
-      'Team 9: qualified 1st, through to the final',
+      'Unnamed team: qualified 1st, through to the final',
       'Team B: not through. Placed 2nd and only the top 1 go through',
       'Team C: not through. Placed 3rd and only the top 1 go through',
       'Team A (HC): hors concours, does not take a place in the final',
@@ -207,5 +207,33 @@ describe('summariseRace endings', () => {
     const s = summariseRace(input(h, [r0, r1], 1, { hcTeamIds: new Set([2]) }))!;
     expect(s.totals[0]).toMatchObject({ teamId: 1, points: 4 });
     expect(s.ending!.lines).toEqual(['1st Team A: 4 points', 'Team B: hors concours, 2 points, not ranked']);
+  });
+});
+
+describe('joint places and the heat-finished sentence', () => {
+  it('reads a shared place as =1st and a sole place as 1st', () => {
+    expect(placeText(1, true)).toBe('=1st');
+    expect(placeText(3, false)).toBe('3rd');
+  });
+
+  it('marks joint places in a race and in the heat totals, and leaves hors concours unranked', () => {
+    const h = heat();
+    const r0 = race(0, [row(1, 1, 4), row(2, 1, 4), row(3, 3, 2), row(4, 4, 1)]);
+    const s = summariseRace(input(h, [r0], 0, { rule: TieBreakRule.Manual, hcTeamIds: new Set([4]) }))!;
+    expect(s.placings.map((p) => [p.teamId, p.joint, p.hc])).toEqual([[1, true, false], [2, true, false], [3, false, false], [4, false, true]]);
+    expect(s.totals.map((t) => [t.teamId, t.position, t.joint, t.hc])).toEqual([[1, 1, true, false], [2, 1, true, false], [3, 3, false, false], [4, null, false, true]]);
+    expect(s.ending!.lines[0]).toContain('=1st Team A');
+    expect(s.ending!.lines[2]).toContain('3rd Team C');
+    expect(s.ending!.lines[3]).toContain('Team D: hors concours');
+  });
+
+  it('names the winner, names a tie at the top together, and never names hors concours', () => {
+    const t = (rows: Array<[number, number, boolean]>) => heatTotals(heat(), [race(0, rows.map(([id, pts]) => row(id, id, pts)))], 0, new Set(rows.filter((r) => r[2]).map((r) => r[0])), TieBreakRule.Manual);
+    expect(heatFinishedSentence('Heat 2', t([[1, 4, false], [2, 3, false]]))).toBe('Heat 2 finished. Team A won.');
+    expect(heatFinishedSentence('Heat 2', t([[1, 4, true], [2, 3, false]]))).toBe('Heat 2 finished. Team B won.');
+    expect(heatFinishedSentence('Final', t([[1, 4, false], [2, 4, false]]))).toBe('Final finished. Team A and Team B are level at the top.');
+    expect(heatFinishedSentence('Final', t([[1, 4, false], [2, 4, false], [3, 4, false]]))).toBe('Final finished. Team A, Team B and Team C are level at the top.');
+    expect(heatFinishedSentence('Heat 1', [])).toBe('Heat 1 finished.');
+    expect(heatFinishedSentence('Heat 1', t([[1, 0, false]]))).toBe('Heat 1 finished.');
   });
 });

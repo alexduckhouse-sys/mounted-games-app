@@ -1,3 +1,6 @@
+import { reliability } from './reliability.ts';
+import { timing } from './timing.ts';
+import { completion } from './completion.ts';
 /**
  * MACHINE-DRAFTED French (`fr`): written by an AI model, not by a native speaker, and not yet reviewed.
  * It needs a native-speaker review before it is relied on at an event; see ../REVIEW.md for the terms that were
@@ -18,11 +21,13 @@ import { site } from './site.ts';
 import { admin } from './admin.ts';
 import { desk } from './desk.ts';
 import { teams } from './teams.ts';
+import { acct } from './acct.ts';
+
 import { broadcast } from './broadcast.ts';
 import { vaccinations } from './vaccinations.ts';
 import { apple } from './apple.ts';
 import { wind } from './wind.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, broadcast, vaccinations, apple, wind } as const;
+export const AREAS = { reliability, timing, completion, common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, acct, broadcast, vaccinations, apple, wind } as const;
 
-export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...broadcast, ...vaccinations, ...apple, ...wind };
+export const fr: Catalogue = { ...reliability, ...timing, ...completion, ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...acct, ...broadcast, ...vaccinations, ...apple, ...wind };

@@ -39,18 +39,28 @@ export function SiteAdminDashboard() {
     <RefinePage>
       <RefineHeader context={t('common.mountedGames')} title={t('admin.accounts.siteAdmin')} />
       <div className="ops-cards ops-tt ops-admin">
-        {toApprove > 0 && (
-          <>
-            <h2 className="rf-sec ops-tt-head"><span>{t('admin.accounts.dash.needsYou')}</span></h2>
-            <RefineList as="div" label={t('admin.accounts.dash.needsYou')}>
-              <Link to="/admin/trainer-requests" className="rf-row">
-                <span className="rf-num ops-count">{toApprove}</span>
-                <span className="rf-grow rf-t1">{t('admin.accounts.dash.requestsToApprove', { count: toApprove })}</span>
-                <Chevron />
-              </Link>
-            </RefineList>
-          </>
-        )}
+        {/* The space for "Needs you" is held until we know whether anyone is waiting, then it either fills or folds away. */}
+        <div className="ops-reserve" data-open={waiting === null || toApprove > 0}>
+          <div>
+            {toApprove > 0 ? (
+              <>
+                <h2 className="rf-sec ops-tt-head"><span>{t('admin.accounts.dash.needsYou')}</span></h2>
+                <RefineList as="div" label={t('admin.accounts.dash.needsYou')}>
+                  <Link to="/admin/trainer-requests" className="rf-row">
+                    <span className="rf-num ops-count">{toApprove}</span>
+                    <span className="rf-grow rf-t1">{t('admin.accounts.dash.requestsToApprove', { count: toApprove })}</span>
+                    <Chevron />
+                  </Link>
+                </RefineList>
+              </>
+            ) : (
+              <div aria-hidden="true">
+                <h2 className="rf-sec ops-tt-head"><span className="mg-skel" style={{ width: 96, height: 22 }} /></h2>
+                <RefineList as="div"><div className="rf-row"><span className="mg-skel" style={{ width: '60%', height: 16 }} /></div></RefineList>
+              </div>
+            )}
+          </div>
+        </div>
 
         <h2 className="rf-sec ops-tt-head"><span>{t('admin.accounts.competitions')}</span></h2>
         <RefineList as="div" label={t('admin.accounts.competitions')}>

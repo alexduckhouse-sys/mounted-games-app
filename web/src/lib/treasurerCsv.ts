@@ -1,4 +1,4 @@
-// Unused in web UI yet — reserved for iOS / upcoming wiring
+import { tr } from '../i18n/translate';
 import { toCsv } from './csv';
 import type { SectionSignup, SignupPaymentStatus, Team } from '../types';
 
@@ -28,6 +28,7 @@ export interface TreasurerOrderRow {
   id: number;
   competitionId: number;
   buyerUserId?: string;
+  isTestOrder?: boolean;
   buyerName?: string | null;
   status: number; // 0 AwaitingManualPayment, 1 AwaitingTestPayment, 2 Paid, 3 Declined, 4 Cancelled, 5 Refunded
   totalMinor: number;
@@ -683,4 +684,57 @@ function formatSignupMatchLabel(signup: TreasurerSignupRow, teamById: Map<number
   const team = signup.teamId != null ? teamById.get(signup.teamId) : undefined;
   const group = signup.teamName?.trim() || team?.displayName || signup.ponyClubName?.trim();
   return group ? `${signup.fullName} (${group})` : signup.fullName;
+}
+
+export class AccountingExportError extends Error {}
+
+export type AccountingPreset = 'xero' | 'quickbooks' | 'freeagent';
+
+/** Manually recorded receipts and completed refunds, for a clearing account after checking against the bank. */
+export function accountingCsv(input: TreasurerCsvInput, preset: AccountingPreset): string {
+  const records: { date: string; amount: number; payee: string; description: string; reference: string }[] = [];
+  const ukDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+  function add(date: string | null | undefined, amount: number, payee: string, description: string, reference: string) {
+    if (!Number.isSafeInteger(amount)) throw new AccountingExportError(tr('completion.penceError'));
+    if (!amount) return;
+    if (!date) throw new AccountingExportError(tr('completion.dateError'));
+    const day = date.slice(0, 10);
+    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day) throw new AccountingExportError(tr('completion.dateError'));
+    let recordedDay = day;
+    if (date.length > 10) {
+      // These API timestamps are UTC; SQLite may omit the suffix when reading them back.
+      const utc = /Z|[+-]\d{2}:?\d{2}$/.test(date) ? date : `${date}Z`;
+      const instant = new Date(utc);
+      if (!Number.isFinite(instant.getTime())) throw new AccountingExportError(tr('completion.dateError'));
+      recordedDay = ukDay.format(instant);
+    }
+    records.push({ date: recordedDay, amount, payee, description, reference });
+  }
+  for (const signup of input.signups) {
+    // Withdrawal changes the entry status, not the historical receipt. A known fee
+    // disposition without a date must fail validation rather than silently lose money.
+    const cancelledReceipt = signup.status === 3 && (signup.paidAt != null || signup.refundPending
+      || ['RefundPending', 'Refunded', 'Retained', 'CreditRollover'].includes(signup.feeDisposition ?? ''));
+    if (signup.status !== 1 && signup.status !== 2 && !cancelledReceipt) continue;
+    const reference = formatBacsReference(signup.id, input.competitionId);
+    const description = `Entry · ${signup.sectionName} · ${input.competitionName ?? ''}`;
+    add(signup.paidAt, signup.amountMinor, signup.fullName, description, reference);
+    if (signup.status === 2) add(signup.dispositionUpdatedAt, -Math.min(signup.amountMinor, Math.max(0, signup.refundedAmountMinor ?? signup.amountMinor)), signup.fullName, `Refund · ${description}`, reference);
+  }
+  for (const order of input.orders ?? []) {
+    if (order.isTestOrder || order.status !== 2 && order.status !== 5) continue;
+    if (order.currency && order.currency.toUpperCase() !== 'GBP') throw new AccountingExportError(tr('completion.currencyError'));
+    const description = `Shop · ${order.lines.map(line => line.title).join('; ')}`;
+    const reference = `ORDER-${order.id}`;
+    add(order.paidAt, order.totalMinor, order.buyerName ?? '', description, reference);
+    if (order.status === 5) add(order.refundedAt, -order.totalMinor, order.buyerName ?? '', `Refund · ${description}`, reference);
+  }
+  records.sort((a, b) => a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference));
+  const date = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+  const plain = (text: string) => text.replace(/[\r\n]+/g, ' ').trim();
+  if (preset === 'xero') return toCsv(['Date', 'Amount', 'Payee', 'Description', 'Reference'], records.map(r => [date(r.date), (r.amount / 100).toFixed(2), plain(r.payee), plain(r.description), r.reference]));
+  const rows = records.map(r => [date(r.date), `${r.reference} · ${plain(r.description)} · ${plain(r.payee)}`, (r.amount / 100).toFixed(2)]);
+  if (preset === 'quickbooks') return toCsv(['Date', 'Description', 'Amount'], rows);
+  // FreeAgent requires no header, no quote marks and no line breaks within descriptions.
+  return rows.map(([day, description, amount]) => `${day},${amount},${description.replace(/[,"\r\n]/g, ' ')}`).join('\r\n');
 }

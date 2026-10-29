@@ -1,11 +1,10 @@
 import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDialogFocus } from '../../components/useDialogFocus';
+import { useEffect, useMemo, useState } from 'react';
+import { Sheet } from '../../components/Sheet';
 import { useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import { RaceListPicker } from '../../components/RacePicker';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -261,15 +260,13 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   );
   const finalsModal = (
     <>
-      <AnimatePresence>
-        {showFinals && sectionId != null && (
-          <FinalsModal
-            sectionId={sectionId}
-            onClose={() => setShowFinals(false)}
-            onCreated={() => { setShowFinals(false); reload(); }}
-          />
-        )}
-      </AnimatePresence>
+      {showFinals && sectionId != null && (
+        <FinalsModal
+          sectionId={sectionId}
+          onClose={() => setShowFinals(false)}
+          onCreated={() => { setShowFinals(false); reload(); }}
+        />
+      )}
     </>
   );
 
@@ -375,8 +372,6 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
 interface FinalsModalProps { sectionId: number; onClose: () => void; onCreated: () => void }
 
 function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialogRef, onClose, 'button');
   const { competition } = useCompetition();
   const [topN, setTopN] = useState(6);
   const [lanes, setLanes] = useState(6);
@@ -467,23 +462,10 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-center p-3"
-      onClick={onClose}
-    >
-      <motion.div
-        ref={dialogRef} role="dialog" aria-modal="true" aria-label="Create finals"
-        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
-        className="card w-full max-w-md max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 p-3 border-b border-slate-200 dark:border-slate-800">
-          <Sparkles className="w-4 h-4 text-brand-600" />
-          <h3 className="font-semibold text-sm flex-1">Create finals</h3>
-          <button onClick={onClose} aria-label="Close" className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="p-3 space-y-3">
+    <Sheet title="Create finals" onClose={onClose}>
+      {({ close }) => (
+        <>
+        <div className="flex flex-col gap-3">
           {toFill ? (
             <p className="text-sm">
               The {listNames(fillNames)} {fillNames.length === 1 ? 'is' : 'are'} already on the timetable. Teams go in from the toplist,
@@ -492,7 +474,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
           ) : (<>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs font-semibold">Top N teams</span>
+              <span className="text-xs font-semibold">Teams in the A final</span>
               <NumberField  min={1} max={50} className="input mt-1 text-sm"
                 value={topN} onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
@@ -525,14 +507,15 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
 
           {err && <Notice>{err}</Notice>}
         </div>
-        <div className="flex items-center gap-2 p-3 border-t border-slate-200 dark:border-slate-800">
-          <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-xs">Cancel</button>
-          <button onClick={toFill ? fill : submit} disabled={busy} className="btn-primary !py-1.5 !px-3 text-xs ml-auto">
-            <Sparkles className="w-3.5 h-3.5" /> {toFill ? (busy ? 'Filling…' : 'Fill the finals') : (busy ? 'Creating…' : 'Create finals')}
+        <div className="kit-acts">
+          <button type="button" onClick={toFill ? fill : submit} disabled={busy} className="kit-pill kit-pill-fill">
+            <Sparkles className="h-4 w-4" aria-hidden="true" /> {toFill ? (busy ? 'Filling…' : 'Fill the finals') : (busy ? 'Creating…' : 'Create finals')}
           </button>
+          <button type="button" onClick={() => close()} className="kit-pill">Cancel</button>
         </div>
-      </motion.div>
-    </motion.div>
+        </>
+      )}
+    </Sheet>
   );
 }
 

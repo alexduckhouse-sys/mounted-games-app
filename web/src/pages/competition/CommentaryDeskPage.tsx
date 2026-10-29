@@ -1,5 +1,6 @@
+import { CallUpStrip } from './reliability/CallUpStrip';
 import { clubLabel } from '../../lib/clubName';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Trophy, Users } from 'lucide-react';
 import { api } from '../../api';
@@ -18,10 +19,12 @@ import { statusLetter } from '../../lib/resultStatus';
 import { publicRiderName } from '../../lib/riderNames';
 import { displaySectionName } from '../../lib/section';
 import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
-import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
+import { RefineChoiceRow, RefineList } from '../refine/Refine';
 import { DeskOverlays } from './streamControls/DeskOverlays';
 import { CommentatorBriefingCard } from './CommentatorBriefingCard';
 import { useHeldFor } from '../../hooks/useHeldFor';
@@ -43,7 +46,7 @@ export function CommentaryDeskPage() {
   usePageWidth('wide');
   const t = useT();
   const { lang } = useLanguage();
-  const { competition, reload } = useCompetition();
+  const { competition, connected = false, standingsVersion = 0, ready } = useCompetition();
   const { canOrganise } = useAuth();
   const canControlStreams = canOrganise(competition);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,27 +63,7 @@ export function CommentaryDeskPage() {
   const [selectedHeatId, setSelectedHeatId] = useState<number | null>(null);
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
   const [declarations, setDeclarations] = useState<DeclarationForm[]>([]);
-  const [refreshTick, setRefreshTick] = useState(0);
   const [showQrModal, setShowQrModal] = useState(false);
-
-  const bumpRefresh = useCallback(() => {
-    setRefreshTick((n) => n + 1);
-  }, []);
-
-  const { connected } = useLiveHub(competition.id, {
-    onReady: () => {
-      reload();
-      bumpRefresh();
-    },
-    onSessionUpdated: () => {
-      reload();
-      bumpRefresh();
-    },
-    onResultsUpdated: () => {
-      reload();
-      bumpRefresh();
-    },
-  });
 
   usePageHeader({
     title: t('desk.commentary.title'),
@@ -94,8 +77,8 @@ export function CommentaryDeskPage() {
     [competition.sessions, sectionId],
   );
 
-  const refreshSource = useMemo(() => ({ competitionId: competition.id, scoreVersion, teams: competition.teams, sections: competition.sections, refreshTick }),
-    [competition.id, scoreVersion, competition.teams, competition.sections, refreshTick]);
+  const refreshSource = useMemo(() => ({ competitionId: competition.id, scoreVersion, teams: competition.teams, sections: competition.sections, ready, standingsVersion }),
+    [competition.id, scoreVersion, competition.teams, competition.sections, ready, standingsVersion]);
 
   useEffect(() => {
     if (sectionId == null) return;
@@ -124,7 +107,7 @@ export function CommentaryDeskPage() {
         if (!cancelled) setDeclarations([]);
       });
     return () => { cancelled = true; };
-  }, [competition.id, refreshTick]);
+  }, [competition.id, ready, standingsVersion]);
 
   const chooseSection = (nextId: number) => {
     setSelectedSectionId(nextId);
@@ -259,13 +242,17 @@ export function CommentaryDeskPage() {
         const gapLabel = idx === 0
           ? t('desk.commentary.leader')
           : idx < cutoffPlaces
-            ? t('desk.commentary.gapTop', { gap: formatPoints(gapToFirst), places: cutoffPlaces })
-            : t('desk.commentary.gapCutoff', { gap: formatPoints(gapToFirst), cut: formatPoints(gapToCutoff), places: cutoffPlaces });
+            ? (gapToFirst === 0
+              ? t('desk.commentary.levelTop', { places: cutoffPlaces })
+              : t('desk.commentary.gapTop', { gap: t('desk.commentary.pointsN', { count: gapToFirst }), places: cutoffPlaces }))
+            : (gapToCutoff === 0
+              ? t('desk.commentary.levelCutoff', { gap: formatPoints(gapToFirst), places: cutoffPlaces })
+              : t('desk.commentary.gapCutoff', { gap: formatPoints(gapToFirst), cut: formatPoints(gapToCutoff), places: cutoffPlaces }));
 
         return {
           teamId: row.teamId,
           rank: row.position,
-          rankLabel: toplist.started ? `${localOrdinal(row.position, lang)}${row.joint ? '=' : ''}` : localOrdinal(idx + 1, lang),
+          rankLabel: toplist.started ? `${row.joint ? '=' : ''}${localOrdinal(row.position, lang)}` : '—',
           bibColour: team?.bibColour ?? st?.bibColour ?? null,
           teamName: row.teamName,
           clubName: clubLabel(team?.clubName ?? st?.clubName),
@@ -289,7 +276,7 @@ export function CommentaryDeskPage() {
       return {
         teamId: tm.id,
         rank: idx + 1,
-        rankLabel: localOrdinal(idx + 1, lang),
+        rankLabel: '—',
         bibColour: tm.bibColour ?? null,
         teamName: tm.displayName,
         clubName: clubLabel(tm.clubName),
@@ -345,7 +332,7 @@ export function CommentaryDeskPage() {
       const chasing = orderedStandings[cutoffPlaces];
       if (onBubble && chasing) {
         const diff = Math.max(0, onBubble.totalPoints - chasing.totalPoints);
-        cutoffText = t('desk.commentary.cutoffBubble', { team: onBubble.teamName, points: formatPoints(onBubble.totalPoints), place: localOrdinal(cutoffPlaces, lang), chasing: chasing.teamName, diff: formatPoints(diff) });
+        cutoffText = t('desk.commentary.cutoffBubble', { team: onBubble.teamName, points: t('desk.commentary.pointsN', { count: onBubble.totalPoints }), place: localOrdinal(cutoffPlaces, lang), chasing: chasing.teamName, ahead: t('desk.commentary.pointsN', { count: diff }) });
       }
     }
 
@@ -356,9 +343,63 @@ export function CommentaryDeskPage() {
     };
   }, [section?.finalistCount, orderedStandings, toplist.started, latestRaceSummary, t, lang]);
 
+  // The controls live in a sheet opened from the dock; with no dock (page on its own) they stay in the header card.
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const docked = useDockAction({ label: t('desk.commentary.controls'), icon: 'settings', onClick: () => setControlsOpen(true) });
+  const renderControls = (close?: (after?: () => void) => void) => (
+    <div className="flex flex-col gap-3">
+      <RefineList as="div">
+        {competition.sections.length > 1 && (
+          <RefineChoiceRow label={t('desk.commentary.section')} value={String(sectionId ?? '')} onChange={(value) => chooseSection(Number(value))}
+            options={competition.sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }))} />
+        )}
+        {sectionHeats.length > 1 && (
+          <RefineChoiceRow label={t('desk.commentary.heat')} value={String(activeHeatItem?.heat.id ?? '')} onChange={(value) => setSelectedHeatId(Number(value))}
+            options={sectionHeats.map((item) => ({ value: String(item.heat.id), label: item.label }))} />
+        )}
+        <RefineChoiceRow<DeskMode> label={t('desk.commentary.view')} value={mode} onChange={setMode}
+          options={[
+            { value: 'split', label: t('desk.commentary.sideBySide') },
+            { value: 'lanes', label: t('desk.commentary.currentLanes') },
+            { value: 'standings', label: t('desk.commentary.standingsInOrder') },
+          ]} />
+      </RefineList>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => { if (close) close(() => { setControlsOpen(false); setShowQrModal(true); }); else setShowQrModal(true); }}
+          className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
+        >
+          <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.qrAccess')}
+        </button>
+        <Link
+          to={`/competitions/${competition.id}/tv${sectionId != null ? `?section=${sectionId}` : ''}`}
+          className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
+        >
+          <Monitor className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.tvKiosk')}
+        </Link>
+        <Link
+          to={`/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`}
+          className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
+        >
+          {t('desk.commentary.scoring')}
+        </Link>
+        {activeHeatItem && (
+          <Link
+            to={`/competitions/${competition.id}/session/${activeHeatItem.session.id}?heat=${activeHeatItem.heat.id}&commentator=1`}
+            className="mg-btn mg-btn-primary !min-h-10 !px-3 text-xs font-bold"
+          >
+            <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.scoreAndCommentate')}
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
       {standingsStale && (standings.length ? savedNotice && <Notice tone="info">{t('desk.commentary.savedStandings')}</Notice> : <Notice tone="info">{t('desk.commentary.waitingOfficial')}</Notice>)}
+      {canControlStreams && <CallUpStrip competitionId={competition.id} sessions={competition.sessions} />}
       {/* Top Bar */}
       <header className="mg-card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -380,89 +421,14 @@ export function CommentaryDeskPage() {
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {competition.sections.length > 1 && (
-              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                <span>{t('desk.commentary.section')}</span>
-                <select
-                  aria-label={t('desk.commentary.sectionFilter')}
-                  value={sectionId ?? ''}
-                  onChange={(e) => chooseSection(Number(e.target.value))}
-                  className="min-h-10 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-sm font-semibold text-[rgb(var(--mg-ink))]"
-                >
-                  {competition.sections.map((sec) => (
-                    <option key={sec.id} value={sec.id}>
-                      {displaySectionName(sec.displayName)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            {activeHeatItem && (
-              <Link
-                to={`/competitions/${competition.id}/session/${activeHeatItem.session.id}?heat=${activeHeatItem.heat.id}&commentator=1`}
-                className="mg-btn mg-btn-primary !min-h-10 !px-3 text-xs font-bold"
-              >
-                <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.scoreAndCommentate')}
-              </Link>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowQrModal(true)}
-              className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
-            >
-              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.qrAccess')}
-            </button>
-
-            <Link
-              to={`/competitions/${competition.id}/tv${sectionId != null ? `?section=${sectionId}` : ''}`}
-              className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
-            >
-              <Monitor className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.tvKiosk')}
-            </Link>
-            <Link
-              to={`/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`}
-              className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
-            >
-              {t('desk.commentary.scoring')}
-            </Link>
-          </div>
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="mg-seg" role="group" aria-label={t('desk.commentary.viewGroup')}>
-            <button type="button" aria-pressed={mode === 'split'} onClick={() => setMode('split')}>
-              {t('desk.commentary.sideBySide')}
-            </button>
-            <button type="button" aria-pressed={mode === 'lanes'} onClick={() => setMode('lanes')}>
-              {t('desk.commentary.currentLanes')}
-            </button>
-            <button type="button" aria-pressed={mode === 'standings'} onClick={() => setMode('standings')}>
-              {t('desk.commentary.standingsInOrder')}
-            </button>
-          </div>
-
-          {sectionHeats.length > 1 && (
-            <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-              <span>{t('desk.commentary.heat')}</span>
-              <select
-                aria-label={t('desk.commentary.selectHeat')}
-                value={activeHeatItem?.heat.id ?? ''}
-                onChange={(e) => setSelectedHeatId(Number(e.target.value))}
-                className="min-h-9 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2 py-1 text-xs font-semibold text-[rgb(var(--mg-ink))]"
-              >
-                {sectionHeats.map((item) => (
-                  <option key={item.heat.id} value={item.heat.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
+        {!docked && renderControls()}
       </header>
+      {docked && controlsOpen && (
+        <Sheet title={t('desk.commentary.controls')} onClose={() => setControlsOpen(false)}>
+          {({ close }) => renderControls(close)}
+        </Sheet>
+      )}
 
       {/* One-tap stream overlays */}
       {canControlStreams && <DeskOverlays />}
@@ -581,7 +547,7 @@ export function CommentaryDeskPage() {
               declarations={declarations}
               finalistCount={section?.finalistCount}
               laneOrder={activeLanes?.lanes.map((l) => ({ teamId: l.entry.teamId, lane: l.lane, sitting: l.sitting }))}
-              refreshTick={refreshTick}
+              refreshTick={`${ready}:${standingsVersion}:${scoreVersion}`}
             />
           )}
 
@@ -641,7 +607,7 @@ export function CommentaryDeskPage() {
                           {t('desk.commentary.firsts', { count: row.wins })}
                         </span>
                         <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                          {t('desk.commentary.ptsOnly', { points: formatPoints(row.totalPoints) })}
+                          {t('desk.commentary.pointsN', { count: Number(formatPoints(row.totalPoints)) })}
                         </span>
                       </div>
                     </div>

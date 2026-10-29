@@ -42,4 +42,11 @@ export const wind = {
   "wind.pause": "Oedi rasio",
   "wind.tell": "Anfon cyhoeddiad",
   "wind.error": "Methu cadw neu lwytho’r adolygiad. Gwiriwch eich signal ac ail-lwythwch cyn rhoi cynnig arall arni.",
+  "wind.recommendations": "Newidiadau ras a argymhellir",
+  "wind.suggestionReason": "Gall poteli a baneri symud mewn hyrddiau. Ticiwch ddewis arall i’w adolygu gyda’r swyddog.",
+  "wind.noSuggestions": "Dim dewisiadau eraill wedi’u cadarnhau. Gwiriwch reolau’r digwyddiad neu adolygwch ras isod.",
+  "wind.acceptSuggestion": "Adolygu ras yn lle {race}",
+  "wind.dismissSuggestion": "Diystyru ras yn lle {race}",
+  "wind.continue": "Parhau am y tro",
+  "wind.send": "Anfon",
 } as const;

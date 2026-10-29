@@ -1,14 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AxiosRequestConfig } from 'axios';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { competition, team } from '../test/factories';
 import type { ShopPost } from '../types';
 import { CompetitionContext } from './competition/context';
 import { TeamsTab } from './competition/TeamsTab';
-import { FormatPage } from './admin/FormatPage';
 import { ShopPage } from './ShopPage';
 import { chooseOption, selectedValue } from '../test/select';
 
@@ -114,41 +113,5 @@ describe('TeamsTab new team form', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/teams', expect.objectContaining({ competitionSectionId: 5, clubId: 3, suffix: 'A' })));
     await userEvent.click(screen.getByRole('button', { name: /Add custom team/ }));
     await waitFor(() => expect(selectedValue(screen.getByLabelText(/Club/))).toBe('3'));
-  });
-});
-
-describe('FormatPage', () => {
-  const detail = { id: 4, name: 'Autumn Games', sections: [], teams: [], sessions: [], signupsLocked: false, createdByUserId: 'u1' };
-  function mount() {
-    return render(
-      <MemoryRouter initialEntries={['/admin/competitions/4/format']}>
-        <Routes><Route path="/admin/competitions/:id/format" element={<FormatPage />} /></Routes>
-      </MemoryRouter>,
-    );
-  }
-
-  it('loads the competition and its signups on arrival', async () => {
-    serve((url) => (url === '/competitions/4' ? detail : []));
-    mount();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { level: 1, name: 'On the day' })).toBeInTheDocument();
-    expect(api.get).toHaveBeenCalledWith('/competitions/4/signups');
-  });
-
-  it('shows the error when the competition cannot be loaded', async () => {
-    serve(() => { throw new Error('nope'); });
-    mount();
-    expect(await screen.findByText('Couldn’t load the organiser details. Check your signal and try again.')).toBeInTheDocument();
-  });
-
-  it('reloads after the lock is toggled', async () => {
-    serve((url) => (url === '/competitions/4' ? detail : []));
-    vi.mocked(api.post).mockResolvedValue({ data: {} });
-    mount();
-    await screen.findByRole('heading', { level: 1, name: 'On the day' });
-    const before = vi.mocked(api.get).mock.calls.length;
-    await userEvent.click(screen.getByRole('button', { name: 'Close signups now' }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/4/signups-locked', { locked: true });
-    await waitFor(() => expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(before));
   });
 });

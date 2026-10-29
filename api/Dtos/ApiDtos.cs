@@ -138,7 +138,7 @@ public record CompetitionDetail(
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
     double? Latitude, double? Longitude,
-    string? What3Words, string? AppleMapsUrl,
+    string? What3Words, [MaxLength(500)] string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
     [MaxLength(CompetitionFields.PostcodeMax)] string? Postcode = null,
     string? StreamUrl = null,
@@ -161,7 +161,7 @@ public record CreateCompetitionRequest(
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
     double? Latitude, double? Longitude,
-    string? What3Words, string? AppleMapsUrl,
+    string? What3Words, [MaxLength(500)] string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived,
     [MaxLength(CompetitionFields.PostcodeMax)] string? Postcode = null,
@@ -456,7 +456,7 @@ public record RaceDto(
     int OrderIndex, bool IsComplete,
     DateTime? StartedAt, DateTime? FinishedAt,
     IReadOnlyList<ResultDto> Results,
-    bool UnderReview = false, int ProgrammeRevision = 0);
+    bool UnderReview = false, int ProgrammeRevision = 0, bool StartIsExplicit = false);
 
 public record UpdateHeatDurationRequest(int? DurationMinutes);
 
@@ -489,7 +489,7 @@ public record CreateHeatRequest(
 public record SubmitRaceResultsRequest(
     IReadOnlyList<FinishingPlaceDto> Places,
     IReadOnlyList<FinishingPlaceDto>? Expected = null,
-    string? Reason = null, int? ExpectedProgrammeRevision = null);
+    string? Reason = null, int? ExpectedProgrammeRevision = null, DateTime? FinishedAt = null);
 /// <summary>Status null means Eliminated when Eliminated is set. RefereeNote is private to staff (500 characters at most).</summary>
 /// <param name="Points">Optional points for a finisher, in whole or half points (a dead heat, say); left out, the place decides.</param>
 public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? RefereeNote = null, double? Points = null);

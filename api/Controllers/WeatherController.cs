@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using MountedGames.Api.Services;
@@ -18,12 +20,14 @@ public class WeatherController : ControllerBase
     private readonly IHttpClientFactory _http;
     private readonly WeatherCache _cache;
     private readonly TimeProvider _time;
+    private readonly ILogger<WeatherController> _log;
 
-    public WeatherController(IHttpClientFactory http, WeatherCache cache, TimeProvider time)
+    public WeatherController(IHttpClientFactory http, WeatherCache cache, TimeProvider time, ILogger<WeatherController> log)
     {
         _http = http;
         _cache = cache;
         _time = time;
+        _log = log;
     }
 
     private async Task<ActionResult<object>> ServeAsync(string key, Func<Task<WeatherOutcome>> fetch)
@@ -36,6 +40,8 @@ public class WeatherController : ControllerBase
     // Lookups use the rounded coordinates (about 1 km) so the cached answer is the same whichever
     // phone asked first.
     [HttpGet("current")]
+    [AllowAnonymous]
+    [PublicRead]
     public Task<ActionResult<object>> Current([FromQuery] double lat, [FromQuery] double lon)
     {
         lat = WeatherCache.RoundCoordinate(lat);
@@ -54,10 +60,10 @@ public class WeatherController : ControllerBase
             }
             catch (Exception ex)
             {
+                _log.LogWarning(ex, "Weather service request failed.");
                 return new WeatherOutcome(new
                 {
                     error = "weather_unavailable",
-                    detail = ex.Message,
                     fallback = new { temperature_2m = 15, weather_code = 3, wind_speed_10m = 8, is_day = 1 }
                 }, null);
             }
@@ -65,6 +71,8 @@ public class WeatherController : ControllerBase
     }
 
     [HttpGet("at")]
+    [AllowAnonymous]
+    [PublicRead]
     public Task<ActionResult<object>> AtTime(
         [FromQuery] double lat,
         [FromQuery] double lon,
@@ -111,10 +119,10 @@ public class WeatherController : ControllerBase
             }
             catch (Exception ex)
             {
+                _log.LogWarning(ex, "Weather service request failed.");
                 return new WeatherOutcome(new
                 {
                     error = "weather_unavailable",
-                    detail = ex.Message,
                     fallback = new { temperature_2m = 15, weather_code = 3, is_day = 1 }
                 }, null);
             }
@@ -122,6 +130,8 @@ public class WeatherController : ControllerBase
     }
 
     [HttpGet("forecast")]
+    [AllowAnonymous]
+    [PublicRead]
     public Task<ActionResult<object>> Forecast(
         [FromQuery] double lat,
         [FromQuery] double lon,
@@ -143,10 +153,10 @@ public class WeatherController : ControllerBase
             }
             catch (Exception ex)
             {
+                _log.LogWarning(ex, "Weather service request failed.");
                 return new WeatherOutcome(new
                 {
                     error = "weather_unavailable",
-                    detail = ex.Message,
                     fallback = new { weather_code = new[] { 3 }, temperature_2m_max = new[] { 15 }, temperature_2m_min = new[] { 8 } }
                 }, null);
             }

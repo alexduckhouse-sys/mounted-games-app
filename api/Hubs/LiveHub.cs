@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using MountedGames.Api.Services.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MountedGames.Api.Security;
@@ -75,6 +76,18 @@ public class LiveHub(ViewerRegistry viewers, LiveConnections connections, AppDbC
 
     public async Task JoinCompetition(int competitionId)
     {
+        if (Context.GetHttpContext() is { } http
+            && await db.IsIpBlockedAsync(http, Context.ConnectionAborted, includeAccountBlocks: false))
+            throw new HubException("This address has been blocked.");
+        if (Context.User?.Identity?.IsAuthenticated == true && Context.UserIdentifier is { } accountId)
+        {
+            var state = await LiveAccounts.StateAsync(db, accountId, Context.ConnectionAborted);
+            if (state is null || !state.Accepts(LiveAccounts.SessionVersionOf(Context.User)))
+            {
+                Context.Abort();
+                throw new HubException("Sign in again to join this competition.");
+            }
+        }
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(competitionId));
         // Membership records the subscription, not a role that could be revoked while the socket stays open.
         if (Context.User?.Identity?.IsAuthenticated == true && Context.UserIdentifier is { } userId)
@@ -95,7 +108,7 @@ public class LiveHub(ViewerRegistry viewers, LiveConnections connections, AppDbC
 public interface ILiveBroadcaster
 {
     Task ChatMessage(int competitionId, object message);
-    /// <summary>Sends an admin-only message to the competition's admins and to its author.</summary>
+    /// <summary>Sends a private message only to subscribed competition staff and its participants.</summary>
     Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message, string? recipientUserId = null);
     Task ChatMessageDeleted(int competitionId, int messageId);
     Task SessionUpdated(int competitionId, object session);
@@ -157,34 +170,19 @@ public class LiveBroadcaster : ILiveBroadcaster
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var adminIds = await (from membership in db.UserRoles
-                              join role in db.Roles on membership.RoleId equals role.Id
-                              where role.Name == Roles.Admin
-                              select membership.UserId).Distinct().ToListAsync();
-        var groups = adminIds.Where(id => id != authorUserId && id != recipientUserId)
+        var managerIds = await db.ManagerIdsAsync(competitionId);
+        var groups = managerIds.Append(authorUserId).Append(recipientUserId).OfType<string>().Distinct()
             .Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
         if (groups.Length > 0)
             await _hub.Clients.Groups(groups).SendAsync("chatMessage", message);
-        if (authorUserId is not null)
-            await _hub.Clients.User(authorUserId).SendAsync("chatMessage", message);
-        if (recipientUserId is not null && recipientUserId != authorUserId)
-            await _hub.Clients.User(recipientUserId).SendAsync("chatMessage", message);
     }
 
     public async Task ProtestsChanged(int competitionId)
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var adminIds = await (from membership in db.UserRoles
-                              join role in db.Roles on membership.RoleId equals role.Id
-                              where role.Name == Roles.Admin
-                              select membership.UserId).Distinct().ToListAsync();
-        var owner = await db.Competitions.AsNoTracking().Where(c => c.Id == competitionId)
-            .Select(c => c.CreatedByUserId).FirstOrDefaultAsync();
-        var team = await db.CompetitionCollaborators.AsNoTracking().Where(k => k.CompetitionId == competitionId)
-            .Select(k => k.UserId).ToListAsync();
-        var groups = adminIds.Concat(team).Append(owner).OfType<string>().Distinct()
-            .Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
+        var managerIds = await db.ManagerIdsAsync(competitionId);
+        var groups = managerIds.Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
         if (groups.Length > 0)
             await _hub.Clients.Groups(groups).SendAsync("protestsChanged", new { competitionId });
     }

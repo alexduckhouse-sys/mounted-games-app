@@ -8,6 +8,7 @@ import PrintEventPage from '../operations/PrintEventPage';
 import { ResultsBookTab } from './ResultsBookTab';
 import type { ResultsBook } from './resultsBookTypes';
 import { chooseOption } from '../../test/select';
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => true }) }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn() } }));
 

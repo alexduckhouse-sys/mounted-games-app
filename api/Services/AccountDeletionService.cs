@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Entities.Seasons;
 
@@ -53,6 +54,9 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         var optInEmail = (user.Email ?? string.Empty).Trim().ToLowerInvariant();
         if (optInEmail.Length > 0)
             await db.EmailOptIns.Where(o => o.Email == optInEmail).ExecuteDeleteAsync(ct);
+        await db.Set<SubstitutionRequest>().Where(r => r.RequestedByUserId == id).ExecuteDeleteAsync(ct);
+        await db.Set<SubstitutionRequest>().Where(r => r.DecidedByUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.DecidedByUserId, (string?)null), ct);
         await db.TrainerNotes.Where(n => n.UserId == id).ExecuteDeleteAsync(ct);
         await db.StartingPoints.Where(p => p.OwnerUserId == id).ExecuteDeleteAsync(ct);
         // The networks it signed in from, and the ones blocked because of it. A blocked account keeps both: the blocks stay
@@ -70,6 +74,9 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         await db.CompetitionCollaborators.Where(c => c.UserId == id).ExecuteDeleteAsync(ct);
         // The rider roster holds other people's children; entries already made from it keep their own copy of the details.
         var riders = db.SavedRiders.Where(r => r.CreatedByUserId == id);
+        // Detaching the roster must not undo a child's current surname privacy choice.
+        await db.RiderEntries.Where(e => e.SavedRiderId != null && riders.Where(r => r.UseInitialOnly).Select(r => r.Id).Contains(e.SavedRiderId.Value))
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.UseInitialOnly, true), ct);
         await db.RiderEntries.Where(e => e.SavedRiderId != null && riders.Select(r => r.Id).Contains(e.SavedRiderId.Value))
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.SavedRiderId, (int?)null), ct);
         await riders.ExecuteDeleteAsync(ct);
@@ -115,6 +122,8 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
             .SetProperty(r => r.IpAddress, (string?)null), ct);
 
         // --- Event and accounting history: kept, with the account link removed. ---
+        await db.DeclarationForms.Where(d => d.SubmittedByUserId == id || d.Team!.TrainerUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.TrainerPhone, (string?)null), ct);
         await db.DeclarationForms.Where(d => d.SubmittedByUserId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.SubmittedByUserId, (string?)null), ct);
         // Protest logs stay with the competition; only the account links go.

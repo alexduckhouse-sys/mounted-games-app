@@ -55,9 +55,9 @@ it('marks pending BACS payments paid and lets staff complete a withdrawal refund
   const changed = vi.fn();
   render(<EntryManagement competition={competition()} entriesCloseAt={null} onChanged={changed} signups={[entry(1), entry(2, { status: 3, isWithdrawn: true, refundPending: true })]} />);
   await userEvent.click(screen.getByText('Entries · 2'));
-  await userEvent.click(screen.getByRole('button', { name: 'Mark Synthetic 1 as Paid' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Mark Synthetic 1 as paid' }));
   expect(api.post).toHaveBeenCalledWith('/competitions/1/signups/1/mark-paid', {});
-  expect(screen.queryByRole('button', { name: 'Mark Synthetic 2 as Paid' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Mark Synthetic 2 as paid' })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Mark Synthetic 2 refunded' }));
   expect(api.put).toHaveBeenCalledWith('/signups/2/status', { status: 2 });
   expect(changed).toHaveBeenCalledTimes(2);
@@ -66,10 +66,10 @@ it('keeps payment failures visible and leaves demo payments to checkout', async 
   vi.mocked(api.post).mockRejectedValue({ response: { data: { message: 'Section is full.' } } });
   const { unmount } = render(<EntryManagement competition={competition()} entriesCloseAt={null} signups={[entry(1, { isWaitlist: true })]} />);
   await userEvent.click(screen.getByText('Entries · 1'));
-  await userEvent.click(screen.getByRole('button', { name: 'Mark Synthetic 1 as Paid' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Mark Synthetic 1 as paid' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Section is full.');
   unmount();
   render(<EntryManagement competition={competition({ isDemo: true })} entriesCloseAt={null} signups={[entry(1)]} />);
   await userEvent.click(screen.getByText('Entries · 1'));
-  await waitFor(() => expect(screen.queryByRole('button', { name: /as Paid/ })).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByRole('button', { name: /as paid/ })).not.toBeInTheDocument());
 });

@@ -42,4 +42,11 @@ export const wind = {
   "wind.pause": "Pause racing",
   "wind.tell": "Send announcement",
   "wind.error": "Couldn’t save or load this review. Check your signal and reload before trying again.",
+  "wind.recommendations": "Recommended race changes",
+  "wind.suggestionReason": "Bottles and flags can move in gusts. Tick an alternative to review it with the official.",
+  "wind.noSuggestions": "No confirmed alternatives to suggest. Check the event rules or review a race below.",
+  "wind.acceptSuggestion": "Review replacement for {race}",
+  "wind.dismissSuggestion": "Dismiss replacement for {race}",
+  "wind.continue": "Continue for now",
+  "wind.send": "Send",
 } as const;

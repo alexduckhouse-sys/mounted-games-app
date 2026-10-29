@@ -82,19 +82,30 @@ export function browserPublisherDependencies(customRequest: typeof streamRequest
     },
   };
 }
-export const encodings: RTCRtpEncodingParameters[] = [
-  { rid: 'f', maxBitrate: 2_000_000, maxFramerate: 30 },
-  { rid: 'h', scaleResolutionDownBy: 1.5, maxBitrate: 850_000, maxFramerate: 30 },
-  { rid: 'q', scaleResolutionDownBy: 2, maxBitrate: 350_000, maxFramerate: 30 },
-];
+const presetHeight = (preset: StreamQualityPreset): number => preset === 'auto' ? 1080 : Number.parseInt(preset, 10);
+
+/** Keep the advertised layers bounded even when a camera ignores its ideal capture size. */
+function senderEncoding(track: MediaStreamTrack | undefined, preset: StreamQualityPreset, rid?: string): RTCRtpEncodingParameters {
+  const fullHeight = presetHeight(preset);
+  const height = rid === 'q' ? Math.min(fullHeight, 360) : rid === 'h' ? Math.min(fullHeight, 540) : fullHeight;
+  const settings = track?.getSettings?.();
+  // Portrait cameras report width/height swapped. Resolution presets describe the shorter edge.
+  const dimensions = [settings?.width, settings?.height].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+  const sourceHeight = dimensions.length ? Math.min(...dimensions) : fullHeight;
+  const maxBitrate = height <= 360 ? 350_000 : height <= 480 ? 900_000 : height <= 540 ? 850_000 : height <= 720 ? 1_500_000 : preset === 'auto' ? 2_200_000 : 2_500_000;
+  return { ...(rid ? { rid } : {}), maxBitrate, maxFramerate: 30, scaleResolutionDownBy: Math.max(1, sourceHeight / height) };
+}
 
 function detectResolutionLabel(track?: MediaStreamTrack): string {
   const settings = (track as MediaStreamTrack & { getSettings?: () => MediaTrackSettings })?.getSettings?.();
-  const h = settings?.height ?? 0;
+  const dimensions = [settings?.width, settings?.height].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+  const h = dimensions.length ? Math.min(...dimensions) : 720;
   if (h >= 2000) return '4K';
   if (h >= 1400) return '1440p';
   if (h >= 1000) return '1080p';
-  return '720p';
+  if (h >= 700) return '720p';
+  if (h >= 470) return '480p';
+  return '360p';
 }
 
 function detectMaxZoom(track?: MediaStreamTrack): number {
@@ -124,6 +135,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let pendingRecovery = false;
   let epoch = 0;
   let captureEpoch = 0;
+  let qualityChange: Promise<void> = Promise.resolve();
   let failures = 0;
   let hadStream = false;
   let takeOverFirst = false;
@@ -145,8 +157,8 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let wake: { release: () => Promise<void> } | undefined;
   let hiddenAt: number | undefined;
   const releaseMedia = (media: MediaStream) => media.getTracks().forEach((track) => track.stop());
-  const videoConstraints = (idealWidth = 3840, idealHeight = 2160): MediaTrackConstraints => ({
-    width: { ideal: idealWidth }, height: { ideal: idealHeight }, frameRate: { ideal: 30 },
+  const videoConstraints = (idealHeight = presetHeight(snapshot.qualityPreset ?? '720p')): MediaTrackConstraints => ({
+    width: { ideal: Math.round(idealHeight * 16 / 9) }, height: { ideal: idealHeight }, frameRate: { ideal: 30 },
     ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode }),
   });
   const audioConstraints = (): MediaTrackConstraints => ({
@@ -169,45 +181,31 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = 'maintain-framerate';
       if (Array.isArray(params.encodings) && params.encodings.length > 0) {
         for (const enc of params.encodings) {
-          if (preset === '360p') {
-            enc.maxBitrate = 380_000;
-            enc.scaleResolutionDownBy = 3;
-            enc.maxFramerate = 30;
-          } else if (preset === '480p') {
-            if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
-            else { enc.maxBitrate = 900_000; enc.scaleResolutionDownBy = 1.5; }
-            enc.maxFramerate = 30;
-          } else if (preset === '720p') {
-            if (enc.rid === 'f') { enc.maxBitrate = 1_500_000; enc.scaleResolutionDownBy = 1.5; }
-            else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 2; }
-            else if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 3; }
-            else { enc.maxBitrate = 2_500_000; enc.scaleResolutionDownBy = 1; }
-            enc.maxFramerate = 30;
-          } else if (preset === 'auto') {
-            if (enc.rid === 'f') { enc.maxBitrate = 2_200_000; enc.scaleResolutionDownBy = 1; }
-            else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 1.5; }
-            else if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
-            else { enc.maxBitrate = 2_200_000; enc.scaleResolutionDownBy = 1; }
-            enc.maxFramerate = 30;
-          } else {
-            if (enc.rid === 'f') { enc.maxBitrate = 2_500_000; enc.scaleResolutionDownBy = 1; }
-            else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 1.5; }
-            else { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
-            enc.maxFramerate = 30;
-          }
+          Object.assign(enc, senderEncoding(snapshot.media?.getVideoTracks()[0], preset, enc.rid));
         }
       }
       await sender.setParameters(params);
     } catch { /* Browser may reject runtime encoding parameter edits. */ }
   }
+  async function reconcileCapture(media: MediaStream, requested: StreamQualityPreset | undefined) {
+    // Permission/device selection can outlast a quality change made while capture is pending.
+    while (alive && snapshot.qualityPreset !== requested) {
+      requested = snapshot.qualityPreset;
+      try { await media.getVideoTracks()[0]?.applyConstraints?.(videoConstraints()); }
+      catch { break; /* The sender will still scale a camera that cannot change its capture size. */ }
+    }
+  }
   async function capture(sound = true) {
     const ticket = ++captureEpoch;
+    const requestedPreset = snapshot.qualityPreset;
     let media: MediaStream;
     try {
       media = await d.getUserMedia({ video: videoConstraints(), audio: sound ? audioConstraints() : false });
     } catch {
-      media = await d.getUserMedia({ video: videoConstraints(1280, 720), audio: sound ? audioConstraints() : false });
+      media = await d.getUserMedia({ video: videoConstraints(720), audio: sound ? audioConstraints() : false });
     }
+    if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
+    await reconcileCapture(media, requestedPreset);
     if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
     if (snapshot.media) releaseMedia(snapshot.media);
     const vTrack = media.getVideoTracks()[0];
@@ -345,10 +343,11 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       const vTrack = media.getVideoTracks()[0];
       prepareVideoTrack(vTrack);
       let video: RTCRtpTransceiver;
-      try { video = peer.addTransceiver(vTrack, { direction: 'sendonly', streams: [media], sendEncodings: encodings }); }
+      try { video = peer.addTransceiver(vTrack, { direction: 'sendonly', streams: [media], sendEncodings: ['f', 'h', 'q'].map((rid) => senderEncoding(vTrack, snapshot.qualityPreset ?? '720p', rid)) }); }
       catch { video = peer.addTransceiver(vTrack, { direction: 'sendonly', streams: [media] }); }
       videoSender = video.sender;
-      void applySenderParameters(snapshot.qualityPreset);
+      await applySenderParameters(snapshot.qualityPreset);
+      if (!current() || pc !== peer) return;
       const audioTrack = media.getAudioTracks()[0];
       const audio = audioTrack ? peer.addTransceiver(audioTrack, { direction: 'sendonly', streams: [media] }) : undefined;
       audioSender = audio?.sender;
@@ -484,7 +483,10 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       deviceId = id;
       if (!id) facingMode = facingMode === 'environment' ? 'user' : 'environment';
       const ticket = ++captureEpoch;
+      const requestedPreset = snapshot.qualityPreset;
       const media = await d.getUserMedia({ video: videoConstraints(), audio: false });
+      if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
+      await reconcileCapture(media, requestedPreset);
       if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
       const track = media.getVideoTracks()[0];
       prepareVideoTrack(track);
@@ -495,6 +497,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       preview.getVideoTracks().forEach((old) => { preview.removeTrack(old); old.stop(); });
       preview.addTrack(track);
       update({ media: preview, zoom: 1, maxZoom: detectMaxZoom(track), captureResolution: detectResolutionLabel(track), cameraLocks: detectCameraLocks(track) });
+      await applySenderParameters();
     },
     async switchAudio(id?: string) {
       audioDeviceId = id;
@@ -529,7 +532,17 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     },
     async setQualityPreset(preset: StreamQualityPreset) {
       update({ qualityPreset: preset });
-      await applySenderParameters(preset);
+      // Serialise camera constraints so an earlier slow change cannot override the latest selection.
+      qualityChange = qualityChange.then(async () => {
+        if (!alive || snapshot.qualityPreset !== preset) return;
+        const track = snapshot.media?.getVideoTracks()[0];
+        try { await track?.applyConstraints?.(videoConstraints()); }
+        catch { /* Keep a working camera; sender scaling still caps an unsupported capture size. */ }
+        if (!alive || snapshot.media?.getVideoTracks()[0] !== track) return;
+        if (track) update({ captureResolution: detectResolutionLabel(track) });
+        await applySenderParameters();
+      });
+      await qualityChange;
     },
     async mute(muted: boolean) {
       if (!muted && !snapshot.hasAudio && snapshot.media) {

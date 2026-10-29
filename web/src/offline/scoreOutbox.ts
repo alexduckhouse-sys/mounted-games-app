@@ -27,12 +27,21 @@ export interface QueuedScore {
   programmeChanged?: boolean;
   competitionId: number;
   sessionId: number;
+  arenaName?: string;
+  sessionName?: string;
+  lanes?: Record<number, number>;
+  /** Display-only provisional points for offline backups; never a scoring override. */
+  previewPoints?: Record<number, number>;
   /** e.g. "Heat 2 · Barrel Race", for the outbox panel. */
   label: string;
   places: Placing[];
   expected: Placing[];
   teamNames: Record<number, string>;
   queuedAt: string;
+  /** Exact device taps, retained through offline transfer and retries. */
+  startedAt?: string;
+  finishedAt?: string;
+  timingOmitted?: boolean;
   reason?: string;
   /** Sent with a scorer link's token instead of a signed-in account. */
   viaLink?: boolean;
@@ -139,7 +148,7 @@ export function outcomeOfError(err: unknown, viaLink = false): SendOutcome {
 /** "1st Red Rum · 2nd Shergar · Arkle out" */
 export function describePlacings(places: Placing[], names: Record<number, string>): string {
   if (places.length === 0) return 'No results';
-  const name = (id: number) => names[id] ?? `Team ${id}`;
+  const name = (id: number) => names[id] ?? 'Unnamed team';
   return [...places]
     .sort((a, b) => Number(a.eliminated) - Number(b.eliminated) || a.place - b.place)
     .map((p) => p.eliminated ? `${name(p.teamId)} ${statusLetter(true, p.status) === 'E' ? 'out' : statusLetter(true, p.status)}` : `${ordinal(p.place)} ${name(p.teamId)}`)
@@ -228,6 +237,17 @@ export function parseOutboxBackup(
       ...(typeof item.expectedProgrammeRevision === 'number' && Number.isInteger(item.expectedProgrammeRevision) && item.expectedProgrammeRevision >= 0 ? { expectedProgrammeRevision: item.expectedProgrammeRevision } : {}),
       competitionId: compId,
       sessionId: item.sessionId,
+      ...(typeof item.arenaName === 'string' ? { arenaName: item.arenaName } : {}),
+      ...(typeof item.sessionName === 'string' ? { sessionName: item.sessionName } : {}),
+      ...(item.lanes && typeof item.lanes === 'object' && !Array.isArray(item.lanes) ? {
+        lanes: Object.fromEntries(Object.entries(item.lanes).filter(([key, value]) => Number.isInteger(Number(key)) && typeof value === 'number' && Number.isInteger(value) && value > 0)),
+      } : {}),
+      ...(item.previewPoints && typeof item.previewPoints === 'object' && !Array.isArray(item.previewPoints) ? {
+        previewPoints: Object.fromEntries(Object.entries(item.previewPoints).filter(([key, value]) =>
+          Number.isSafeInteger(Number(key)) && Number(key) > 0 &&
+          (item.places as Placing[]).some((placing) => placing.teamId === Number(key)) &&
+          typeof value === 'number' && Number.isFinite(value) && value >= 0)),
+      } : {}),
       label: item.label.trim(),
       places: item.places,
       expected,
@@ -235,10 +255,17 @@ export function parseOutboxBackup(
       queuedAt: typeof item.queuedAt === 'string' && item.queuedAt ? item.queuedAt : new Date().toISOString(),
       ...(typeof item.reason === 'string' && item.reason.trim() ? { reason: item.reason.trim() } : {}),
       ...(viaLink ? { viaLink: true } : {}),
+      ...(item.timingOmitted === true ? { timingOmitted: true } : {}),
+      ...(typeof item.startedAt === 'string' && Number.isFinite(Date.parse(item.startedAt)) ? { startedAt: item.startedAt } : {}),
+      ...(typeof item.finishedAt === 'string' && Number.isFinite(Date.parse(item.finishedAt)) ? { finishedAt: item.finishedAt } : {}),
       state: 'waiting',
     });
   }
   return out;
+}
+
+export class OutboxProgrammeConflict extends Error {
+  constructor() { super('This backup has scores for a different race programme. Keep both backups and ask the organiser to review them before importing.'); }
 }
 
 /** Merges imported backup scores into the current outbox, replacing older entries for the same race while preserving newer local saves. */
@@ -246,6 +273,7 @@ export function mergeOutboxBackup(existing: QueuedScore[], imported: QueuedScore
   return imported.reduce((acc, item) => {
     const current = acc.find((q) => q.raceId === item.raceId);
     if (current) {
+      if ((current.expectedProgrammeRevision ?? 0) !== (item.expectedProgrammeRevision ?? 0)) throw new OutboxProgrammeConflict();
       const currentMs = Date.parse(current.queuedAt);
       const importedMs = Date.parse(item.queuedAt);
       if (Number.isFinite(currentMs) && Number.isFinite(importedMs) && currentMs > importedMs) {

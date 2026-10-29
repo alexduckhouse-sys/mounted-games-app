@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { FollowStar } from '../../components/FollowStar';
-import { Plus, Save, ClipboardList, Ban, Flag, Search, X } from 'lucide-react';
+import { Plus, Save, ClipboardList, Ban, Flag, Search, X, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
@@ -10,6 +10,8 @@ import type { Club, DeclarationForm, Session, Team } from '../../types';
 import { parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { SelectField } from '../../components/SelectField';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -126,7 +128,14 @@ export function TeamsTab() {
 
   const canCreate = hasRole('Trainer') || hasRole('Admin') || hasRole('Manager') || canOrganise(competition);
 
-  const addButton = canCreate && (
+  // Organisers add a team from the + beside the ticker dock; the form opens in a sheet.
+  // Spectators get the age-group filter there instead (phones only: wider screens have the rail).
+  const dockedFilter = !canCreate && !desktop;
+  const docked = useDockAction(
+    canCreate ? { label: t('teams.list.addCustom'), icon: 'plus', onClick: () => setShowForm(true) }
+      : dockedFilter ? { label: t('teams.list.ageGroup'), icon: 'filters', count: sectionId === 'all' ? 0 : 1, onClick: () => setSheetOpen(true) } : null,
+  );
+  const addButton = canCreate && !docked && (
     <button onClick={() => setShowForm((s) => !s)} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 !py-2 text-sm">
       <Plus className="h-4 w-4" /> {showForm ? t('common.close') : t('teams.list.addCustom')}
     </button>
@@ -150,78 +159,79 @@ export function TeamsTab() {
       {addButton}
     </nav>
   );
+  const addForm = (inSheet: boolean) => (
+    <form onSubmit={submit} className={inSheet ? 'grid gap-3' : 'mg-card grid gap-3 p-4 sm:grid-cols-12'}>
+      <label className="sm:col-span-3">
+        <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.section')}</span>
+        <SelectField
+          className="input mt-1"
+          value={form.competitionSectionId}
+          onChange={(e) => setDraft({ ...form, competitionSectionId: parseInt(e.target.value, 10) })}
+          required
+        >
+          {competition.sections.map((s) => (
+            <option key={s.id} value={s.id}>{s.displayName}</option>
+          ))}
+        </SelectField>
+      </label>
+      <label className="sm:col-span-3">
+        <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.club')}</span>
+        <SelectField
+          className="input mt-1"
+          value={form.clubId}
+          onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10), clubName: '' })}
+        >
+          <option value={0}>{t('teams.list.chooseClub')}</option>
+          {clubs.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </SelectField>
+      </label>
+      <label className="sm:col-span-2">
+        <span className="text-xs text-slate-500">{t('teams.list.newClub')}</span>
+        <input
+          className="input mt-1"
+          list="mg-clubs-datalist"
+          placeholder={t('teams.list.newClubPlaceholder')}
+          value={form.clubName}
+          onChange={(e) => setDraft({ ...form, clubName: e.target.value })}
+        />
+        <datalist id="mg-clubs-datalist">
+          {clubs.map((c) => (
+            <option key={c.id} value={c.name} />
+          ))}
+        </datalist>
+      </label>
+      <label className="sm:col-span-2">
+        <span className="text-xs text-slate-500">{t('teams.list.teamName')}</span>
+        <input
+          className="input mt-1"
+          placeholder={t('teams.list.teamNamePlaceholder')}
+          value={form.teamName}
+          onChange={(e) => setDraft({ ...form, teamName: e.target.value })}
+        />
+      </label>
+      <label className="sm:col-span-2">
+        <span className="text-xs text-slate-500">{t('teams.list.suffix')}</span>
+        <input
+          className="input mt-1 uppercase" maxLength={4}
+          placeholder={t('teams.list.suffixPlaceholder')}
+          value={form.suffix}
+          onChange={(e) => setDraft({ ...form, suffix: e.target.value, suffixTouched: true })}
+        />
+      </label>
+      <div className="flex justify-end gap-2 sm:col-span-12">
+        {createError && <div className="mr-auto"><Notice>{createError}</Notice></div>}
+        <button type="button" className="mg-btn mg-btn-secondary !min-h-10 !px-3.5 text-sm" onClick={() => setShowForm(false)}>{t('common.cancel')}</button>
+        <button type="submit" disabled={busy || (!form.clubId && !form.clubName.trim() && !form.teamName.trim())} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
+          <Save className="h-4 w-4" /> {busy ? t('teams.list.creating') : t('teams.list.create')}
+        </button>
+      </div>
+    </form>
+  );
   const teamBlocks = (
     <>
-      {showForm && canCreate && (
-        <form onSubmit={submit} className="mg-card grid gap-3 p-4 sm:grid-cols-12">
-          <label className="sm:col-span-3">
-            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.section')}</span>
-            <SelectField
-              className="input mt-1"
-              value={form.competitionSectionId}
-              onChange={(e) => setDraft({ ...form, competitionSectionId: parseInt(e.target.value, 10) })}
-              required
-            >
-              {competition.sections.map((s) => (
-                <option key={s.id} value={s.id}>{s.displayName}</option>
-              ))}
-            </SelectField>
-          </label>
-          <label className="sm:col-span-3">
-            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.club')}</span>
-            <SelectField
-              className="input mt-1"
-              value={form.clubId}
-              onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10), clubName: '' })}
-            >
-              <option value={0}>{t('teams.list.chooseClub')}</option>
-              {clubs.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </SelectField>
-          </label>
-          <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">{t('teams.list.newClub')}</span>
-            <input
-              className="input mt-1"
-              list="mg-clubs-datalist"
-              placeholder={t('teams.list.newClubPlaceholder')}
-              value={form.clubName}
-              onChange={(e) => setDraft({ ...form, clubName: e.target.value })}
-            />
-            <datalist id="mg-clubs-datalist">
-              {clubs.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
-          </label>
-          <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">{t('teams.list.teamName')}</span>
-            <input
-              className="input mt-1"
-              placeholder={t('teams.list.teamNamePlaceholder')}
-              value={form.teamName}
-              onChange={(e) => setDraft({ ...form, teamName: e.target.value })}
-            />
-          </label>
-          <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">{t('teams.list.suffix')}</span>
-            <input
-              className="input mt-1 uppercase" maxLength={4}
-              placeholder={t('teams.list.suffixPlaceholder')}
-              value={form.suffix}
-              onChange={(e) => setDraft({ ...form, suffix: e.target.value, suffixTouched: true })}
-            />
-          </label>
-          <div className="flex justify-end gap-2 sm:col-span-12">
-            {createError && <div className="mr-auto"><Notice>{createError}</Notice></div>}
-            <button type="button" className="mg-btn mg-btn-secondary !min-h-10 !px-3.5 text-sm" onClick={() => setShowForm(false)}>{t('common.cancel')}</button>
-            <button type="submit" disabled={busy || (!form.clubId && !form.clubName.trim() && !form.teamName.trim())} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
-              <Save className="h-4 w-4" /> {busy ? t('teams.list.creating') : t('teams.list.create')}
-            </button>
-          </div>
-        </form>
-      )}
+      {showForm && canCreate && !docked && addForm(false)}
 
       {grouped.map(([section, sectionTeams]) => (
         <section key={section} aria-label={displaySectionName(section)} className="flex flex-col gap-2">
@@ -235,11 +245,11 @@ export function TeamsTab() {
               const parsedBib = parseBibAndFlag(team.bibDescription);
               const on = followed.has(team.id);
               return (
-                <li key={team.id} className={`flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${team.isHorsConcours || team.isWithdrawn ? 'opacity-70' : ''}`}>
+                <li key={team.id} className={`relative flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${team.isHorsConcours || team.isWithdrawn ? 'opacity-70' : ''}`}>
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-base font-semibold leading-tight">
                       {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
-                      <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] hover:underline">
+                      <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] after:absolute after:inset-0 after:content-[''] hover:underline">
                         {team.displayName}
                       </Link>
                       {hasDec && (
@@ -264,7 +274,7 @@ export function TeamsTab() {
                       )}
                     </div>
                     {clubLabel(team.clubName) && <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{team.clubName}</span>}
-                    {mayAssignTrainers && <TrainerPicker competitionId={competition.id} team={team} onSaved={reload} />}
+                    {mayAssignTrainers && <div className="relative z-10"><TrainerPicker competitionId={competition.id} team={team} onSaved={reload} /></div>}
                   </div>
                   {canEdit() && (
                     <button
@@ -275,7 +285,7 @@ export function TeamsTab() {
                         reload();
                       }}
                       title={team.isHorsConcours ? t('teams.list.markScoring') : t('teams.list.markHc')}
-                      className={`mg-small-btn !min-h-9 !px-2 !text-[10px] ${
+                      className={`mg-small-btn relative z-10 !min-h-9 !px-2 !text-[10px] ${
                         team.isHorsConcours ? '!text-[rgb(var(--mg-ok))]' : '!text-[rgb(var(--mg-muted))]'
                       }`}
                     >
@@ -284,7 +294,7 @@ export function TeamsTab() {
                   )}
                   <button
                     type="button"
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+                    className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
                     aria-pressed={on}
                     aria-label={t(on ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
                     onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
@@ -320,7 +330,7 @@ export function TeamsTab() {
   const searchBar = desktop ? searchField : (
     <div className="fk-find">
       {searchField}
-      <AgeGroupFilterButton label={filterLabel} active={!!sectionLabel} onClick={() => setSheetOpen(true)} />
+      {!(docked && dockedFilter) && <AgeGroupFilterButton label={filterLabel} active={!!sectionLabel} onClick={() => setSheetOpen(true)} />}
     </div>
   );
   const shownCount = (id: number | 'all') => (id === 'all' ? competition.teams : competition.teams.filter((team) => team.competitionSectionId === id)).length;
@@ -346,11 +356,12 @@ export function TeamsTab() {
               </button>
             </div>
           )}
-          {canCreate && <div>{addButton}</div>}
+          {addButton && <div>{addButton}</div>}
           {teamBlocks}
         </>
       )}
     </div>
+      {showForm && canCreate && docked && <Sheet title={t('teams.list.addCustom')} onClose={() => setShowForm(false)}>{addForm(true)}</Sheet>}
       {sheetOpen && !desktop && (
         <AgeGroupFilterSheet
           title={filterLabel}
@@ -381,12 +392,15 @@ function arenaOf(sessions: Session[], sectionId: number | null | undefined): str
 function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number; team: Team; onSaved: () => void }) {
   const t = useT();
   const [trainers, setTrainers] = useState<{ userId: string; fullName: string }[]>([]);
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
+  // The club's trainers are fetched only when the organiser opens this picker, not for every team on the page.
   useEffect(() => {
+    if (!open) return;
     api.get<{ userId: string; fullName: string }[]>(`/clubs/${team.clubId}/trainers`)
       .then((r) => setTrainers(r.data))
       .catch(() => setTrainers([]));
-  }, [team.clubId]);
+  }, [open, team.clubId]);
   // The current trainer stays selectable even if they belong to another club.
   const options = team.trainerUserId && !trainers.some((trainer) => trainer.userId === team.trainerUserId)
     ? [{ userId: team.trainerUserId, fullName: team.trainerName ?? t('teams.list.currentTrainer') }, ...trainers]
@@ -397,6 +411,15 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
       await api.put(`/competitions/${competitionId}/teams/${team.id}`, { trainerUserId });
       onSaved();
     } catch { setError(true); }
+  }
+  if (!open) {
+    return (
+      <button type="button" className="relative inline-flex min-h-11 items-center gap-1 text-left text-[13px] text-[rgb(var(--mg-muted))] after:absolute after:-inset-x-1 after:inset-y-0 after:content-['']"
+        aria-label={t('teams.list.changeTrainer', { name: team.displayName })} onClick={() => setOpen(true)}>
+        <span className="truncate">{team.trainerName ?? t('teams.list.noTrainer')}</span>
+        <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+      </button>
+    );
   }
   return (
     <label className="block text-[10px] text-[rgb(var(--mg-muted))]">

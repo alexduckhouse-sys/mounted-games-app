@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MotionConfig } from 'framer-motion';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -56,8 +57,8 @@ function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued =
   const rules = { lanesPerHeat: lanes, mode: LaneRotationMode.MoveUp };
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
-    <ScoringSection
-      heat={heatOverride} races={heatOverride.races} activeRace={heatOverride.races[activeIdx] ?? null} onSelectRace={onSelectRace} sessionBase={3}
+    <MotionConfig reducedMotion="always"><ScoringSection
+      heat={heatOverride} races={heatOverride.races} activeRace={heatOverride.races[activeIdx] ? { ...heatOverride.races[activeIdx], startIsExplicit: true, startedAt: '2026-10-29T09:00:00Z' } : null} onSelectRace={onSelectRace} sessionBase={3}
       laneRules={rules} qualifiers={3} pending={pending} canScore allowAudit={allowAudit} queued={queued}
       onClickTeam={(teamId) => setPending((p) => [...p, { teamId, place: p.length + 1, eliminated: false }])}
       onToggleElim={(teamId) => setPending((p) => [...p.filter((x) => x.teamId !== teamId), { teamId, place: 0, eliminated: true }])}
@@ -66,7 +67,7 @@ function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued =
       cards={cards} onSetCard={onSetCard} teamFacts={teamFacts} factsOn={factsOn} onToggleFacts={onToggleFacts} toolLinks={toolLinks}
       onAddRace={onAddRace} onRerunRace={onRerunRace} heatTools={heatTools} onDeadHeat={onDeadHeat} onClearDeadHeat={onClearDeadHeat}
       correctionReason={correctionReason} onCorrectionReason={() => {}}
-    />
+    /></MotionConfig>
   );
 }
 
@@ -203,7 +204,7 @@ describe('the elimination sheet', () => {
     const onSubmit = vi.fn();
     render(<Harness allowReasons onSubmit={onSubmit} initial={[{ teamId: 2, place: 1, eliminated: false }, { teamId: 3, place: 2, eliminated: false }, { teamId: 1, place: 0, eliminated: true }]} />);
     await user.click(screen.getByRole('button', { name: 'SAVE SCORES' }));
-    const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
+    const sheet = screen.getByRole('dialog', { name: 'Why are they out?' });
     const save = within(sheet).getByRole('button', { name: 'Save race' });
     expect(save).toBeDisabled();
     await user.click(within(sheet).getByRole('button', { name: 'Missed a flag or pot' }));
@@ -382,7 +383,7 @@ describe('race tools', () => {
     expect(screen.queryByRole('dialog', { name: 'Race tools' })).toBeNull();
 
     await openTools(user);
-    await user.click(screen.getByRole('button', { name: 'Close race tools' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Race tools' })).toBeNull();
     await openTools(user);
     await user.click(screen.getByRole('button', { name: 'Close' }));
@@ -418,7 +419,7 @@ describe('race tools', () => {
     expect(within(sheet).getByText('2')).toBeInTheDocument();
     await user.click(within(sheet).getByRole('button', { name: 'Done' }));
     expect(within(sheet).queryByRole('button', { name: 'Done' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Close race tools' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
     expect(screen.getByRole('button', { name: /^Bravo, lane/ })).toHaveTextContent('2 pts by hand');
   });
 
@@ -431,7 +432,7 @@ describe('race tools', () => {
     const tools = screen.getByRole('dialog', { name: 'Organiser tools' });
     await user.click(within(tools).getByRole('button', { name: /Re-run stopped race/ }));
     expect(rerun).toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Close organiser tools' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Organiser tools' })).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Organiser tools' })).toBeNull();
   });
 
@@ -782,7 +783,7 @@ it('keeps a manual score, and raises nothing, when an HC change fails', async ()
   const menu = await openTeamMenu(user, sheet, 'Bravo');
   await user.click(within(menu).getByRole('menuitem', { name: 'Make HC' }));
   await waitFor(() => expect(onSetHc).toHaveBeenCalledWith(2, true));
-  await user.click(screen.getByRole('button', { name: 'Close race tools' }));
+  await user.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
   expect(screen.getByRole('button', { name: /^Bravo, lane/ })).toHaveTextContent('7 pts by hand');
 });
 
@@ -881,5 +882,52 @@ describe('swiping scoring sheets down', () => {
     fireEvent.touchMove(title, { touches: [{ clientY: 220 }] });
     fireEvent.touchEnd(title, { changedTouches: [{ clientY: 220 }] });
     expect(screen.queryByRole('dialog', { name: 'Race tools' })).toBeNull();
+  });
+});
+
+describe('shared sheets and quiet announcements', () => {
+  const finished: Heat = heat(1, {
+    entries,
+    races: [
+      done,
+      race(2, { name: 'Race 2', isComplete: true, results: [result(2, 1, { points: 3 }), result(3, 2, { points: 2 })] }),
+      race(3, { name: 'Race 3', isComplete: true, results: [result(2, 1, { points: 3 }), result(3, 2, { points: 2 })] }),
+    ],
+  });
+  const liveText = () => document.querySelector('p.sr-only[aria-live="polite"]')?.textContent ?? '';
+
+  it('says once, quietly, that the heat finished and who won, and not when a finished heat is just opened', () => {
+    const { rerender } = render(<Harness />);
+    expect(liveText()).toBe('');
+    rerender(<Harness heatOverride={finished} activeIdx={2} />);
+    expect(liveText()).toBe('Heat finished. Bravo won.');
+    expect(document.querySelector('p.sr-only[aria-live="polite"]')).not.toBeNull();
+    const { unmount } = render(<Harness heatOverride={finished} activeIdx={2} />);
+    expect(document.querySelectorAll('p.sr-only[aria-live="polite"]')[1]?.textContent).toBe('');
+    unmount();
+  });
+
+  it('opens race tools as the shared sheet, which closes on Escape and on a tap on the dim', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    let sheet = await openTools(user);
+    expect(sheet).toHaveClass('kit-sheet');
+    fireEvent(sheet, new Event('cancel', { cancelable: true }));
+    expect(screen.queryByRole('dialog', { name: 'Race tools' })).toBeNull();
+    sheet = await openTools(user);
+    fireEvent.click(sheet);
+    expect(screen.queryByRole('dialog', { name: 'Race tools' })).toBeNull();
+  });
+
+  it('shows its on/off choices as the house switch, with a state a screen reader can read', async () => {
+    const user = userEvent.setup();
+    const toggle = vi.fn();
+    render(<Harness factsOn onToggleFacts={toggle} />);
+    const sheet = await openTools(user);
+    const facts = within(sheet).getByRole('switch', { name: 'Commentator facts' });
+    expect(facts).toHaveClass('rf-sw');
+    expect(facts).toHaveAttribute('aria-checked', 'true');
+    await user.click(facts);
+    expect(toggle).toHaveBeenCalledTimes(1);
   });
 });

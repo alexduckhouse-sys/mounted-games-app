@@ -26,12 +26,12 @@ const rules = (selections: WindSelection[] = [selection()]) => ({
 const event = (extra: Partial<CompetitionDetail> = {}) => competition({
   id: 12,
   sections: [
-    { id: 5, competitionId: 12, format: 1, ageGroup: 'Seniors', displayName: 'Seniors' },
-    { id: 6, competitionId: 12, format: 1, ageGroup: 'Juniors', displayName: 'Juniors' },
+    { id: 5, competitionId: 12, format: 2, ageGroup: 'Seniors', displayName: 'Seniors' },
+    { id: 6, competitionId: 12, format: 2, ageGroup: 'Juniors', displayName: 'Juniors' },
   ],
   sessions: [
     session(10, { name: 'Morning', arenaName: 'North', heats: [heat(100, { label: 'Heat A', races: [race(101, { name: 'Flag Fliers' }), race(102, { name: 'Finished race', isComplete: true })] })] }),
-    session(20, { name: 'Afternoon', arenaName: 'South', heats: [heat(200, { races: [race(201, { name: 'Bottle Shuttle' })] })] }),
+    session(20, { name: 'Afternoon', heats: [heat(200, { races: [race(201, { name: 'Bottle Shuttle' })] })] }),
     session(30, { name: 'Finished session', status: 2, arenaName: 'Closed', heats: [heat(300, { races: [race(301)] })] }),
   ], ...extra,
 });
@@ -177,7 +177,7 @@ describe('wind rule settings', () => {
 });
 
 describe('race change review and approval', () => {
-  it('lists unfinished races by arena and warns about unsent scores for the selected session', async () => {
+  it('lists unfinished races across arenas and warns about unsent scores for the selected session', async () => {
     const queued: QueuedScore = { raceId: 101, competitionId: 12, sessionId: 10, label: 'Test race', places: [], expected: [], teamNames: {}, queuedAt: new Date(NOW).toISOString(), state: 'waiting' };
     localStorage.setItem('mg.outbox.scores', JSON.stringify([queued]));
     const { user } = show();
@@ -192,11 +192,10 @@ describe('race change review and approval', () => {
     expect(button).toBeDisabled();
     await user.type(screen.getByLabelText('Replacement race name'), '   ');
     expect(button).toBeDisabled();
-    await choose(user, 'Arena', 'South');
     await choose(user, 'Race', 'Afternoon · · Bottle Shuttle');
     expect(screen.queryByText(/This phone has unsent scores/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Race:/ }));
-    expect(screen.queryByRole('option', { name: /Flag Fliers/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Flag Fliers/ })).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -299,26 +298,19 @@ describe('race change review and approval', () => {
     expect(view.onClose).not.toHaveBeenCalled();
   });
 
-  it('removes the preview when another arena is selected', async () => {
-    const { user } = show();
-    await reviewRace(user);
-    await choose(user, 'Arena', 'South');
-    expect(screen.queryByText('Use the approved published spare.')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Apply approved change' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Preview change' }));
-    expect(api.post).toHaveBeenCalledTimes(1);
-  });
+
 });
 
 describe('wind actions and forecast lifecycle', () => {
-  it('pauses only the selected arena with the edited announcement', async () => {
+  it('pauses the event with an announcement opened on request', async () => {
     const { user, reload, onClose } = show();
-    await choose(user, 'Arena', 'South');
+    expect(screen.queryByLabelText('Announcement (editable; optional for pause)')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Send announcement' }));
     await user.type(screen.getByLabelText('Announcement (editable; optional for pause)'), '  Test arena pause.  ');
     expect(api.post).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Pause racing' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(api.post).toHaveBeenCalledWith(`${base}/sessions/pause`, { arenaName: 'South', reason: 'wind', announcement: 'Test arena pause.' });
+    expect(api.post).toHaveBeenCalledWith(`${base}/sessions/pause`, { reason: 'wind', announcement: 'Test arena pause.' });
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
@@ -327,28 +319,25 @@ describe('wind actions and forecast lifecycle', () => {
     expect(screen.queryByRole('button', { name: /^Arena:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Equipment reviewed on site' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Pause racing' }));
-    expect(api.post).toHaveBeenCalledWith(`${base}/sessions/pause`, { arenaName: undefined, reason: 'wind', announcement: undefined });
+    expect(api.post).toHaveBeenCalledWith(`${base}/sessions/pause`, { reason: 'wind', announcement: undefined });
   });
 
   it('requires official approval for the wind-paused arena and does not resume an arena paused for rain', async () => {
-    const { user, onClose } = show({ prompt: null, competition: event({ sessions: [session(10, { arenaName: 'North', notes: '[paused:123] [pausefor:wind]' }), session(20, { arenaName: 'South', notes: '[paused:456] [pausefor:rain]' })] }) });
+    const { user, onClose } = show({ prompt: null, competition: event({ sessions: [session(10, { arenaName: 'North', notes: '[paused:123] [pausefor:wind]' }), session(20, { notes: '[paused:456] [pausefor:rain]' })] }) });
     expect(screen.getByText('Racing paused for wind · Official review needed')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Resume racing' })).toBeDisabled();
-    await choose(user, 'Arena', 'South');
-    expect(screen.queryByRole('button', { name: 'Resume racing' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: /official has checked/ })).not.toBeInTheDocument();
-    await choose(user, 'Arena', 'North');
     await user.click(screen.getByRole('switch', { name: /official has checked/ }));
     await user.click(screen.getByRole('button', { name: 'Resume racing' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(api.post).toHaveBeenCalledWith(`${base}/sessions/resume`, { arenaName: 'North', reason: 'wind', announcement: undefined });
+    expect(api.post).toHaveBeenCalledWith(`${base}/sessions/resume`, { reason: 'wind', announcement: undefined });
   });
 
   it('retains a failed announcement for retry, then clears it without closing the review', async () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     const { user, reload, onClose } = show();
+    await user.click(screen.getByRole('button', { name: 'Send announcement' }));
     const input = screen.getByLabelText('Announcement (editable; optional for pause)');
-    const send = screen.getByRole('button', { name: 'Send announcement' });
+    const send = screen.getByRole('button', { name: 'Send' });
     expect(send).toBeDisabled();
     await user.type(input, '   ');
     expect(send).toBeDisabled();
@@ -358,25 +347,21 @@ describe('wind actions and forecast lifecycle', () => {
     expect(input).toHaveValue('   Test event update.  ');
     expect(reload).not.toHaveBeenCalled();
     await user.click(send);
-    await waitFor(() => expect(input).toHaveValue(''));
+    await waitFor(() => expect(screen.queryByLabelText('Announcement (editable; optional for pause)')).not.toBeInTheDocument());
     expect(api.post).toHaveBeenLastCalledWith(`${base}/sessions/weather-notice`, { body: 'Test event update.' });
-    expect(send).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send announcement' })).toBeEnabled();
     expect(reload).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it.each(['All arenas', 'North'])('acknowledges the fresh forecast for %s after an explicit decision', async selectedArena => {
-    const notification = vi.fn();
-    window.addEventListener('mg:wind-review', notification, { once: true });
-    const { user, reload, onClose, prompt } = show();
-    if (selectedArena !== 'All arenas') await choose(user, 'Arena', selectedArena);
-    expect(screen.getByText(/Gusts up to 38 mph forecast/)).toBeVisible();
+  it('shows a large warning without an arena selector or inspection acknowledgement', async () => {
+    const { user, onClose } = show();
+    expect(screen.getByText(/Gusts up to 38 mph forecast/)).toHaveClass('wind-review-warning');
+    expect(screen.queryByRole('button', { name: /^Arena:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Equipment reviewed on site' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue for now' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(api.post).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Equipment reviewed on site' }));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(api.post).toHaveBeenCalledWith(`${base}/wind-review/acknowledge`, { ...prompt, arena: selectedArena === 'All arenas' ? 'North|South' : 'North' });
-    expect(notification).toHaveBeenCalledTimes(1);
-    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it('hides acknowledgement for a stale forecast but keeps manual decisions available', async () => {
@@ -392,14 +377,14 @@ describe('wind actions and forecast lifecycle', () => {
     show({ prompt: null, hours: [{ startsAt: NOW + 3_600_000, gustMph: 31, fetchedAt: NOW, weatherCode: 61, rainMm: 5, rainChance: 90 }] });
     expect(screen.getByText(/Gusts up to 31 mph forecast/)).toBeVisible();
     expect(screen.getByText('Heavy rain is also forecast.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Equipment reviewed on site' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Continue for now' })).toBeEnabled();
     await screen.findByText('Event rules and wind prompts');
   });
 
   it('snoozes locally and closes without changing the event', async () => {
     const onSnooze = vi.fn();
     const { user, onClose, reload } = show({ onSnooze });
-    await user.click(screen.getByRole('button', { name: 'Not now' }));
+    await user.click(screen.getByRole('button', { name: 'Continue for now' }));
     expect(onSnooze).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(reload).not.toHaveBeenCalled();
@@ -413,7 +398,7 @@ describe('wind actions and forecast lifecycle', () => {
     const pause = screen.getByRole('button', { name: 'Pause racing' });
     await user.click(pause);
     expect(pause).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Equipment reviewed on site' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Continue for now' })).toBeDisabled();
     await user.click(pause);
     expect(api.post).toHaveBeenCalledTimes(1);
     await act(async () => request.resolve({ data: {} }));
@@ -453,6 +438,140 @@ describe('wind actions and forecast lifecycle', () => {
       else oldRequest.reject(new Error('old request failed'));
     });
     expect(screen.getByLabelText('Event level and age group')).toHaveValue('Current test event');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('recommended race changes', () => {
+  const suggestedEvent = () => event({ startDate: '2026-10-29', sessions: [session(10, { competitionSectionId: 5, name: 'Morning', heats: [heat(100, { label: 'Heat A', races: [race(101, { name: 'Bottle Shuttle' })] })] })] });
+  const hoopla = 'Hoopla — IMGA 2026 (Teams)';
+  beforeEach(() => vi.mocked(api.get).mockResolvedValue({ data: rules([selection({ profileId: 'imga-2026-v1', permittedRaces: [hoopla] })]) }));
+  it('opens the official preview from the tick without applying a change', async () => {
+    const { user } = show({ competition: suggestedEvent() });
+    await user.click(await screen.findByRole('button', { name: 'Review replacement for Bottle Shuttle' }));
+    expect(await screen.findByText('Use the approved published spare.')).toBeVisible();
+    expect(api.post).toHaveBeenCalledExactlyOnceWith(`${base}/wind-review/preview`, { sessionId: 10, raceId: 101, replacement: hoopla });
+    expect(screen.getByRole('button', { name: 'Apply approved change' })).toBeDisabled();
+  });
+  it('dismisses a suggestion with the cross without changing the programme', async () => {
+    const { user } = show({ competition: suggestedEvent() });
+    await user.click(await screen.findByRole('button', { name: 'Dismiss replacement for Bottle Shuttle' }));
+    expect(screen.queryByRole('button', { name: 'Review replacement for Bottle Shuttle' })).not.toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+  it('honours a section override instead of suggesting the event-wide alternative', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: rules([selection({ profileId: 'imga-2026-v1', permittedRaces: [hoopla] }), selection({ sectionId: 5, profileId: 'unverified' })]) });
+    show({ competition: suggestedEvent() });
+    await screen.findByText('Event rules and wind prompts');
+    expect(screen.queryByRole('button', { name: /Review replacement for/ })).not.toBeInTheDocument();
+  });
+  it.each(['unconfirmed', 'later edition', 'started', 'not permitted', 'unknown format'])('does not recommend a change when %s', async reason => {
+    const comp = suggestedEvent();
+    const rule = selection({ profileId: 'imga-2026-v1', permittedRaces: [hoopla] });
+    if (reason === 'unconfirmed') rule.adoptionConfirmed = false;
+    if (reason === 'later edition') comp.startDate = '2027-04-01';
+    if (reason === 'started') comp.sessions[0].heats[0].races[0].startedAt = '2026-10-29T12:00:00Z';
+    if (reason === 'not permitted') rule.permittedRaces = [];
+    if (reason === 'unknown format') comp.sections = [];
+    vi.mocked(api.get).mockResolvedValue({ data: rules([rule]) });
+    show({ competition: comp });
+    await screen.findByText('Event rules and wind prompts');
+    expect(screen.queryByRole('button', { name: /Review replacement for/ })).not.toBeInTheDocument();
+  });
+  it.each([1, 2] as const)('reviews the section’s published PC spare for format %s instead of the event-wide IMGA suggestion', async format => {
+    const comp = suggestedEvent();
+    comp.sections[0].format = format;
+    vi.mocked(api.get).mockResolvedValue({ data: rules([
+      selection({ profileId: 'imga-2026-v1', permittedRaces: [hoopla] }),
+      selection({ sectionId: 5, profileId: 'pc-2026-v1', publishedSpare: 'Two Flag', permittedRaces: ['two flag'] }),
+    ]) });
+    const { user, onClose } = show({ competition: comp });
+    const recommendation = await screen.findByRole('button', { name: 'Review replacement for Bottle Shuttle' });
+    expect(screen.getByText('Bottle Shuttle', { exact: false, selector: '.wind-review-suggestion p' })).toHaveTextContent('Bottle Shuttle → Two Flag');
+    expect(api.post).not.toHaveBeenCalled();
+    await user.click(recommendation);
+    await screen.findByText('Use the approved published spare.');
+    expect(api.post).toHaveBeenCalledExactlyOnceWith(`${base}/wind-review/preview`, { sessionId: 10, raceId: 101, replacement: 'Two Flag' });
+    expect(screen.getByLabelText('Replacement race name')).toHaveValue('Two Flag');
+    expect(screen.getByRole('button', { name: 'Apply approved change' })).toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each(['individual', 'unconfirmed adoption'])('does not fall back to the event rules when a section’s PC selection has %s', async reason => {
+    const comp = suggestedEvent();
+    if (reason === 'individual') comp.sections[0].format = 3;
+    vi.mocked(api.get).mockResolvedValue({ data: rules([
+      selection({ profileId: 'imga-2026-v1', permittedRaces: ['Hoopla — IMGA 2026 (Individual)', hoopla] }),
+      selection({ sectionId: 5, profileId: 'pc-2026-v1', publishedSpare: 'Two Flag', permittedRaces: ['Two Flag'], adoptionConfirmed: reason !== 'unconfirmed adoption' }),
+    ]) });
+    const { user } = show({ competition: comp });
+    await openRules(user);
+    expect(screen.queryByRole('button', { name: /Review replacement for/ })).not.toBeInTheDocument();
+    await choose(user, 'Applies to', 'Seniors');
+    expect(screen.getByLabelText('Published spare race')).toHaveValue('Two Flag');
+    expect(screen.getByRole('switch', { name: 'Event adoption and race list checked' })).toHaveAttribute('aria-checked', String(reason !== 'unconfirmed adoption'));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('keeps the recommended race and replacement available when its preview fails', async () => {
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+    const { user, onClose, reload } = show({ competition: suggestedEvent() });
+    await user.click(await screen.findByRole('button', { name: 'Review replacement for Bottle Shuttle' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(errorText);
+    expect(screen.getByRole('button', { name: 'Race: Morning · Heat A · Bottle Shuttle' })).toBeEnabled();
+    expect(screen.getByLabelText('Replacement race name')).toHaveValue(hoopla);
+    expect(screen.queryByRole('button', { name: 'Apply approved change' })).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Preview change' }));
+    await screen.findByText('Use the approved published spare.');
+    expect(vi.mocked(api.post).mock.calls).toEqual([
+      [`${base}/wind-review/preview`, { sessionId: 10, raceId: 101, replacement: hoopla }],
+      [`${base}/wind-review/preview`, { sessionId: 10, raceId: 101, replacement: hoopla }],
+    ]);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply approved change' })).toBeDisabled();
+  });
+
+  it('does not request a preview for a selected race removed by a refreshed programme', async () => {
+    const view = show();
+    await openRace(view.user);
+    view.rerender(<WindReviewSheet competition={event({ sessions: [] })} prompt={freshPrompt()} hours={null} reload={view.reload} onClose={view.onClose} />);
+    await view.user.click(screen.getByRole('button', { name: 'Preview change' }));
+    expect(api.post).not.toHaveBeenCalled();
+    expect(view.reload).not.toHaveBeenCalled();
+    expect(view.onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Apply approved change' })).not.toBeInTheDocument();
+  });
+
+});
+
+
+describe('failed wind pause and resume requests', () => {
+  it.each([false, true])('keeps the decision and announcement available after a failed send (already paused: %s)', async paused => {
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+    const comp = event({ sessions: [session(10, { notes: paused ? '[paused:123] [pausefor:wind]' : undefined })] });
+    const { user, onClose, reload } = show({ competition: comp });
+    if (paused) await user.click(screen.getByRole('switch', { name: /official has checked/ }));
+    await user.click(screen.getByRole('button', { name: 'Send announcement' }));
+    const announcement = screen.getByLabelText('Announcement (editable; optional for pause)');
+    await user.type(announcement, '  Test official update.  ');
+    const action = screen.getByRole('button', { name: paused ? 'Resume racing' : 'Pause racing' });
+    await user.click(action);
+    expect(await screen.findByRole('alert')).toHaveTextContent(errorText);
+    expect(announcement).toHaveValue('  Test official update.  ');
+    expect(action).toBeEnabled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    if (paused) expect(screen.getByRole('switch', { name: /official has checked/ })).toBeChecked();
+    await user.click(action);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.post).mock.calls).toEqual([
+      [`${base}/sessions/${paused ? 'resume' : 'pause'}`, { reason: 'wind', announcement: 'Test official update.' }],
+      [`${base}/sessions/${paused ? 'resume' : 'pause'}`, { reason: 'wind', announcement: 'Test official update.' }],
+    ]);
+    expect(reload).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

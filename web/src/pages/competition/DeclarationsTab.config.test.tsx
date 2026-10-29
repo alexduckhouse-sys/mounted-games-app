@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({ user: state.user, hasRole: (r: Role) => state.user.roles.includes(r), canOrganise: () => state.organise }),
 }));
-vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, delete: vi.fn() } }));
+vi.mock('../../api', () => ({ readStoredAuth: () => ({ user: state.user }), api: { get: state.get, post: state.post, delete: vi.fn() } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: state.download }));
 
 const setup: DecFormConfig = {
@@ -51,6 +51,7 @@ beforeEach(() => {
   state.organise = false;
   config = setup;
   state.get.mockImplementation(async (url: string) => {
+    if (url.endsWith('/substitution-requests')) return { data: [] };
     if (url === '/declaration-forms') return { data: forms };
     if (url === '/clubs/1/saved-riders') return { data: [] };
     if (url === '/competitions/4/dec-form-config') {
@@ -205,4 +206,21 @@ describe('the dec form list for organisers', () => {
     const [, csv] = state.download.mock.calls[0];
     expect((csv as string).split(/\r?\n/)[0]).toBe('Team,Rider,Reserve,Guest,DOB,Pony,Height (hh),Bibs,Trainer,Phone,Submitted by,Terms agreed,Submitted at,Notes');
   });
+});
+
+
+it('defaults year-only children to initials while preserving an explicit choice', async () => {
+  config = { ...BASIC_CONFIG, dob: 1, dobFormat: 1 };
+  const user = userEvent.setup();
+  mount();
+  await screen.findByLabelText('Team name');
+  await user.click(screen.getByRole('button', { name: 'Add rider 1' }));
+  const year = screen.getByLabelText(/Year of birth/);
+  const privacy = screen.getByRole('switch', { name: 'Show surname as initial only on public start lists and results' });
+  await user.type(year, '2015');
+  expect(privacy).toHaveAttribute('aria-checked', 'true');
+  await user.click(privacy);
+  await user.clear(year);
+  await user.type(year, '2016');
+  expect(privacy).toHaveAttribute('aria-checked', 'false');
 });

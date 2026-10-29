@@ -156,7 +156,7 @@ it('filters by arena from the slider in the filter sheet, shows it as a chip and
   expect(screen.getByText('Heat 2')).toBeVisible();
   expect(screen.queryByText('Heat 1')).toBeNull();
   expect(within(sheet).getByRole('button', { name: 'Show 1 heat' })).toBeVisible();
-  expect(header().subtitle).toBe(`${weekday(day)} · Arena Two`);
+  expect(header().subtitle).toBe('Spring Games');
   expect(filterButton()).toHaveTextContent('(1)');
 
   // The chip under the header clears it again.
@@ -222,7 +222,7 @@ it('offers day tabs, named by weekday, when the event runs over several days, an
   fireEvent.click(days[1]);
   expect(screen.getByText('Nothing scheduled for this day.')).toBeVisible();
   expect(container.querySelector('.tt-body')).toHaveClass('tt-in-right-1');
-  expect(header().subtitle).toBe(weekday(tomorrow));
+  expect(header().subtitle).toBe('Spring Games');
   fireEvent.click(days[0]);
   expect(screen.getByText('Heat 1')).toBeVisible();
   expect(container.querySelector('.tt-body')).toHaveClass('tt-in-left-0');
@@ -262,27 +262,22 @@ it('defaults the header title to Timetable and leaves the time out until loaded'
   expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Timetable', subtitle: 'Spring Games' });
 });
 
-it('says in the header line what is showing once there is something to filter', () => {
+it('keeps the competition name and update time in the header line, with no day or age-group summary, once there is something to filter', () => {
   setCompetition({ sections: [
     { id: 10, competitionId: 1, format: 2, ageGroup: 'Under 12', displayName: 'Teams Under 12' },
     { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
   ] }, new Date(2026, 5, 1, 10, 54));
   renderWithDock();
-  expect(header().subtitle).toBe(`${weekday(day)} · All ages`);
+  expect(header().subtitle).toBe('Spring Games · 10:54');
+  expect(header().subtitle).not.toMatch(/All ages|▾/);
 });
 
-it('renders the bandExtra and lead slots, places Status colours above Show full timetable, and reveals footer inside Show full timetable', () => {
+it('renders the bandExtra and lead slots, shows the page footer without a Show full timetable button when nothing is folded away', () => {
   renderBoard(<TimetableBoard bandExtra={<p>age chips</p>} lead={<p>toplist lead</p>} footer={<p>page footer</p>} />);
   expect(screen.getByText('age chips')).toBeVisible();
   expect(screen.getByText('toplist lead')).toBeVisible();
-  expect(screen.queryByText('page footer')).toBeNull();
-
-  const legend = screen.getByRole('list', { name: 'Status colours' });
-  const toggle = screen.getByRole('button', { name: 'Show full timetable' });
-  expect(toggle.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-
-  fireEvent.click(toggle);
   expect(screen.getByText('page footer')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Show full timetable' })).toBeNull();
 });
 
 it('gives a break its own heading line with how long it lasts, and lists briefings with their label and no chevron link', () => {
@@ -422,7 +417,7 @@ it('filters the timetable by age group (section) when the competition has multip
   expect(tiles[1]).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('U15 Heat 1')).toBeVisible();
   expect(screen.queryByText('U12 Heat 1')).toBeNull();
-  expect(header().subtitle).toBe(`${weekday(day)} · Under 15`);
+  expect(header().subtitle).toBe('Spring Games');
   expect(screen.getByRole('button', { name: 'Remove Under 15' })).toBeVisible();
 
   // Tapping the chosen tile again goes back to every age.
@@ -549,7 +544,7 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
 it('formats delays of an hour or more as hours and minutes, and lets organisers move the times by typed minutes from the timing sheet behind the pencil', async () => {
   const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
   auth.organise = true;
-  const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
+  const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true, startIsExplicit: true, startedAt: `${day}T09:${String((id - 1) * 4).padStart(2, '0')}:00`, finishedAt: `${day}T09:${String(id * 4).padStart(2, '0')}:00` }));
   setCompetition({
     sessions: [
       session(1, {
@@ -706,3 +701,6 @@ it('warms a row once when a delay moves its start time while you watch, but not 
   expect(moved.querySelector('.tt-shifted')).not.toBeNull();
   expect(container.querySelectorAll('.tt-shifted')).toHaveLength(1);
 });
+
+// Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
+vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));

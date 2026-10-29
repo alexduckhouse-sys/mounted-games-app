@@ -1,5 +1,7 @@
+import { shareOrDownloadFile } from '../../../lib/shareFile';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { RaceChapterPicker } from '../../../components/stream/RaceChapterPicker';
 import { useT } from '../../../i18n/LanguageContext';
 import { renderTrimmedFollowClip } from '../../../components/stream/ReplayInspector';
 import { ReplayPreparation } from '../../../components/stream/ReplayPreparation';
@@ -137,11 +139,12 @@ export function ReplayEditor({ clip, editable, justMade, onClose, onCancelClip, 
         {editable && (
           <span className="rp-frame" role="slider" tabIndex={0} aria-label={t('desk.stream.ed.framing')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(frame.x)}
             aria-valuetext={t('desk.stream.ed.framingValue', { x: Math.round(frame.x), y: Math.round(frame.y), z: frame.z.toFixed(1) })} data-drag={dragging !== null}
-            style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
+            style={{ transform: `translate3d(${(rect.left / rect.width) * 100}%, ${(rect.top / rect.height) * 100}%, 0)`, width: `${rect.width}%`, height: `${rect.height}%` }}
             onPointerDown={onDragStart} onKeyDown={onFrameKey}><span className="rp-z">{zoomLabel(frame.z)}</span></span>
         )}
       </div>
 
+      <RaceChapterPicker clip={clip} onSeek={(seconds) => { pause(); seek(seconds); }} />
       <div className="rp-bar">
         <span aria-hidden="true" className="rp-track" />
         {editable && <span aria-hidden="true" className="rp-band" style={{ left: percent(start), width: `${((end - start) / duration) * 100}%` }} />}
@@ -152,6 +155,8 @@ export function ReplayEditor({ clip, editable, justMade, onClose, onCancelClip, 
       <span className="rp-time"><span>{clockLabel(now)}</span>{editable && <span>{t('desk.stream.ed.keyframes', { count: keys.length })}</span>}<span>{clockLabel(duration)}</span></span>
 
       <div className="rp-ctl">
+        <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void shareOrDownloadFile(
+          new File([clip.blob], `replay.${clip.mimeType.includes('mp4') ? 'mp4' : 'webm'}`, { type: clip.mimeType }), { title: clip.label })}>{t('timing.share')}</button>
         <button type="button" className="rp-ib" aria-label={t('desk.stream.ed.back')} onClick={() => nudge(-STEP_SECONDS)}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
         <button type="button" className="rp-play" aria-label={playing ? t('desk.stream.ed.pause') : t('desk.stream.ed.play')} onClick={togglePlay}>
           {playing ? <Pause className="h-5 w-5" aria-hidden="true" /> : <Play className="h-5 w-5" aria-hidden="true" />}

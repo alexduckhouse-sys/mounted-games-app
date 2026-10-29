@@ -20,6 +20,8 @@ interface Props {
   className?: string;
   /** Set up the arena in front of the viewer: each pole and piece of kit drops in, from the start line to the top. */
   drop?: boolean;
+  /** Fit the box to the drawing's own shape instead of a fixed height, so a narrow screen has no empty bars above and below it. */
+  fit?: boolean;
 }
 
 /** Handlers the editor passes in; the read-only diagram leaves them out. */
@@ -38,11 +40,22 @@ export interface LaneEditing {
  * Renders an arena lane as SVG from the pole-based slot model (see
  * diagramSlots.ts). Old diagrams are mapped to the nearest slot on read.
  */
-export function RaceDiagram({ diagramJson, height = 140, className, drop = false }: Props) {
+export function RaceDiagram({ diagramJson, height = 140, className, drop = false, fit = false }: Props) {
   const model = toLaneModel(parseDiagram(diagramJson));
   // Keyed on the race, so moving to another race sets its arena up afresh.
-  return <LaneCanvas key={drop ? diagramJson ?? '' : undefined} model={model} height={height} className={className} ariaLabel="Arena setup diagram" drop={drop} />;
+  return <LaneCanvas key={drop ? diagramJson ?? '' : undefined} model={model} height={height} className={className} ariaLabel="Arena setup diagram" drop={drop} fit={fit} />;
 }
+
+/**
+ * The arena's own colours, from the `--mg-arena-*` tokens in skin.css: warm sand in the light themes, a soft slate
+ * with light chalk lines in Stable Night. Kit keeps its own colours so a cone is a cone in every theme.
+ */
+const ARENA = {
+  ground: 'rgb(var(--mg-arena-ground))', lane: 'rgb(var(--mg-arena-lane))', line: 'rgb(var(--mg-arena-line))',
+  label: 'rgb(var(--mg-arena-label))', ink: 'rgb(var(--mg-arena-ink))', start: 'rgb(var(--mg-arena-start))', top: 'rgb(var(--mg-arena-top))',
+  midline: 'rgb(var(--mg-arena-midline))', midlineText: 'rgb(var(--mg-arena-midline-text))', mark: 'rgb(var(--mg-arena-mark))',
+  tag: 'rgb(var(--mg-arena-tag))', tagLine: 'rgb(var(--mg-arena-tag-line))', poleInk: 'rgb(var(--mg-arena-pole-ink))', coneInk: 'rgb(var(--mg-arena-cone-ink))',
+} as const;
 
 /** Seconds before the first piece of kit lands, and between one piece and the next. */
 const DROP_START_S = 0.15;
@@ -78,7 +91,7 @@ function resolveRenderX(p: PlacedElement, model: LaneModel): number {
 }
 
 export function LaneCanvas({
-  model, height, className, ariaLabel, editing, drop = false,
+  model, height, className, ariaLabel, editing, drop = false, fit = false,
 }: {
   model: LaneModel;
   height: number;
@@ -86,6 +99,7 @@ export function LaneCanvas({
   ariaLabel: string;
   editing?: LaneEditing;
   drop?: boolean;
+  fit?: boolean;
 }) {
   const { slots, placed } = placeElements(model);
   const laneWidth = LANE.topLineX - LANE.left;
@@ -109,22 +123,22 @@ export function LaneCanvas({
       role="img"
       aria-label={ariaLabel}
       className={className}
-      style={{ height: `${height}px`, width: '100%', display: 'block', ...(editing ? { touchAction: 'none', cursor: editing.placing ? 'crosshair' : 'default' } : {}) }}
+      style={{ ...(fit ? { height: 'auto', aspectRatio: `${svgWidth} / 240` } : { height: `${height}px` }), width: '100%', display: 'block', ...(editing ? { touchAction: 'none', cursor: editing.placing ? 'crosshair' : 'default' } : {}) }}
       onPointerDown={editing?.onBackgroundDown}
       onPointerMove={editing?.onMove}
       onPointerUp={editing?.onUp}
       onPointerCancel={editing?.onUp}
     >
-      <rect x="0" y="0" width={svgWidth} height="240" fill="#fef3c7" />
+      <rect x="0" y="0" width={svgWidth} height="240" style={{ fill: ARENA.ground }} />
       <rect x={LANE.left - 10} y={LANE.top - 10} width={laneWidth + 20} height={LANE.bottom - LANE.top + 20}
-            fill="#fde68a" rx="6" />
+            style={{ fill: ARENA.lane }} rx="6" />
       <rect x={LANE.topLineX} y={LANE.top - 10} width={beyondRight - LANE.topLineX} height={LANE.bottom - LANE.top + 20}
-            fill="#fde68a" opacity="0.55" rx="6" />
+            style={{ fill: ARENA.lane }} opacity="0.55" rx="6" />
 
-      <line x1={LANE.left} y1={LANE.top} x2={LANE.topLineX} y2={LANE.top} stroke="#92400e" strokeWidth="1.5" />
-      <line x1={LANE.left} y1={LANE.bottom} x2={LANE.topLineX} y2={LANE.bottom} stroke="#92400e" strokeWidth="1.5" />
-      <line x1={LANE.topLineX} y1={LANE.top} x2={beyondRight} y2={LANE.top} stroke="#92400e" strokeWidth="1.2" strokeDasharray="4 4" opacity="0.6" />
-      <line x1={LANE.topLineX} y1={LANE.bottom} x2={beyondRight} y2={LANE.bottom} stroke="#92400e" strokeWidth="1.2" strokeDasharray="4 4" opacity="0.6" />
+      <line x1={LANE.left} y1={LANE.top} x2={LANE.topLineX} y2={LANE.top} style={{ stroke: ARENA.line }} strokeWidth="1.5" />
+      <line x1={LANE.left} y1={LANE.bottom} x2={LANE.topLineX} y2={LANE.bottom} style={{ stroke: ARENA.line }} strokeWidth="1.5" />
+      <line x1={LANE.topLineX} y1={LANE.top} x2={beyondRight} y2={LANE.top} style={{ stroke: ARENA.line }} strokeWidth="1.2" strokeDasharray="4 4" opacity="0.6" />
+      <line x1={LANE.topLineX} y1={LANE.bottom} x2={beyondRight} y2={LANE.bottom} style={{ stroke: ARENA.line }} strokeWidth="1.2" strokeDasharray="4 4" opacity="0.6" />
 
       {landmarks.map((m) => (
         <PoleLandmark key={m.label} label={m.label} x={pctToPx(m.x)} />
@@ -142,19 +156,19 @@ export function LaneCanvas({
         <rect key={i} x={LANE.left + (i % 2 === 0 ? -4 : 0)} y={LANE.top - 8 + i * ((LANE.bottom - LANE.top + 16) / 8)}
               width="4" height={(LANE.bottom - LANE.top + 16) / 8} fill="#f0fdf4" />
       ))}
-      <text x={LANE.left} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" fill="#14532d">START</text>
+      <text x={LANE.left} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" style={{ fill: ARENA.start }}>START</text>
 
       <line x1={LANE.topLineX} y1={LANE.top - 8} x2={LANE.topLineX} y2={LANE.bottom + 8} stroke="#dc2626" strokeWidth="4" />
-      <text x={LANE.topLineX} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" fill="#991b1b">TOP</text>
-      <text x={(LANE.topLineX + beyondRight) / 2} y={LANE.bottom + 22} textAnchor="middle" fontSize="11" fill="#92400e" fontStyle="italic">
+      <text x={LANE.topLineX} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" style={{ fill: ARENA.top }}>TOP</text>
+      <text x={(LANE.topLineX + beyondRight) / 2} y={LANE.bottom + 22} textAnchor="middle" fontSize="11" style={{ fill: ARENA.label }} fontStyle="italic">
         beyond
       </text>
 
       {model.midline && (
         <>
           <line x1={pctToPx(55)} y1={LANE.top - 4} x2={pctToPx(55)} y2={LANE.bottom + 4}
-                stroke="#475569" strokeWidth="1.5" strokeDasharray="6 6" />
-          <text x={pctToPx(55)} y={LANE.top - 16} textAnchor="middle" fontSize="12" fill="#334155">midline</text>
+                style={{ stroke: ARENA.midline }} strokeWidth="1.5" strokeDasharray="6 6" />
+          <text x={pctToPx(55)} y={LANE.top - 16} textAnchor="middle" fontSize="12" style={{ fill: ARENA.midlineText }}>midline</text>
         </>
       )}
 
@@ -182,11 +196,11 @@ export function LaneCanvas({
 function PoleLandmark({ label, x }: { label: string; x: number }) {
   return (
     <g data-testid={`pole-landmark-${label}`}>
-      <line x1={x} y1={LANE.top - 4} x2={x} y2={LANE.top + 6} stroke="#b45309" strokeWidth="1.5" opacity="0.7" />
-      <line x1={x} y1={LANE.bottom - 6} x2={x} y2={LANE.bottom + 4} stroke="#b45309" strokeWidth="1.5" opacity="0.7" />
-      <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} stroke="#b45309" strokeWidth="1" strokeDasharray="3 5" opacity="0.35" />
-      <rect x={x - 12} y={LANE.top - 22} width="24" height="14" rx="4" fill="#fef3c7" stroke="#d97706" strokeWidth="1" />
-      <text x={x} y={LANE.top - 12} textAnchor="middle" fontSize="10" fontWeight="700" fill="#92400e">{label}</text>
+      <line x1={x} y1={LANE.top - 4} x2={x} y2={LANE.top + 6} style={{ stroke: ARENA.mark }} strokeWidth="1.5" opacity="0.7" />
+      <line x1={x} y1={LANE.bottom - 6} x2={x} y2={LANE.bottom + 4} style={{ stroke: ARENA.mark }} strokeWidth="1.5" opacity="0.7" />
+      <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} style={{ stroke: ARENA.mark }} strokeWidth="1" strokeDasharray="3 5" opacity="0.35" />
+      <rect x={x - 12} y={LANE.top - 22} width="24" height="14" rx="4" style={{ fill: ARENA.tag, stroke: ARENA.tagLine }} strokeWidth="1" />
+      <text x={x} y={LANE.top - 12} textAnchor="middle" fontSize="10" fontWeight="700" style={{ fill: ARENA.label }}>{label}</text>
     </g>
   );
 }
@@ -194,7 +208,7 @@ function PoleLandmark({ label, x }: { label: string; x: number }) {
 function SlotMarker({ slot }: { slot: Slot }) {
   const x = pctToPx(slot.id in SLOT_RENDER_X ? SLOT_RENDER_X[slot.id] : slot.x);
   if (slot.kind === 'pole') {
-    return <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} stroke="#b45309" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.7" />;
+    return <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} style={{ stroke: ARENA.mark }} strokeWidth="1.5" strokeDasharray="3 5" opacity="0.7" />;
   }
   if (slot.kind === 'gap' || slot.kind === 'beyond') {
     return <circle cx={x} cy={CENTRE_Y} r="4" fill="#d97706" opacity="0.55" />;
@@ -236,15 +250,15 @@ function DiagramNode({
         <ElementShape key={i} el={c} x={x} y={y - (i + 1) * CHILD_GAP} />
       ))}
       {children.length > shown.length && (
-        <text x={x + 16} y={y - (shown.length + 1) * CHILD_GAP + 8} fontSize="13" fontWeight="700" fill="#1e293b">+{children.length - shown.length}</text>
+        <text x={x + 16} y={y - (shown.length + 1) * CHILD_GAP + 8} fontSize="13" fontWeight="700" style={{ fill: ARENA.ink }}>+{children.length - shown.length}</text>
       )}
       {label && (
-        <text x={x} y={labelY} textAnchor="middle" fontSize="14" fontWeight="700" fill={labelFor(el.t)}>
+        <text x={x} y={labelY} textAnchor="middle" fontSize="14" fontWeight="700" style={{ fill: labelFor(el.t) }}>
           {label}
         </text>
       )}
       {summary && (
-        <text x={x} y={labelY + (label ? 15 : 0)} textAnchor="middle" fontSize="13" fontWeight="600" fill="#1e293b" data-testid="contents-summary">
+        <text x={x} y={labelY + (label ? 15 : 0)} textAnchor="middle" fontSize="13" fontWeight="600" style={{ fill: ARENA.ink }} data-testid="contents-summary">
           {summary}
         </text>
       )}
@@ -328,7 +342,7 @@ function Item({ x, y, kind }: { x: number; y: number; kind: ItemKind }) {
       return (
         <>
           <rect x={x - 6} y={y - 6} width="10" height="12" fill="#fef3c7" stroke="#92400e" strokeWidth="1.5" rx="1" />
-          <path d={`M ${x + 4} ${y - 3} Q ${x + 9} ${y} ${x + 4} ${y + 3}`} fill="none" stroke="#92400e" strokeWidth="1.5" />
+          <path d={`M ${x + 4} ${y - 3} Q ${x + 9} ${y} ${x + 4} ${y + 3}`} fill="none" style={{ stroke: ARENA.line }} strokeWidth="1.5" />
         </>
       );
     case 'ball':
@@ -387,10 +401,9 @@ function Item({ x, y, kind }: { x: number; y: number; kind: ItemKind }) {
 
 function labelFor(t: DiagramElement['t']): string {
   switch (t) {
-    case 'pole': return '#7f1d1d';
-    case 'cone': return '#7c2d12';
-    case 'item': return '#1e293b';
-    case 'table': case 'in': return '#92400e';
-    default: return '#1e293b';
+    case 'pole': return ARENA.poleInk;
+    case 'cone': return ARENA.coneInk;
+    case 'table': case 'in': return ARENA.label;
+    default: return ARENA.ink;
   }
 }

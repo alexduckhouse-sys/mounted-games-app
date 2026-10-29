@@ -12,6 +12,17 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
     private readonly ApiFactory _f;
     public ReadinessAndRulebooksTests(ApiFactory f) => _f = f;
 
+    [Theory]
+    [InlineData("http://example.invalid/rules")]
+    [InlineData("https://fake:fake@example.invalid/rules")]
+    [InlineData("javascript:alert(1)")]
+    public async Task RulebooksRejectUnsafeLinks(string url)
+    {
+        var admin = await _f.AdminAsync();
+        var response = await admin.PostAsJsonAsync("/api/rulebooks", new { title = "Fake rules", edition = "Test", text = "Fake rules text", sourceUrl = url });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task Readiness_ReportsAllBlockingCategories_WithoutPrivateContacts()
     {

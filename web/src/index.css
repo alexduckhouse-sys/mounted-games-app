@@ -167,8 +167,9 @@ nav a:focus-visible, summary:focus-visible {
 html[data-lite="true"] .ticker-in, html[data-lite="true"] .ticker-out { animation: none; }
 html[data-lite="true"] .ticker-out { display: none; }
 
-/* iOS Safari zooms into any field under 16px when it gets focus, so on phones every typed field is at least 16px. */
-@media (max-width: 639px) {
+/* iOS Safari zooms into any field under 16px when it gets focus, so on phones and any touch screen (an iPad in landscape
+   is wider than 639px) every typed field is at least 16px. */
+@media (max-width: 639px), (pointer: coarse) {
   input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"]),
   select,
   textarea { font-size: max(16px, 1em) !important; }

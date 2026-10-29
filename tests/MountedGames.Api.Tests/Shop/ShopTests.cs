@@ -23,6 +23,45 @@ public class ShopTests : IClassFixture<ApiFactory>
         return await r.ReadAsync<ShopPostDto>();
     }
 
+    [Theory]
+    [InlineData("data:image/png;base64,AAAA")]
+    [InlineData("data:image/jpeg;base64,iVBORw0KGgo=")]
+    [InlineData("data:image/gif;base64,AAAA")]
+    [InlineData("data:image/png;base64,===")]
+    public async Task PicturesMustMatchTheirDeclaredSignature_OnCreateAndUpdate(string image)
+    {
+        var (client, _) = await _f.SignupAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/shop/posts", Post(image: image))).StatusCode);
+        var post = await CreateAsync(client, Post());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/shop/posts/{post.Id}", new { imageBase64 = image })).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("data:image/png;base64,iVBORw0KGgo=")]
+    [InlineData("data:image/jpeg;base64,/9j/")]
+    [InlineData("data:image/gif;base64,R0lGODlh")]
+    [InlineData("data:image/webp;base64,UklGRgAAAABXRUJQ")]
+    public async Task SupportedPictureSignaturesAreAccepted(string image)
+    {
+        var (client, _) = await _f.SignupAsync();
+        Assert.Equal(image, (await CreateAsync(client, Post(image: image))).ImageBase64);
+    }
+
+    [Fact]
+    public async Task ProfanityIsMaskedInPostsUpdatesAndPrivateComments()
+    {
+        var (client, _) = await _f.SignupAsync();
+        var post = await CreateAsync(client, Post("Bloody saddle", "crap"));
+        Assert.Equal("B***** saddle", post.Title);
+        Assert.Equal("c***", post.Body);
+        var update = await client.PutAsJsonAsync($"/api/shop/posts/{post.Id}", new { title = "crap saddle", body = "Bloody" });
+        var changed = await update.ReadAsync<ShopPostDto>();
+        Assert.Equal("c*** saddle", changed.Title);
+        Assert.Equal("B*****", changed.Body);
+        var comment = await client.PostAsJsonAsync($"/api/shop/posts/{post.Id}/comments", new { authorName = "Fake Seller", body = "crap", isPrivate = true });
+        Assert.Equal("c***", (await comment.ReadAsync<ShopCommentDto>()).Body);
+    }
+
     [Fact]
     public async Task Create_Returns401_WhenAnonymous()
     {
@@ -97,9 +136,9 @@ public class ShopTests : IClassFixture<ApiFactory>
     {
         var (me, _) = await _f.SignupAsync();
 
-        var post = await CreateAsync(me, Post(image: "data:image/png;base64,AAAA"));
+        var post = await CreateAsync(me, Post(image: "data:image/png;base64,iVBORw0KGgo="));
 
-        Assert.Equal("data:image/png;base64,AAAA", post.ImageBase64);
+        Assert.Equal("data:image/png;base64,iVBORw0KGgo=", post.ImageBase64);
     }
 
     [Fact]

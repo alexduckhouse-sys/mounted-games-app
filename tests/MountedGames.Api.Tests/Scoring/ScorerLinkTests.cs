@@ -76,6 +76,21 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         return new UpdateRaceScoreRequest(order.Select((t, i) => new FinishingPlaceDto(t, i + 1, false)).ToList(), revision, id, reason);
     }
 
+    [Fact]
+    public async Task FlagDownUsesScorerToken_AndCannotStartAnotherCompetition()
+    {
+        var world = await WorldAsync();
+        var (token, _) = await CreateLinkAsync(world);
+        var client = Scorer(token);
+        var at = DateTime.UtcNow.AddMinutes(-1);
+        var started = await (await client.PostAsJsonAsync($"/api/scorer/races/{world.MainRaces[0]}/start", new RaceClockRequest(at))).ReadAsync<RaceDto>();
+        Assert.True(started.StartIsExplicit);
+        Assert.Equal(at, started.StartedAt);
+        var other = await WorldAsync();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"/api/scorer/races/{other.MainRaces[0]}/start", new RaceClockRequest(at))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Scorer(null).PostAsJsonAsync($"/api/scorer/races/{world.MainRaces[0]}/start", new RaceClockRequest(at))).StatusCode);
+    }
+
     // ---- creating, listing, revoking --------------------------------------------------------------
 
     [Fact]

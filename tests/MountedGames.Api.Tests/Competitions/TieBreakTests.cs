@@ -479,12 +479,12 @@ public class TieBreakerUnitTests
         var openA = new TieFacts(1, 1, 64, [2, 1], [5]);
         var openB = new TieFacts(2, 1, 64, [2, 1], [5]);
         Assert.Equal(
-            "Level on points and countback — run-off if on cut-off",
+            "Level on points and countback (run-off if on cut-off)",
             breaker.Explain([openA, openB], openA, openB, "Belvoir A"));
 
         var runoffBreaker = Breaker(TieBreakRule.RunOff);
         Assert.Equal(
-            "Level on points and countback — run-off if on cut-off",
+            "Level on points and countback (run-off if on cut-off)",
             runoffBreaker.Explain([countbackA, countbackB], countbackA, countbackB, "Belvoir A"));
 
         var lastRaceBreaker = Breaker(TieBreakRule.LastRace);

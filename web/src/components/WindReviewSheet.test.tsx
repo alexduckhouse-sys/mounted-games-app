@@ -18,12 +18,12 @@ describe('wind review decisions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Resume racing' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.stringMatching(/sessions\/resume$/), expect.anything()));
   });
-  it('shows other hazards and shares a review only after an explicit action', async () => {
+  it('shows other hazards and continues without claiming an equipment inspection', async () => {
     const prompt = { startsAt: now - 1000, endsAt: now + 3_600_000, peakMph: 37, severity: 2 as const, fetchedAt: now };
     render(<WindReviewSheet competition={event()} prompt={prompt} hours={[{ startsAt: now, weatherCode: 95, rainChance: 0, rainMm: 0 }]} reload={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText(/Thunder is also forecast/)).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Equipment reviewed on site' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.stringMatching(/acknowledge$/), expect.objectContaining({ severity: 2, peakMph: 37, arena: 'Main' })));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue for now' }));
+    expect(api.post).not.toHaveBeenCalled();
   });
 });

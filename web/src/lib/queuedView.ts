@@ -39,7 +39,7 @@ export function withQueuedResults(heat: Heat, queued: readonly QueuedScore[], se
         return {
           id: -p.teamId,
           teamId: p.teamId,
-          teamName: q.teamNames[p.teamId] ?? `Team ${p.teamId}`,
+          teamName: q.teamNames[p.teamId] ?? 'Unnamed team',
           placing: p.eliminated || sitOut ? null : p.place,
           eliminated: p.eliminated,
           points: sitOut ? 0 : points,

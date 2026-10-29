@@ -3,6 +3,13 @@ import type { ChatMessage } from '../types';
 
 /** Tag on the copy of an announcement that is pinned: it is the notice on the bar at the top of the event. */
 export const BANNER_TAG = 'banner';
+export const isPinnedAnnouncement = (message: ChatMessage) => !message.adminOnly && !message.recipientUserId && message.type === 2 && (message.tag === 'pinned' || message.tag === BANNER_TAG);
+
+/** A pin updates an existing announcement and replaces the previous public pin. */
+export function updateChatMessage(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
+  const previous = isPinnedAnnouncement(message) ? messages.map((item) => isPinnedAnnouncement(item) && item.id !== message.id ? { ...item, tag: null } : item) : messages;
+  return previous.some((item) => item.id === message.id) ? previous.map((item) => item.id === message.id ? message : item) : [...previous, message];
+}
 
 const byTime = (a: ChatMessage, b: ChatMessage) =>
   new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id;
@@ -16,12 +23,12 @@ const isPublicAnnouncement = (message: ChatMessage) =>
 
 /** The announcement pinned to the top of the event, if any (the newest banner). */
 export function pinnedAnnouncement(messages: ChatMessage[]): ChatMessage | null {
-  return messages.filter((m) => isPublicAnnouncement(m) && m.tag === BANNER_TAG).sort(byTime).at(-1) ?? null;
+  return messages.filter((m) => isPinnedAnnouncement(m)).sort(byTime).at(-1) ?? null;
 }
 
 /** Every banner copy, so pinning a new one or unpinning can clear the old ones. */
 export function bannerMessages(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((m) => isPublicAnnouncement(m) && m.tag === BANNER_TAG);
+  return messages.filter((m) => isPinnedAnnouncement(m));
 }
 
 /**
@@ -30,23 +37,23 @@ export function bannerMessages(messages: ChatMessage[]): ChatMessage[] {
  */
 export function sentAnnouncements(messages: ChatMessage[]): ChatMessage[] {
   const sent = messages
-    .filter((m) => isPublicAnnouncement(m) && m.tag !== BANNER_TAG && !m.tag?.startsWith('missing-team'))
+    .filter((m) => isPublicAnnouncement(m) && !isPinnedAnnouncement(m) && !m.tag?.startsWith('missing-team'))
     .sort(byTime);
   const pinned = pinnedAnnouncement(messages);
-  const pinnedSource = pinned ? sent.findLast((m) => m.body === pinned.body) : undefined;
+  const pinnedSource = pinned?.tag === BANNER_TAG ? sent.findLast((m) => m.body === pinned.body) : undefined;
   return sent.filter((m) => m !== pinnedSource).reverse();
 }
 
 /** The announcements the ticker shows: every one in the list, with only the newest banner copy, which goes last. */
 export function tickerAnnouncements(messages: ChatMessage[]): ChatMessage[] {
-  const announcements = messages.filter((message) => message.type === 2);
-  const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
-  return [...announcements.filter((message) => message.tag !== BANNER_TAG), ...(activeBanner ? [activeBanner] : [])];
+  const announcements = messages.filter(isPublicAnnouncement);
+  const activeBanner = announcements.filter(isPinnedAnnouncement).at(-1);
+  return [...announcements.filter((message) => !isPinnedAnnouncement(message)), ...(activeBanner ? [activeBanner] : [])];
 }
 
 /** The pinned banner stays on the ticker for as long as it is pinned, so it counts as just sent. */
 export function bannerAsNew(announcements: ChatMessage[], now: Date): ChatMessage[] {
-  const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
+  const activeBanner = announcements.filter(isPinnedAnnouncement).at(-1);
   return activeBanner
     ? announcements.map((message) => message.id === activeBanner.id ? { ...message, createdAt: now.toISOString() } : message)
     : announcements;

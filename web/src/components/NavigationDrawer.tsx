@@ -80,7 +80,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
       ? [{ to: seasonsTo, label: t('shell.menu.seasons'), icon: Trophy, end: false }, { to: '/competitions/past', label: t('shell.menu.pastCompetitions'), icon: History, end: false }]
       : [{ to: '/competitions/past', label: t('shell.menu.pastCompetitions'), icon: History, end: false }, { to: seasonsTo, label: t('shell.menu.seasons'), icon: Trophy, end: false }]),
     { to: '/stats', label: t('shell.menu.stats'), icon: BarChart3, end: false },
-    ...(current ? [] : [{ to: '/team-profiles', label: t('shell.menu.teamProfiles'), icon: IdCard, end: false }]),
+    { to: '/team-profiles', label: t('shell.menu.teamProfiles'), icon: IdCard, end: false },
     { to: '/shop', label: t('shell.menu.tackShop'), icon: ShoppingBag, end: false },
   ];
   // Weather shows with a competition open, or away from one only when switched on in Settings.
@@ -102,6 +102,8 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const dayLinks = [
     { to: `${base}/commentary${sectionQuery}`, label: 'PA desk', icon: Mic },
     { to: `${base}/tv${sectionQuery}`, label: 'TV kiosk', icon: Monitor },
+    { to: `${base}/prize-giving${sectionQuery}`, label: t('screen.pg.title'), icon: Trophy },
+    ...(hasRole('Admin') ? [{ to: `${base}/announcements`, label: t('teams.chat.announcements'), icon: ClipboardList }] : []),
   ];
   return (
     <dialog ref={ref} onCancel={(e) => { e.preventDefault(); close(); }} onClick={(e) => { if (e.target === e.currentTarget) close(); }} aria-labelledby="navigation-title" className={`mg-drawer${closing ? ' is-closing' : ''} mg-font fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(88vw,20rem)] max-w-none bg-[rgb(var(--mg-surface))] p-0 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.55)]`}>

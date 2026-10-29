@@ -42,4 +42,11 @@ export const wind = {
   "wind.pause": "Suspendre les courses",
   "wind.tell": "Envoyer l’annonce",
   "wind.error": "Impossible d’enregistrer ou de charger cet examen. Vérifiez votre connexion et rechargez avant de réessayer.",
+  "wind.recommendations": "Changements de courses recommandés",
+  "wind.suggestionReason": "Les bouteilles et les drapeaux peuvent bouger dans les rafales. Cochez une alternative pour la revoir avec l’officiel.",
+  "wind.noSuggestions": "Aucune alternative confirmée. Vérifiez le règlement de l’événement ou examinez une course ci-dessous.",
+  "wind.acceptSuggestion": "Examiner le remplacement de {race}",
+  "wind.dismissSuggestion": "Écarter le remplacement de {race}",
+  "wind.continue": "Continuer pour le moment",
+  "wind.send": "Envoyer",
 } as const;

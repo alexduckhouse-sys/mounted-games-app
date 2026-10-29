@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +31,7 @@ public class ScoringController : ControllerBase
         _live = live;
     }
 
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     [HttpPost("api/races/{raceId:int}/results")]
     [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<HeatDto>> SubmitRaceResults(
@@ -45,7 +48,7 @@ public class ScoringController : ControllerBase
         {
             await _scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                correctionReason, cancellationToken, expectedProgrammeRevision: req.ExpectedProgrammeRevision);
+                correctionReason, cancellationToken, expectedProgrammeRevision: req.ExpectedProgrammeRevision, finishedAt: req.FinishedAt);
         }
         catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message, ex.ExistingPlaces, ex.IncomingPlaces); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -175,9 +178,10 @@ public class ScoringController : ControllerBase
             {
                 await _scoring.ApplyLegacyAsync(raceId, places, expected: null,
                     User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                    "Score clash resolved", cancellationToken);
+                    "Score clash resolved", cancellationToken, expectedProgrammeRevision: req.ExpectedProgrammeRevision);
             }
             catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+            catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
             catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
         }
         else
@@ -292,17 +296,19 @@ public class ScoringController : ControllerBase
     /// </summary>
     [HttpPost("api/races/{raceId:int}/start")]
     [CompetitionAccess("raceId", CompetitionResource.Race)]
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     public async Task<ActionResult<RaceDto>> StartRace(int raceId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
         CancellationToken cancellationToken = default)
     {
-        var tappedAt = ClockTime(req?.At, DateTime.UtcNow);
+        var tappedAt = req?.At ?? DateTime.UtcNow;
         Race race;
         try
         {
             race = await _scoring.UpdateRaceClockAsync(
                 raceId, true, tappedAt, req?.At is not null, cancellationToken, req?.ExpectedProgrammeRevision);
         }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -416,4 +422,4 @@ public class ScoringController : ControllerBase
     }
 }
 
-public record ResolveScoreClashRequest(bool UseIncoming, IReadOnlyList<FinishingPlaceDto>? Places = null);
+public record ResolveScoreClashRequest(bool UseIncoming, IReadOnlyList<FinishingPlaceDto>? Places = null, int? ExpectedProgrammeRevision = null);

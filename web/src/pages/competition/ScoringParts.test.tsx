@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MotionConfig } from 'framer-motion';
 import { describe, expect, it, vi } from 'vitest';
 import { EliminationSheet, NextLanesCard, ScoreClashBanner, type ScoreClashItem } from './ScoringParts';
 
@@ -53,21 +54,21 @@ describe('NextLanesCard', () => {
   });
 });
 
-describe('EliminationSheet focus', () => {
-  it('takes focus, closes on Escape and gives focus back', () => {
-    const opener = document.createElement('button');
-    document.body.appendChild(opener);
-    opener.focus();
+describe('EliminationSheet', () => {
+  it('is the shared sheet: it closes on Escape or a tap on the dim, and not on a tap inside', () => {
     const onCancel = vi.fn();
-    const { unmount } = render(
-      <EliminationSheet places={[{ teamId: 1, place: 1, eliminated: true } as never]} names={{ 1: 'Oak A' }} onSave={vi.fn()} onSkip={vi.fn()} onCancel={onCancel} />,
+    render(
+      <MotionConfig reducedMotion="always">
+        <EliminationSheet places={[{ teamId: 1, place: 1, eliminated: true } as never]} names={{ 1: 'Oak A' }} onSave={vi.fn()} onSkip={vi.fn()} onCancel={onCancel} />
+      </MotionConfig>,
     );
-    const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
-    expect(sheet.contains(document.activeElement)).toBe(true);
-    fireEvent.keyDown(document, { key: 'Escape' });
+    const sheet = screen.getByRole('dialog', { name: 'Why are they out?' });
+    expect(sheet).toHaveClass('kit-sheet');
+    fireEvent.click(within(sheet).getByText('Oak A'));
+    expect(onCancel).not.toHaveBeenCalled();
+    fireEvent(sheet, new Event('cancel', { cancelable: true }));
     expect(onCancel).toHaveBeenCalledTimes(1);
-    unmount();
-    expect(document.activeElement).toBe(opener);
-    opener.remove();
+    fireEvent.click(sheet);
+    expect(onCancel).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,12 +3,7 @@
 
 /* On signed-in routes AppShell's <main> has top padding, which showed the page background as a white bar between the app header and the header band. The band should butt up against the app header. */
 main:has(.rf-hd) { padding-top: 0; }
-.rf-page { width: 100%; font-family: var(--mg-font); color: rgb(var(--mg-ink)); animation: rf-page-in 180ms var(--mg-ease-out); }
-@keyframes rf-page-in {
-  /* From part-faded, not blank: a page that starts invisible reads as a flash of empty screen. */
-  from { opacity: .4; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+.rf-page { width: 100%; font-family: var(--mg-font); color: rgb(var(--mg-ink)); }
 
 /* Header band: navy band matching .mg-band-header, with title in --mg-font-display. */
 .rf-hd, .rf-head { margin-top: 0; }
@@ -23,6 +18,12 @@ main:has(.rf-hd) { padding-top: 0; }
 .rf-ttl { margin: 0 0 0 12px; display: flex; align-items: center; gap: 8px; font: 700 26px/1.05 var(--mg-font-display); letter-spacing: .01em; color: rgb(var(--mg-header-ink)); overflow-wrap: anywhere; }
 .rf-ttl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rf-ttl-row .rf-ttl { flex: 1; min-width: 0; }
+/* In the app the title sits in the top bar; what's left (actions, a line of detail, tabs) tucks up under it. */
+.rf-hd-slim { padding-top: 0; }
+.rf-hd-slim > .rf-sub:first-child { margin-top: 0; }
+/* With only a status line left (Sections' "Saved"), there's no band: the status floats at the top right of the page. */
+.rf-hd-slim:not(:has(a, button, .rf-sub, .rf-tabs, .rf-demo)) { position: relative; height: 0; padding: 0; border: 0; background: none; border-image: none; }
+.rf-hd-slim:not(:has(a, button, .rf-sub, .rf-tabs, .rf-demo)) .rf-hd-top { position: absolute; top: 4px; right: 16px; min-height: 0; }
 .rf-sub { margin: 4px 0 0 12px; font: 400 14px/1.3 var(--mg-font); color: rgb(var(--mg-header-sub)); }
 .rf-tabs { position: relative; display: flex; gap: 2px; overflow-x: auto; margin: 8px -8px -12px -4px; padding: 0 8px; scrollbar-width: none; }
 .rf-tabs::-webkit-scrollbar { display: none; }
@@ -33,7 +34,7 @@ main:has(.rf-hd) { padding-top: 0; }
 .rf-hd :focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 
 /* Section headings and lists: matches .mg-sec-head / .tt-group-title and .mg-lines / .mg-card. */
-.rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; padding: 0 2px 4px; border-bottom: 1.5px solid rgb(var(--mg-heading)); font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
+.rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; padding: 0 2px 4px; font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
 .rf-sec > span { text-transform: none; letter-spacing: 0; font: 500 12px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 :where(.rf-list) { padding: 0; list-style: none; }
 .rf-list { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); overflow: hidden; }
@@ -44,7 +45,7 @@ a.rf-row:active, button.rf-row:active, summary.rf-row:active { background: rgb(v
 summary.rf-row { list-style: none; cursor: pointer; }
 summary.rf-row::-webkit-details-marker { display: none; }
 .rf-chev-down { transition: transform 180ms var(--mg-ease-out); }
-details[open] > summary .rf-chev-down { transform: rotate(180deg); }
+details[open] > summary .rf-chev-down, [aria-expanded="true"] > .rf-chev-down { transform: rotate(180deg); }
 /* A disclosure's contents come in under their row. Where the browser can animate to auto height it slides open too. */
 details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 @keyframes rf-reveal { from { opacity: 0; transform: translateY(-4px); } }
@@ -109,6 +110,11 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
     bottom: 0;
   }
 }
+/* A sticky footer also clears the ticker dock when it shows (on desktop too, where the dock still sits at the bottom). */
+body:has(.mg-dock-low) .rf-foot:not(.rf-foot-inline) { --rf-foot-offset: calc(64px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); }
+body:has(.mg-dock:not(.mg-dock-low)) .rf-foot:not(.rf-foot-inline) { --rf-foot-offset: calc(128px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); }
+/* Inline: the page's last row of buttons, in the flow like any other content. */
+.rf-foot.rf-foot-inline { position: static; margin-inline: 0; margin-top: 16px; padding: 0; background: none; border-top: 0; }
 
 /* Bottom sheet */
 .rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); animation: rf-fade 160ms var(--mg-ease-out); }
@@ -121,7 +127,7 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-actions { display: flex; gap: 8px; }
 @keyframes rf-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .rf-page, .rf-sheet, .rf-scrim, .rf-pop, details[open] > summary ~ * { animation: none; }
+  .rf-sheet, .rf-scrim, .rf-pop, details[open] > summary ~ * { animation: none; }
   details::details-content { transition: none; }
   .rf-sw > span { transition: none; }
   .rf-btn, .rf-row, .rf-chev-down, .rf-fld input, .rf-fld select, .rf-fld textarea { transition: none; }
@@ -136,6 +142,14 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-table th:last-child, .rf-table td:last-child { padding-right: 14px; text-align: right; }
 .rf-table a { color: inherit !important; font-weight: 600; display: flex; align-items: center; min-height: 44px; text-decoration: none !important; }
 .rf-table-wrap { border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); overflow-x: auto; }
+
+/* A table that always fits its card: fixed columns, short text wrapping instead of pushing the card sideways. */
+.rf-table-fit { overflow-x: hidden; }
+.rf-table-fit .rf-table { table-layout: fixed; font-size: 14px; }
+.rf-table-fit .rf-table th { padding-inline: 3px; overflow-wrap: anywhere; hyphens: auto; }
+.rf-table-fit .rf-table td { padding-inline: 3px; height: auto; min-height: 44px; padding-block: 6px; overflow-wrap: anywhere; line-height: 1.2; }
+.rf-table-fit .rf-table th:first-child, .rf-table-fit .rf-table td:first-child { padding-left: 10px; }
+.rf-table-fit .rf-table th:last-child, .rf-table-fit .rf-table td:last-child { padding-right: 10px; }
 
 /* Demo checkout outcome icons and the padlock screen */
 .rf-state-ok { fill: rgb(var(--mg-ok) / .14); }
@@ -157,13 +171,15 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-pop { animation: rf-pop-in 170ms var(--mg-ease-out); transform-origin: top right; position: fixed; z-index: 70; min-width: 220px; max-width: calc(100vw - 16px); overflow-y: auto; padding: 4px 0; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 14px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
 .rf-choice-other { display: flex; gap: 8px; padding: 8px 12px; }
 .rf-choice-other input { flex: 1; min-width: 0; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 500 16px/1.2 var(--mg-font); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
-.rf-sw { flex: none; position: relative; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: rgb(var(--mg-control)); cursor: pointer; transition: background-color .15s; }
-.rf-sw > span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transition: left 260ms cubic-bezier(.34, 1.56, .64, 1), width 160ms var(--mg-ease-out); }
+.rf-sw { flex: none; position: relative; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: rgb(var(--mg-switch-off)); cursor: pointer; transition: background-color .15s; }
+/* The thumb slides with transform only (no layout work), and the area a thumb hits is 44px tall even though the switch is 22px. */
+.rf-sw::after { content: ''; position: absolute; inset: -11px -4px; }
+.rf-sw > span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transform-origin: left center; transition: transform 260ms cubic-bezier(.34, 1.56, .64, 1); }
 /* The knob stretches under a finger, the way a phone's switch does, and springs across. */
-.rf-sw:active:not(:disabled) > span { width: 22px; }
-.rf-sw[aria-checked="true"]:active:not(:disabled) > span { left: 14px; }
+.rf-sw:active:not(:disabled) > span { transform: scaleX(1.22); }
+.rf-sw[aria-checked="true"]:active:not(:disabled) > span { transform: translateX(16px) scaleX(1.22); transform-origin: right center; }
 .rf-sw[aria-checked="true"] { background: rgb(var(--mg-button)); }
-.rf-sw[aria-checked="true"] > span { left: 18px; }
+.rf-sw[aria-checked="true"] > span { transform: translateX(16px); transform-origin: right center; }
 .rf-sw:disabled { opacity: .5; cursor: default; }
 .rf-sw:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
@@ -185,3 +201,11 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 @keyframes rf-pop-in { from { opacity: 0; transform: scale(.95) translateY(-4px); } }
 .rf-menu-danger { color: rgb(var(--mg-elim)); text-decoration: underline; }
 .rf-menu-danger:hover { color: rgb(var(--mg-elim)); }
+/* A team card folds its body away rather than snapping shut. */
+.tm-body { display: grid; grid-template-rows: 1fr; animation: tm-open var(--mg-dur-base) var(--mg-ease-out); }
+.tm-body > div { min-height: 0; overflow: hidden; }
+.tm-body[data-closing='true'] { grid-template-rows: 0fr; animation: tm-close 180ms var(--mg-ease-out) forwards; }
+@keyframes tm-open { from { grid-template-rows: 0fr; opacity: .4; } to { grid-template-rows: 1fr; opacity: 1; } }
+@keyframes tm-close { from { grid-template-rows: 1fr; opacity: 1; } to { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tm-body, .tm-body[data-closing='true'] { animation: none; } }
+html[data-lite='true'] .tm-body { animation: none; }

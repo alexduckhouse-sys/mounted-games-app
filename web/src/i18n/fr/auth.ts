@@ -9,6 +9,7 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.field.yourName': 'Votre nom',
   'auth.password.hide': 'Masquer le mot de passe',
   'auth.password.show': 'Afficher le mot de passe',
+  'auth.password.capsLock': 'Verrouillage majuscules activé',
   'auth.createAccount': 'Créer un compte',
 
   'auth.login.organiserTitle': 'Connexion organisateur',
@@ -30,6 +31,9 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.signup.roleRider': 'Cavalier ou parent',
   'auth.signup.roleTrainer': 'Entraîneur',
   'auth.signup.roleManager': 'Responsable d’équipe',
+  'auth.signup.roleRiderHint': 'Suivre les événements, les résultats et votre équipe',
+  'auth.signup.roleTrainerHint': 'Organiser des compétitions et envoyer les déclarations',
+  'auth.signup.roleManagerHint': 'Diriger un club et approuver ses entraîneurs',
   'auth.signup.asMember': 'membre',
   'auth.signup.asTrainer': 'entraîneur',
   'auth.signup.asManager': 'responsable d’équipe',

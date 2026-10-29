@@ -33,7 +33,7 @@ public sealed class CommerceOrderService(AppDbContext db)
     {
         var key = request.IdempotencyKey?.Trim();
         if (string.IsNullOrEmpty(key) || key.Length > 100)
-            return Invalid("An idempotency key of at most 100 characters is required.");
+            return Invalid("Something went wrong sending that order. Refresh the page and try again.");
         if (request.Items is null || request.Items.Count == 0)
             return Invalid("At least one item is required.");
         if (request.Items.Count > 50)
@@ -71,7 +71,7 @@ public sealed class CommerceOrderService(AppDbContext db)
         if (replay is not null)
             return replay.RequestHash == requestHash
                 ? new CreateOrderResult(replay, CreateOrderError.None, null, true)
-                : new CreateOrderResult(null, CreateOrderError.IdempotencyConflict, "That idempotency key was already used for a different order.");
+                : new CreateOrderResult(null, CreateOrderError.IdempotencyConflict, "This order is already being processed. Refresh the page and check your orders.");
 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -86,7 +86,7 @@ public sealed class CommerceOrderService(AppDbContext db)
                     await transaction.RollbackAsync(cancellationToken);
                     return replay.RequestHash == requestHash
                         ? new CreateOrderResult(replay, CreateOrderError.None, null, true)
-                        : new CreateOrderResult(null, CreateOrderError.IdempotencyConflict, "That idempotency key was already used for a different order.");
+                        : new CreateOrderResult(null, CreateOrderError.IdempotencyConflict, "This order is already being processed. Refresh the page and check your orders.");
                 }
 
                 if (!await db.Competitions.AnyAsync(x => x.Id == competitionId, cancellationToken))
@@ -233,7 +233,7 @@ public sealed class CommerceOrderService(AppDbContext db)
                 if (replay is not null)
                     return replay.RequestHash == requestHash
                         ? new CreateOrderResult(replay, CreateOrderError.None, null, true)
-                        : new CreateOrderResult(null, CreateOrderError.IdempotencyConflict, "That idempotency key was already used for a different order.");
+                        : new CreateOrderResult(null, CreateOrderError.IdempotencyConflict, "This order is already being processed. Refresh the page and check your orders.");
                 throw;
             }
         });

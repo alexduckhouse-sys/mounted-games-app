@@ -32,7 +32,7 @@ function HeaderProbe() {
   const { header } = useCompactPageBarState();
   return <span data-testid="header">{header ? `${header.title}|${header.subtitle ?? ''}|${header.backTo ?? ''}` : 'none'}</span>;
 }
-const renderPage = () => render(<MemoryRouter initialEntries={['/team-profiles/p1/stats']}><CompactPageBarProvider>
+const renderPage = (path = '/team-profiles/p1/stats') => render(<MemoryRouter initialEntries={[path]}><CompactPageBarProvider>
   <Routes><Route path="/team-profiles/:profileId/stats" element={<TeamProfileStatsPage />} /></Routes><HeaderProbe />
 </CompactPageBarProvider></MemoryRouter>);
 
@@ -42,6 +42,12 @@ beforeEach(() => {
 });
 
 describe('TeamProfileStatsPage', () => {
+  it('sends Back to the same season the profile was showing', async () => {
+    renderPage('/team-profiles/p1/stats?season=s-2025');
+    await screen.findByLabelText('Race statistics');
+    expect(screen.getByTestId('header')).toHaveTextContent('/team-profiles/p1?season=s-2025');
+  });
+
   it('shows the four headline figures two by two, then each game with its share of the points on offer', async () => {
     renderPage();
     expect(screen.getByRole('status')).toHaveTextContent('Loading race statistics…');

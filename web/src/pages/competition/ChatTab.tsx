@@ -1,10 +1,11 @@
+import { isPinnedAnnouncement, updateChatMessage } from '../../lib/announcements';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Lock, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
-import { api } from '../../api';
+import { api, pinChatMessage } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
 import { useDialogFocus } from '../../components/useDialogFocus';
 import { useSwipeToClose } from '../../hooks/useSwipeToClose';
@@ -15,7 +16,7 @@ import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
-import { useLanguage } from '../../i18n/LanguageContext';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
 import { activeLocale, tr } from '../../i18n/translate';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
@@ -49,7 +50,7 @@ export function ChatTab() {
 function ChatTabSession() {
   const { t } = useLanguage();
   const { competition, reload, streams, streamingEnabled, streamingChecked = true, invoke, ready, streamMessages } = useCompetition();
-  const { user, canEdit, hasRole, canOrganise } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
   // Older APIs don't keep private messages private, so they must say they do before anyone can send one.
   const privateMessagingAvailable = competition.staffChatEnabled === true;
@@ -58,8 +59,8 @@ function ChatTabSession() {
   const desktop = useIsDesktop();
   usePageWidth('wide');
   // Anyone signed in who is not an organiser can message the organisers on the dedicated contact page.
-  const canMessageOrganisers = !!user && !isAdmin;
-  const canModerate = canEdit();
+  const canMessageOrganisers = !!user && !canPost;
+  const canModerate = canPost;
   const canManageStream = !!user && canOrganise(competition);
   const canBroadcast = streamingEnabled && canManageStream;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -75,7 +76,6 @@ function ChatTabSession() {
   const loadController = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const pinningRef = useRef(false);
-  const [pinnedSource, setPinnedSource] = useState<{ bannerId: number; messageId: number } | null>(null);
   const announcementsTriggerRef = useRef<HTMLButtonElement>(null);
 
   const requestMessages = useCallback((controller: AbortController) => {
@@ -107,12 +107,12 @@ function ChatTabSession() {
     onChatMessage: (value) => {
       const message = value as ChatMessage;
       if (message.competitionId !== competition.id) return;
-      setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+      setMessages((current) => updateChatMessage(current, message));
     },
     onAnnouncement: (value) => {
       const message = value as ChatMessage;
       if (message.competitionId !== competition.id) return;
-      setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+      setMessages((current) => updateChatMessage(current, message));
     },
     onChatMessageDeleted: ({ id }) => setMessages((current) => current.filter((message) => message.id !== id)),
   });
@@ -120,15 +120,14 @@ function ChatTabSession() {
   // Hub deliveries can arrive out of order; IDs break timestamp ties consistently.
   const orderedMessages = messages.slice().sort((a, b) =>
     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id);
-  const banners = orderedMessages.filter((message) => message.type === 2 && message.tag === BANNER_TAG && !message.adminOnly);
+  const banners = orderedMessages.filter(isPinnedAnnouncement);
   const visibleMessages = orderedMessages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && !message.adminOnly);
   const privateCount = messages.filter((message) => message.adminOnly && !message.recipientUserId).length;
 
   // The pin is the latest banner message. It sits in its own box at the top of the announcements; the rest follow, newest first.
   const banner = banners.at(-1) ?? null;
   const pinnedId = banner
-    ? pinnedSource?.bannerId === banner.id ? pinnedSource.messageId
-      : visibleMessages.findLast((message) => message.body === banner.body)?.id ?? null
+    ? banner.tag === 'pinned' ? banner.id : visibleMessages.findLast((message) => message.body === banner.body)?.id ?? banner.id
     : null;
   // Spectators see the pinned notice once, in its box; organisers keep its row so they can unpin it from there too.
   const listed = canPost ? visibleMessages : visibleMessages.filter((message) => message.id !== pinnedId);
@@ -156,7 +155,7 @@ function ChatTabSession() {
   }
 
   async function blockMessageAuthor(id: number) {
-    if (!canModerate) return;
+    if (!isAdmin) return;
     if (!(await confirmDialog({ title: 'Block this sender?', message: 'They can’t post in chat from this phone or network.', confirmLabel: 'Block sender', destructive: true }))) return;
     setActionError(null);
     setActionNotice(null);
@@ -170,52 +169,20 @@ function ChatTabSession() {
     }
   }
 
-  async function deleteBanners() {
-    if (!canModerate || banners.length === 0) return;
-    await Promise.all(banners.map((message) => api.delete(`/competitions/${competition.id}/chat/${message.id}`)));
-    const ids = new Set(banners.map((message) => message.id));
-    setMessages((current) => current.filter((message) => !ids.has(message.id)));
-  }
-
-  async function unpinBanners() {
-    if (!canModerate || pinningRef.current) return;
-    pinningRef.current = true;
-    setActionError(null);
-    try {
-      if (banners.length > 0) await deleteBanners();
-    } catch {
-      setActionError('Couldn’t unpin the banner. Check your signal and try again.');
-      loadMessages();
-    } finally {
-      pinningRef.current = false;
-      reload();
-    }
-  }
-
   async function pinMessage(target: ChatMessage) {
     if (!canModerate || pinningRef.current || target.adminOnly) return;
     pinningRef.current = true;
     setActionError(null);
     try {
-      const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, {
-        body: target.body,
-        tag: BANNER_TAG,
-      });
-      const posted = response.data;
-      if (!posted || typeof posted.id !== 'number' || posted.adminOnly || posted.tag !== BANNER_TAG) {
-        throw new Error('Invalid announcement response');
-      }
-      setMessages((current) => current.some((item) => item.id === posted.id) ? current : [...current, posted]);
-      setPinnedSource({ bannerId: posted.id, messageId: target.id });
-      // Keep the previous pin until the replacement is safely stored.
-      try { if (banners.length > 0) await deleteBanners(); }
-      catch { setActionError('The announcement was pinned, but the old banner could not be cleared. Try again.'); }
-    } catch {
-      setActionError('Couldn’t pin that announcement. Check your signal and try again.');
-    } finally {
-      pinningRef.current = false;
-      reload();
-    }
+      const { data } = await pinChatMessage(competition.id, target.id);
+      if (!data || data.id !== target.id) throw new Error('Invalid announcement response');
+      setMessages((current) => updateChatMessage(current, data));
+    } catch { setActionError('Couldn’t change the pinned announcement. Check your signal and try again.'); }
+    finally { pinningRef.current = false; reload(); }
+  }
+
+  async function unpinBanners() {
+    if (banner) await pinMessage(banner);
   }
 
   async function send() {
@@ -251,7 +218,7 @@ function ChatTabSession() {
       <section className="live-announcements" aria-labelledby="announcements-title">
         <div className="mg-section-head">
           <h2 id="announcements-title">{t('teams.chat.announcements')}</h2>
-          {isAdmin && (
+          {canPost && (
             <Link to={`/competitions/${competition.id}/contact`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
               Messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
@@ -280,7 +247,7 @@ function ChatTabSession() {
               <AnnouncementList
                 messages={latest}
                 staff={canPost}
-                canModerate={canModerate}
+                canModerate={canModerate} canBlockAuthors={isAdmin}
                 pinnedId={pinnedId}
                 onPin={pinMessage}
                 onUnpin={unpinBanners}
@@ -363,7 +330,7 @@ function ChatTabSession() {
         <AnnouncementsOverlay
           messages={listed.slice().reverse()}
           staff={canPost}
-          canModerate={canModerate}
+          canModerate={canModerate} canBlockAuthors={isAdmin}
           pinnedId={pinnedId}
           error={actionError}
           onPin={pinMessage}
@@ -379,10 +346,11 @@ function ChatTabSession() {
   );
 }
 
-function AnnouncementList({ messages, staff, canModerate, pinnedId, onPin, onUnpin, onDelete, onBlock, full = false }: {
+function AnnouncementList({ messages, staff, canModerate, canBlockAuthors, pinnedId, onPin, onUnpin, onDelete, onBlock, full = false }: {
   messages: ChatMessage[];
   staff: boolean;
   canModerate: boolean;
+  canBlockAuthors: boolean;
   pinnedId: number | null;
   onPin: (message: ChatMessage) => Promise<void>;
   onUnpin: () => Promise<void>;
@@ -399,7 +367,7 @@ function AnnouncementList({ messages, staff, canModerate, pinnedId, onPin, onUnp
           key={message.id}
           message={message}
           staff={staff}
-          canModerate={canModerate}
+          canModerate={canModerate} canBlockAuthors={canBlockAuthors}
           isPinned={pinnedId === message.id}
           onPin={onPin}
           onUnpin={onUnpin}
@@ -413,10 +381,11 @@ function AnnouncementList({ messages, staff, canModerate, pinnedId, onPin, onUnp
   </div>;
 }
 
-function AnnouncementRow({ message, staff, canModerate, isPinned, onPin, onUnpin, onDelete, onBlock, reduceMotion }: {
+function AnnouncementRow({ message, staff, canModerate, canBlockAuthors, isPinned, onPin, onUnpin, onDelete, onBlock, reduceMotion }: {
   message: ChatMessage;
   staff: boolean;
   canModerate: boolean;
+  canBlockAuthors: boolean;
   isPinned: boolean;
   onPin: (message: ChatMessage) => Promise<void>;
   onUnpin: () => Promise<void>;
@@ -425,7 +394,7 @@ function AnnouncementRow({ message, staff, canModerate, isPinned, onPin, onUnpin
   reduceMotion: boolean;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
-  const canBlock = canModerate && message.type === 0;
+  const canBlock = canBlockAuthors && message.type === 0;
   return <motion.div className={`live-announcement-row ${staff ? 'live-announcement-row-staff' : ''}`} initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -4 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}>
     <time dateTime={message.createdAt}>{messageTime(message)}</time>
     {canBlock ? <button type="button" className="live-announcement-copy" aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((open) => !open); }}><span>{message.body}</span>{message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</button>
@@ -452,10 +421,11 @@ function AnnouncementRow({ message, staff, canModerate, isPinned, onPin, onUnpin
   </motion.div>;
 }
 
-function AnnouncementsOverlay({ messages, staff, canModerate, pinnedId, error, onPin, onUnpin, onDelete, onBlock, onDismissError, onClose, returnFocusRef }: {
+function AnnouncementsOverlay({ messages, staff, canModerate, canBlockAuthors, pinnedId, error, onPin, onUnpin, onDelete, onBlock, onDismissError, onClose, returnFocusRef }: {
   messages: ChatMessage[];
   staff: boolean;
   canModerate: boolean;
+  canBlockAuthors: boolean;
   pinnedId: number | null;
   error: string | null;
   onPin: (message: ChatMessage) => Promise<void>;
@@ -474,7 +444,7 @@ function AnnouncementsOverlay({ messages, staff, canModerate, pinnedId, error, o
       <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>{t('teams.chat.allAria')}</h2><button type="button" className="mg-icon-btn" data-close-announcements aria-label={t('teams.chat.close')} onClick={onClose}><X aria-hidden="true" /></button></div>
       {error && <Notice onDismiss={onDismissError} dismissLabel="Dismiss error">{error}</Notice>}
-      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} pinnedId={pinnedId} onPin={onPin} onUnpin={onUnpin} onDelete={onDelete} onBlock={onBlock} full />
+      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} canBlockAuthors={canBlockAuthors} pinnedId={pinnedId} onPin={onPin} onUnpin={onUnpin} onDelete={onDelete} onBlock={onBlock} full />
     </div>
   </div>;
 }
@@ -491,29 +461,33 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
   const [editing, setEditing] = useState(false);
   const closeSettings = useCallback(() => setEditing(false), []);
   const changeRef = useRef<HTMLButtonElement>(null);
+  const t = useT();
+  // Before a stream starts the card's button is the way to go live; once one is on it changes the stream.
+  const action = active ? 'Change' : 'Go live';
   const streamName = active ? active.caption || `${active.arenaName} · ${active.angleName}` : fallback ? 'Competition stream' : 'No stream is set';
   return <div className="staff-stream-wrap">
     <div className="staff-stream mg-card">
       <span className="staff-stream-thumb"><Video aria-hidden="true" /></span>
       <span className="staff-stream-copy"><strong>{active ? 'Stream is on' : fallback ? 'Stream link is set' : 'Stream hasn’t started'}</strong><span>{streamName}</span></span>
-      {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
-        : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
+      {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>{action}</button>
+        : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>{action}</Link> : null}
     </div>
     {canBroadcast && (
       <div className="staff-stream-actions">
-        {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
         {active
           ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
           : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/produce`}>{t('shell.menu.producerOverlay')}</Link>
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
       </div>
     )}
-    {streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}
-    {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
+    {streamingNotSetUp && <Notice tone="info">Streaming isn’t switched on for this site yet. A site admin can turn it on.</Notice>}
+    {editing && canEditStream && <StreamSettingsOverlay live={active != null} competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }
 
-function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef }: {
+function StreamSettingsOverlay({ live, competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef }: {
+  live: boolean;
   competitionId: number;
   fallback: string | null;
   canBroadcast: boolean;
@@ -528,7 +502,7 @@ function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditS
     <div ref={dialogRef} {...handlers} style={style} className={`staff-stream-dialog${dragging ? ' is-dragging' : ''}`} role="dialog" aria-modal="true" aria-label="Stream settings">
       <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>Stream settings</h2><button type="button" className="mg-icon-btn" aria-label="Close stream settings" onClick={onClose}><X aria-hidden="true" /></button></div>
-      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />Change camera</Link>}
+      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />{live ? 'Change camera' : 'Go live'}</Link>}
       <CompStreamEditor competition={{ id: competitionId, streamUrl: fallback }} canEditStream={canEditStream} onSaved={onSaved} />
     </div>
   </div>;

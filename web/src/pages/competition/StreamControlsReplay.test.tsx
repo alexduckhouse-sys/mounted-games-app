@@ -19,7 +19,8 @@ const render45 = vi.hoisted(() => vi.fn());
 vi.mock('../../components/stream/ReplayInspector', () => ({ renderTrimmedFollowClip: render45 }));
 const fakeMedia = {} as MediaStream;
 vi.mock('../../components/stream/LiveVideo', () => ({
-  LiveVideo: ({ onMedia }: { onMedia?: (media: MediaStream | null) => void }) => {
+  LiveVideo: ({ onMedia, enableDvr }: { onMedia?: (media: MediaStream | null) => void; enableDvr?: boolean }) => {
+    expect(enableDvr).toBe(false);
     useEffect(() => { onMedia?.(fakeMedia); return () => onMedia?.(null); }, [onMedia]);
     return <div data-testid="live-video" />;
   },
@@ -123,7 +124,7 @@ describe('Replay tab', () => {
     await user.click(within(list).getAllByRole('button', { name: /Watch/ })[0]);
     const player = screen.getByRole('region', { name: 'Replay: Seniors · Race 1' });
     expect(within(player).getByRole('button', { name: 'Play' })).toBeInTheDocument();
-    for (const name of ['Start here', 'End here', 'Zoom in', 'Add keyframe', 'Slow-mo', 'Save clip', 'Reset framing', 'Remove', 'Cancel clip']) {
+    for (const name of ['Start here', 'End here', 'Zoom in', 'Add camera point', 'Slow-mo', 'Save clip', 'Reset framing', 'Remove', 'Cancel clip']) {
       expect(within(player).queryByRole('button', { name })).toBeNull();
     }
     expect(within(player).queryByRole('slider', { name: /Replay framing/ })).toBeNull();
@@ -160,7 +161,7 @@ describe('Replay editor', () => {
 
   it('shows the editing controls for a saved replay, without Cancel clip', async () => {
     const { editor } = await openEditor();
-    for (const name of ['Start here', 'End here', 'Zoom out', 'Zoom in', 'Add keyframe', 'Slow-mo', 'Save clip', 'Reset framing', 'Remove', 'Back 0.1 seconds', 'Forward 0.1 seconds', 'Play']) {
+    for (const name of ['Start here', 'End here', 'Zoom out', 'Zoom in', 'Add camera point', 'Slow-mo', 'Save clip', 'Reset framing', 'Remove', 'Back 0.1 seconds', 'Forward 0.1 seconds', 'Play']) {
       expect(within(editor).getByRole('button', { name })).toBeInTheDocument();
     }
     expect(within(editor).queryByRole('button', { name: 'Cancel clip' })).toBeNull();
@@ -196,7 +197,7 @@ describe('Replay editor', () => {
   it('zooms, adds keyframes and resets the framing', async () => {
     const { user, editor } = await openEditor();
     const frame = within(editor).getByRole('slider', { name: 'Replay framing, drag to move' });
-    expect(within(editor).getByText('0 keyframes')).toBeInTheDocument();
+    expect(within(editor).getByText('0 camera points')).toBeInTheDocument();
     await user.click(within(editor).getByRole('button', { name: 'Zoom in' }));
     expect(frame).toHaveAttribute('aria-valuetext', 'Centre 50% across, 50% down, 1.5× zoom');
     await user.click(within(editor).getByRole('button', { name: 'Zoom in' }));
@@ -206,12 +207,12 @@ describe('Replay editor', () => {
     await user.click(within(editor).getByRole('button', { name: 'Zoom in' }));
     expect(within(editor).getByRole('button', { name: 'Zoom in' })).toBeDisabled();
     await user.click(within(editor).getByRole('button', { name: 'Zoom out' }));
-    expect(within(editor).getByText('1 keyframe')).toBeInTheDocument();
+    expect(within(editor).getByText('1 camera point')).toBeInTheDocument();
     fireEvent.change(within(editor).getByRole('slider', { name: 'Playhead' }), { target: { value: '50' } });
-    await user.click(within(editor).getByRole('button', { name: 'Add keyframe' }));
-    expect(within(editor).getByText('2 keyframes')).toBeInTheDocument();
+    await user.click(within(editor).getByRole('button', { name: 'Add camera point' }));
+    expect(within(editor).getByText('2 camera points')).toBeInTheDocument();
     await user.click(within(editor).getByRole('button', { name: 'Reset framing' }));
-    expect(within(editor).getByText('0 keyframes')).toBeInTheDocument();
+    expect(within(editor).getByText('0 camera points')).toBeInTheDocument();
   });
 
   it('moves the frame with the keyboard and by dragging', async () => {
