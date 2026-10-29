@@ -1,3 +1,4 @@
+import { shareOrDownloadFile } from '../../lib/shareFile';
 /* eslint-disable react-refresh/only-export-components */
 import { useDialogFocus } from '../useDialogFocus';
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ChangeEvent, type MouseEvent } from 'react';
@@ -21,6 +22,7 @@ import { LEAVE, SPRING } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from './ReplayPreparation';
+import { RaceChapterPicker } from './RaceChapterPicker';
 import { Notice } from '../Notice';
 import { useToast } from '../Toast';
 import type { ReplayEncodingOptions } from '../../live/replayEncoding';
@@ -634,6 +636,8 @@ export function ReplayInspector({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+        <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void shareOrDownloadFile(
+          new File([clip.blob], `replay.${clip.mimeType.includes('mp4') ? 'mp4' : 'webm'}`, { type: clip.mimeType }), { title: clip.label })}>{t('timing.share')}</button>
           <a
             href={clip.url}
             download={downloadFilename}
@@ -747,6 +751,11 @@ export function ReplayInspector({
 
       {/* Scrubber & Controls Section */}
       <div className="flex flex-col gap-2.5 border-t border-[rgb(var(--mg-header-line))] bg-[rgb(var(--mg-header-deep)/0.95)] px-4 py-3">
+        <RaceChapterPicker clip={clip} onSeek={(seconds) => {
+          videoRef.current?.pause(); setIsPlaying(false);
+          if (videoRef.current) videoRef.current.currentTime = seconds;
+          setCurrentTime(seconds);
+        }} />
         {/* Scrubber Slider with Keyframe Markers */}
         <div className="flex items-center gap-3 text-xs font-mono">
           <span className="min-w-[48px] text-right">{formatVideoTime(currentTime)}</span>

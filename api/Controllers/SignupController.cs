@@ -1132,14 +1132,16 @@ public class SignupController : ControllerBase
         if (req.Status == SignupPaymentStatus.Refunded && extras is not null)
         {
             extras.RefundPending = false;
+            if (extras.FeeDisposition != "Refunded") extras.DispositionUpdatedAt = DateTime.UtcNow;
             extras.FeeDisposition = "Refunded";
             extras.RefundedAmountMinor ??= signup.AmountMinor;
-            extras.DispositionUpdatedAt = DateTime.UtcNow;
         }
         signup.Status = req.Status;
         if (req.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
             await ReleasePendingPairAsync(signup.Id);
-        signup.PaidAt = req.Status == SignupPaymentStatus.Paid ? DateTime.UtcNow : null;
+        // Cancellation and refunds do not erase the original receipt date.
+        if (req.Status == SignupPaymentStatus.Paid) signup.PaidAt = DateTime.UtcNow;
+        else if (req.Status == SignupPaymentStatus.Pending) signup.PaidAt = null;
         await _db.SaveChangesAsync();
         return signup.ToDto();
     }
@@ -2007,10 +2009,11 @@ public class SignupController : ControllerBase
         }
 
         var nowUtc = clock.GetUtcNow().UtcDateTime;
+        // Keep the disposition date when correcting its note or amount: neither is a new refund.
+        if (ex.FeeDisposition != disposition) ex.DispositionUpdatedAt = nowUtc;
         ex.FeeDisposition = disposition;
         ex.RefundPending = disposition == "RefundPending";
         ex.DispositionNote = string.IsNullOrWhiteSpace(req.DispositionNote) ? null : req.DispositionNote.Trim();
-        ex.DispositionUpdatedAt = nowUtc;
 
         if (disposition == "Refunded")
         {
@@ -2020,7 +2023,6 @@ public class SignupController : ControllerBase
             if (!isDemo && !hasTestPayment)
             {
                 signup.Status = SignupPaymentStatus.Refunded;
-                signup.PaidAt = null;
                 await ReleasePendingPairAsync(signup.Id);
             }
         }

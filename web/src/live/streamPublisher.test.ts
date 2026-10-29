@@ -29,14 +29,14 @@ describe('publisher negotiation and controls', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     const changed = vi.fn(); const unsubscribe = p.subscribe(changed);
     await start();
-    expect(getUserMedia).toHaveBeenCalledWith({ video: { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 }, facingMode: 'environment' }, audio: { echoCancellation: true, noiseSuppression: true } });
+    expect(getUserMedia).toHaveBeenCalledWith({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'environment' }, audio: { echoCancellation: true, noiseSuppression: true } });
     expect(await p.devices()).toEqual([{ kind: 'videoinput', deviceId: 'usb' }]);
     expect(await p.audioDevices()).toEqual([{ kind: 'audioinput' }]);
     const peer = FakePeer.instances[0];
     expect(peer.configuration).toEqual({ iceServers: [{ urls: 'stun:example.test' }], bundlePolicy: 'max-bundle' });
     expect(peer.addTransceiver.mock.calls[0][1].sendEncodings).toEqual([
-      { rid: 'f', maxBitrate: 2000000, maxFramerate: 30 },
-      { rid: 'h', scaleResolutionDownBy: 1.5, maxBitrate: 850000, maxFramerate: 30 },
+      { rid: 'f', maxBitrate: 1500000, maxFramerate: 30, scaleResolutionDownBy: 1 },
+      { rid: 'h', scaleResolutionDownBy: 720 / 540, maxBitrate: 850000, maxFramerate: 30 },
       { rid: 'q', scaleResolutionDownBy: 2, maxBitrate: 350000, maxFramerate: 30 },
     ]);
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', { sdpOffer: 'publisher offer', videoMid: '0', audioMid: '1', arenaName: 'Main Arena', angleName: 'Main camera', takeOver: false });
@@ -721,4 +721,69 @@ describe('camera locks', () => {
     await expect(p.setCameraLock('focus', true)).resolves.toBeUndefined();
     p.dispose();
   });
+});
+
+
+describe('capture and transmitted resolution agree', () => {
+  it.each([['360p', 360], ['480p', 480], ['720p', 720], ['1080p', 1080], ['auto', 1080]] as const)('captures the selected %s size before publishing', async (preset, height) => {
+    const { publisher: p, getUserMedia } = setup();
+    await p.setQualityPreset(preset); await p.capture(false);
+    expect(getUserMedia).toHaveBeenLastCalledWith({ video: expect.objectContaining({ width: { ideal: Math.round(height * 16 / 9) }, height: { ideal: height } }), audio: false });
+    p.dispose();
+  });
+  it.each([[3840, 2160], [2160, 3840]])('scales all layers from actual %sx%s capture including portrait cameras', async (width, height) => {
+    const { publisher: p, getUserMedia, start } = setup();
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([Object.assign(new FakeTrack(), { getSettings: () => ({ width, height }) })])));
+    await start(false);
+    const encodings = FakePeer.instances[0].addTransceiver.mock.calls[0][1].sendEncodings!;
+    expect(encodings.map((layer) => layer.scaleResolutionDownBy)).toEqual([3, 4, 6]);
+    p.dispose();
+  });
+  it('recalculates runtime parameters after constraints and a camera replacement, without upscaling', async () => {
+    const { publisher: p, getUserMedia, start } = setup();
+    let height = 2160;
+    const applyConstraints = vi.fn(async (constraints: MediaTrackConstraints) => { height = (constraints.height as ConstrainULongRange).ideal as number; });
+    const track = Object.assign(new FakeTrack(), { getSettings: () => ({ width: height * 16 / 9, height }), applyConstraints });
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([track])));
+    await start(false);
+    const sender = FakePeer.instances[0].transceivers[0].sender;
+    const params = { encodings: [{ rid: 'f' }, { rid: 'h' }, { rid: 'q' }] };
+    const setParameters = vi.fn(async () => {});
+    Object.assign(sender, { getParameters: () => params, setParameters });
+    await p.setQualityPreset('1080p');
+    expect(applyConstraints).toHaveBeenCalledWith(expect.objectContaining({ height: { ideal: 1080 } }));
+    expect(params.encodings).toEqual(expect.arrayContaining([expect.objectContaining({ rid: 'f', scaleResolutionDownBy: 1 }), expect.objectContaining({ rid: 'h', scaleResolutionDownBy: 2 }), expect.objectContaining({ rid: 'q', scaleResolutionDownBy: 3 })]));
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([Object.assign(new FakeTrack(), { getSettings: () => ({ width: 640, height: 360 }) })])));
+    await p.switchCamera('small-camera');
+    expect(params.encodings.every((encoding) => (encoding as RTCRtpEncodingParameters).scaleResolutionDownBy === 1)).toBe(true);
+    expect(setParameters).toHaveBeenCalledTimes(2); p.dispose();
+  });
+  it('serialises slow quality changes and caps a camera that rejects new constraints', async () => {
+    const { publisher: p, getUserMedia, start } = setup();
+    const pending = deferred<void>();
+    const applyConstraints = vi.fn().mockReturnValueOnce(pending.promise).mockRejectedValueOnce(new Error('Unsupported size'));
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([Object.assign(new FakeTrack(), { getSettings: () => ({ width: 3840, height: 2160 }), applyConstraints })])));
+    await start(false);
+    const params = { encodings: [{ rid: 'f' }] };
+    Object.assign(FakePeer.instances[0].transceivers[0].sender, { getParameters: () => params, setParameters: vi.fn(async () => {}) });
+    const first = p.setQualityPreset('1080p'); await flush();
+    const second = p.setQualityPreset('360p');
+    expect(applyConstraints).toHaveBeenCalledTimes(1);
+    pending.resolve(); await Promise.all([first, second]);
+    expect(p.getSnapshot().qualityPreset).toBe('360p');
+    expect(params.encodings[0]).toMatchObject({ scaleResolutionDownBy: 6, maxBitrate: 350000 });
+    p.dispose();
+  });
+});
+
+it('applies a quality change made while camera permission is pending', async () => {
+  const { publisher: p, getUserMedia } = setup();
+  const permission = deferred<MediaStream>(); getUserMedia.mockReturnValueOnce(permission.promise);
+  const capture = p.capture(false); await p.setQualityPreset('360p');
+  let height = 1080;
+  const applyConstraints = vi.fn(async () => { height = 360; });
+  permission.resolve(asMedia(new FakeMediaStream([Object.assign(new FakeTrack(), { getSettings: () => ({ height }), applyConstraints })])));
+  await capture;
+  expect(applyConstraints).toHaveBeenCalledWith(expect.objectContaining({ height: { ideal: 360 } }));
+  expect(p.getSnapshot().captureResolution).toBe('360p'); p.dispose();
 });

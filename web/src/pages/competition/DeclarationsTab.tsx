@@ -1,3 +1,4 @@
+import { RequestSubstitution, SubstitutionRequests } from './reliability/SubstitutionRequests';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Check, ChevronRight } from 'lucide-react';
@@ -52,9 +53,23 @@ function DeclarationsSession() {
   const [deleteError, setDeleteError] = useState('');
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    const deadline = Date.parse(lockInfo?.declarationsCloseAt ?? '');
+    if (!Number.isFinite(deadline) || lockInfo?.isClosed) return;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const tick = () => {
+      const value = Date.now();
+      setNow(value);
+      if (value >= deadline && timer !== undefined) { clearInterval(timer); timer = undefined; }
+    };
+    const resume = () => {
+      if (timer !== undefined) { clearInterval(timer); timer = undefined; }
+      tick();
+      if (document.visibilityState !== 'hidden' && Date.now() < deadline) timer = setInterval(tick, 1000);
+    };
+    resume();
+    document.addEventListener('visibilitychange', resume);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', resume); };
+  }, [lockInfo?.declarationsCloseAt, lockInfo?.isClosed]);
 
   const isOrganiser = hasRole('Admin') || canOrganise(competition);
   const declarationsClosed = Boolean(lockInfo?.declarationsCloseAt && (lockInfo.isClosed || now >= new Date(lockInfo.declarationsCloseAt).getTime()));
@@ -273,6 +288,11 @@ function DeclarationsSession() {
         </Notice>
       )}
 
+      {user && <SubstitutionRequests competitionId={competition.id} canDecide={isOrganiser} />}
+      {user && (forms ?? []).filter((f, index, all) => (f.isLocked || declarationsClosed)
+        && all.findIndex(other => other.teamId === f.teamId) === index
+        && (f.submittedByUserId === user.id || myTeams.some(team => team.id === f.teamId)))
+        .map(f => <RequestSubstitution key={f.id} competitionId={competition.id} form={f} />)}
       {lockError && <Notice>{lockError}</Notice>}
       {deleteError && <Notice onDismiss={() => setDeleteError('')}>{deleteError}</Notice>}
       {!organiserLayout && stat}

@@ -585,3 +585,5 @@ describe('Auto tab', () => {
     expect(JSON.parse(localStorage.getItem('mg.streamAuto.1')!).rules.favourites.on).toBe(true);
   });
 });
+
+vi.mock('./streamControls/SavedOverlayLooks', () => ({ SavedOverlayLooks: () => null }));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Maximize2, Mic, Monitor, Pause, Play, QrCode as QrCodeIcon, Radio, SlidersHorizontal, Trophy } from 'lucide-react';
@@ -22,7 +22,6 @@ import { localOrdinal as ordinal } from '../../lib/ordinalText';
 import { resultStatusText } from '../../lib/toplistText';
 import { useT } from '../../i18n/LanguageContext';
 import type { MessageKey } from '../../i18n/en';
-import { useLiveHub } from '../../live/useLiveHub';
 import type { Heat, Race, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
 import { currentRaceIndex, raceLanes, racesInOrder } from '../../lib/raceLanes';
@@ -57,7 +56,7 @@ function pickInitialSectionId(sessions: Session[], sectionIds: number[], request
 export function TvKioskPage() {
   usePageWidth('full');
   const t = useT();
-  const { competition, reload, sponsors = [] } = useCompetition();
+  const { competition, connected = false, standingsVersion = 0, ready, sponsors = [] } = useCompetition();
   const { canOrganise } = useAuth();
   const canControlStreams = canOrganise(competition);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -108,26 +107,6 @@ export function TvKioskPage() {
     };
   }, []);
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
-  const [refreshTick, setRefreshTick] = useState(0);
-
-  const bumpRefresh = useCallback(() => {
-    setRefreshTick((t) => t + 1);
-  }, []);
-
-  const { connected } = useLiveHub(competition.id, {
-    onReady: () => {
-      reload();
-      bumpRefresh();
-    },
-    onSessionUpdated: () => {
-      reload();
-      bumpRefresh();
-    },
-    onResultsUpdated: () => {
-      reload();
-      bumpRefresh();
-    },
-  });
 
   usePageHeader({
     title: t('screen.tv.title'),
@@ -141,8 +120,8 @@ export function TvKioskPage() {
     [competition.sessions, sectionId],
   );
 
-  const refreshSource = useMemo(() => ({ competitionId: competition.id, scoreVersion, teams: competition.teams, sections: competition.sections, refreshTick }),
-    [competition.id, scoreVersion, competition.teams, competition.sections, refreshTick]);
+  const refreshSource = useMemo(() => ({ competitionId: competition.id, scoreVersion, teams: competition.teams, sections: competition.sections, ready, standingsVersion }),
+    [competition.id, scoreVersion, competition.teams, competition.sections, ready, standingsVersion]);
 
   useEffect(() => {
     if (sectionId == null) return;

@@ -103,3 +103,5 @@ describe('Team sheet in French and Welsh', () => {
     expect(screen.getByRole('link', { name: 'Tudalen lawn y tîm' })).toBeInTheDocument();
   });
 });
+
+vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));

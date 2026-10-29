@@ -21,7 +21,8 @@ export interface SavedReplayClip {
   streamId?: number;
   arenaName: string;
   label: string;
-  createdAt: string; // ISO string
+  createdAt: string; // Recording end, not export completion.
+  recordingSegments?: { startAt: string; endAt: string; offsetSeconds: number }[];
   durationSeconds: number;
   mimeType: string;
   blob: Blob;
@@ -41,6 +42,7 @@ export interface SavedReplayClip {
     name: string;
     orderIndex: number;
     startedAt?: string | null;
+    startIsExplicit?: boolean;
     finishedAt?: string | null;
     isComplete?: boolean;
   }>;
@@ -51,6 +53,8 @@ export interface ReplayBufferOptions {
   streamId?: number;
   arenaName: string;
   windowSeconds?: number; // default 1800 (30 minutes)
+  /** Keep earlier cameras in this arena when a media stream is replaced. */
+  retainOnSwitch?: boolean;
   timesliceMs?: number; // default 1000
   resolutionLabel?: string;
   createRecorder?: (stream: MediaStream, mimeType?: string) => MediaRecorderLike;
@@ -168,7 +172,7 @@ async function persistClip(clip: SavedReplayClip): Promise<void> {
         savedHighlight: clip.savedHighlight, trimStartSeconds: clip.trimStartSeconds,
         trimEndSeconds: clip.trimEndSeconds, followKeyframes: clip.followKeyframes,
         resolutionLabel: clip.resolutionLabel,
-        source: clip.source, races: clip.races,
+        source: clip.source, races: clip.races, recordingSegments: clip.recordingSegments,
       });
     });
     clip.storageWarning = undefined;
@@ -293,13 +297,33 @@ export function subscribeSavedReplays(listener: () => void): () => void {
 }
 
 /** Remembers where a clip came from, so the Replay tab can list race recordings apart from the rest. */
-export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>): SavedReplayClip | null {
+export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>, races?: SavedReplayClip['races']): SavedReplayClip | null {
   const clip = savedReplays.find((c) => c.id === clipId);
   if (!clip) return null;
   clip.source = source;
+  if (races) clip.races = races;
   void persistClip(clip);
   notifyListeners();
   return clip;
+}
+
+/** Refresh chapter evidence when timing reaches this device after the recording was saved. */
+export function updateReplayRaceTimes(competitionId: number, arenaName: string, races: NonNullable<SavedReplayClip['races']>) {
+  for (const clip of savedReplays) {
+    if (clip.competitionId !== competitionId || clip.arenaName !== (arenaName || 'Arena')) continue;
+    const end = Date.parse(clip.createdAt), start = end - clip.durationSeconds * 1000;
+    const relevant = races.filter((race) => {
+      const at = Date.parse(race.startedAt ?? race.finishedAt ?? '');
+      return clip.recordingSegments?.length
+        ? clip.recordingSegments.some((segment) => at >= Date.parse(segment.startAt) && at <= Date.parse(segment.endAt))
+        : at >= start - 3000 && at <= end;
+    });
+    if (relevant.length && JSON.stringify(clip.races) !== JSON.stringify(relevant)) {
+      clip.races = relevant;
+      void persistClip(clip);
+      notifyListeners();
+    }
+  }
 }
 
 export function markReplayAsHighlight(
@@ -361,7 +385,13 @@ export async function exportTrimmedClip(
   if (options.signal?.aborted) throw new DOMException('Replay preparation cancelled.', 'AbortError');
   const exported: SavedReplayClip = {
     ...clip, id: crypto.randomUUID(), blob, url: URL.createObjectURL(blob), mimeType: blob.type,
-    createdAt: new Date().toISOString(), durationSeconds: end - start, savedHighlight: true,
+    createdAt: new Date(Date.parse(clip.createdAt) - (clip.durationSeconds - end) * 1000).toISOString(), durationSeconds: end - start, savedHighlight: true,
+    recordingSegments: clip.recordingSegments?.flatMap((segment) => {
+      const length = (Date.parse(segment.endAt) - Date.parse(segment.startAt)) / 1000;
+      const from = Math.max(start, segment.offsetSeconds), to = Math.min(end, segment.offsetSeconds + length);
+      return to <= from ? [] : [{ startAt: new Date(Date.parse(segment.startAt) + (from - segment.offsetSeconds) * 1000).toISOString(),
+        endAt: new Date(Date.parse(segment.startAt) + (to - segment.offsetSeconds) * 1000).toISOString(), offsetSeconds: from - start }];
+    }),
     trimStartSec: 0, trimEndSec: end - start, trimStartSeconds: 0, trimEndSeconds: end - start,
     // The original keeps editable keyframes; the new clip already contains their rendered movement.
     followKeyframes: undefined,
@@ -422,6 +452,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped: Promise<void> = Promise.resolve();
   let epoch = 0;
+  let historyEpoch = 0;
   let sequence = 0;
   let saving = false;
   const sessionId = crypto.randomUUID();
@@ -431,6 +462,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
   function beginSegment() {
     if (!recording || !stream) return;
     const ticket = epoch;
+    const historyTicket = historyEpoch;
     const mimeType = replayMimeType();
     const startedAt = now();
     const parts: Blob[] = [];
@@ -443,9 +475,10 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         : new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 4_000_000, audioBitsPerSecond: 128_000 }) as unknown as MediaRecorderLike;
       recorder = current;
       current.ondataavailable = ({ data }) => {
-        if (!data.size || ticket !== epoch) return;
+        if (!data.size || historyTicket !== historyEpoch) return;
         bytes += data.size;
         if (bytes > 32 * 1024 * 1024) {
+          if (ticket !== epoch) return;
           recording = false; store.warning = 'Recording used too much memory. Replay recording has stopped.'; status();
           if (current.state !== 'inactive') current.stop();
           return;
@@ -453,6 +486,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         parts.push(data);
       };
       current.onerror = (event) => {
+        if (ticket !== epoch) return;
         const error = (event as { error?: { name?: string } })?.error;
         if (error?.name !== 'InvalidModificationError') recording = false;
         store.warning = recording ? 'The recording changed. Replay recording is restarting.' : 'Replay recording stopped. Restart the camera to try again.';
@@ -464,7 +498,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         if (recorder === current) recorder = null;
         // Every blob below contains ALL chunks of one completed recorder session.
         const blob = new Blob(parts, { type: current.mimeType || mimeType || 'video/webm' });
-        const saved = ticket === epoch && blob.size > 0 && bytes <= 32 * 1024 * 1024
+        const saved = historyTicket === historyEpoch && blob.size > 0 && bytes <= 32 * 1024 * 1024
           ? store.add({ id: `${sessionId}-${sequence++}`, start: startedAt, end: endedAt, size: blob.size, blob, pins: 0 })
           : Promise.resolve();
         void saved.finally(() => { status(); settle(); });
@@ -490,7 +524,8 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   };
   const start = (next: MediaStream): boolean => {
-    stop(); epoch++; store.clear();
+    stop(); epoch++;
+    if (!options.retainOnSwitch) { historyEpoch++; store.clear(); }
     stream = next;
     if (!next) return false;
     recording = true;
@@ -540,7 +575,12 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
       const seconds = sources.reduce((sum, source) => sum + source.to - source.from, 0);
       const clip: SavedReplayClip = {
         id: crypto.randomUUID(), competitionId: options.competitionId, streamId: options.streamId,
-        arenaName: options.arenaName, label: label?.trim() || `${options.arenaName} Replay`, createdAt: new Date(now()).toISOString(),
+        arenaName: options.arenaName, label: label?.trim() || `${options.arenaName} Replay`, createdAt: new Date(Math.min(end, selected[selected.length - 1].end)).toISOString(),
+        recordingSegments: selected.map((segment, index) => ({
+          startAt: new Date(Math.max(start, segment.start)).toISOString(),
+          endAt: new Date(Math.min(end, segment.end)).toISOString(),
+          offsetSeconds: sources.slice(0, index).reduce((sum, source) => sum + source.to - source.from, 0),
+        })),
         durationSeconds: seconds, mimeType: blob.type, blob, url, savedHighlight: false,
         trimStartSeconds: 0, trimEndSeconds: seconds, trimStartSec: 0, trimEndSec: seconds,
         resolutionLabel: settings.resolutionLabel ?? options.resolutionLabel,
@@ -552,7 +592,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
     }
   };
   return {
-    get supported() { return supported; }, get recording() { return recording; }, start, stop, dispose: () => { stop(); epoch++; void stopped.finally(() => store.dispose()); }, saveClip,
+    get supported() { return supported; }, get recording() { return recording; }, start, stop, dispose: () => { stop(); epoch++; historyEpoch++; void stopped.finally(() => store.dispose()); }, saveClip,
     markRaceBookmark: (label, seconds = 45) => saveClip(label, seconds), chunkCount: () => store.segments.length,
   };
 }

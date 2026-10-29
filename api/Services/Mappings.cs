@@ -85,7 +85,7 @@ public static class Mappings
         p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
         p.Title, p.Body, p.PriceMinor, p.ContactInfo, p.ImageBase64,
         p.CreatedAt, p.IsDeleted,
-        p.Comments?.Count ?? 0, p.Reports?.Count ?? 0);
+        p.Comments?.Count(c => !c.IsDeleted && !c.IsPrivate) ?? 0, p.Reports?.Count ?? 0);
 
     public static ShopCommentDto ToDto(this ShopComment c) => new(
         c.Id, c.PostId, c.AuthorUserId, c.AuthorName,
@@ -156,7 +156,7 @@ public static class Mappings
         r.Id, r.HeatId, r.Name, r.OrderIndex, r.IsComplete,
         r.StartedAt, r.FinishedAt,
         r.Results.OrderBy(x => x.Placing ?? int.MaxValue).Select(x => x.ToDto()).ToList(),
-        r.HasOpenProtest);
+        r.HasOpenProtest, r.StartIsExplicit);
 
     public static HeatDto ToDto(this Heat h) => new(
         h.Id, h.SessionId, h.Label, h.OrderIndex,

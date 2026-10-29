@@ -29,7 +29,7 @@ const setup = (props: Partial<Parameters<typeof useControllerReplay>[0]> = {}) =
 describe('useControllerReplay', () => {
   it('records the video it is given and stops when the video goes', () => {
     const { result, rerender, unmount } = setup();
-    expect(buffer.createReplayBuffer).toHaveBeenCalledWith(expect.objectContaining({ competitionId: 1, streamId: 4, arenaName: 'Main', windowSeconds: 1800 }));
+    expect(buffer.createReplayBuffer).toHaveBeenCalledWith(expect.objectContaining({ competitionId: 1, streamId: 4, arenaName: 'Main', windowSeconds: 1800, retainOnSwitch: true }));
     expect(handle.start).toHaveBeenCalledWith(media);
     expect(result.current.recording).toBe(true);
     act(() => onStatus({ retainedSeconds: 42, warning: 'Low space' }));

@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Net.Http.Headers;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace MountedGames.Api.Services;
 
@@ -13,10 +15,13 @@ public sealed class JsonEtagMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext context)
     {
+        if (!HttpMethods.IsGet(context.Request.Method)) { await next(context); return; }
         var response = context.Response;
         var original = response.Body;
         using var buffer = new MemoryStream();
         response.Body = buffer;
+        var capture = new EtagCapture(original);
+        context.Features.Set(capture);
         try
         {
             await next(context);
@@ -24,7 +29,10 @@ public sealed class JsonEtagMiddleware(RequestDelegate next)
         finally
         {
             response.Body = original;
+            context.Features.Set<EtagCapture>(null);
         }
+
+        if (capture.Bypassed) return;
 
         buffer.Position = 0;
         if (response.StatusCode == StatusCodes.Status200OK
@@ -51,5 +59,27 @@ public sealed class JsonEtagMiddleware(RequestDelegate next)
         }
 
         await buffer.CopyToAsync(original, context.RequestAborted);
+    }
+}
+
+internal sealed class EtagCapture(Stream original)
+{
+    public Stream Original { get; } = original;
+    public bool Bypassed { get; set; }
+}
+
+/// <summary>Choose after MVC knows the actual result, before it writes any bytes (including archive?format=zip).</summary>
+public sealed class JsonEtagResultFilter : IAsyncResultFilter
+{
+    public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
+    {
+        if ((context.Result is FileResult || context.Result is ContentResult { ContentType: { } type }
+                && !type.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+            && context.HttpContext.Features.Get<EtagCapture>() is { } capture)
+        {
+            capture.Bypassed = true;
+            context.HttpContext.Response.Body = capture.Original;
+        }
+        await next();
     }
 }

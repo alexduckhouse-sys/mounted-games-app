@@ -248,6 +248,26 @@ describe('serializeOutboxBackup, parseOutboxBackup and mergeOutboxBackup', () =>
     expect(parsed![0].error).toBeUndefined();
   });
 
+  it('round-trips provisional points without turning them into manual overrides', () => {
+    const item = queued(1, { previewPoints: { 1: 2.5, 2: 0 } });
+    const [restored] = parseOutboxBackup(serializeOutboxBackup([item], 1), 1)!;
+    expect(restored.previewPoints).toEqual({ 1: 2.5, 2: 0 });
+    expect(restored.places).toEqual(item.places);
+    expect(restored.places.every((place) => place.points === undefined)).toBe(true);
+  });
+
+  it('filters invalid preview points and unknown teams without losing saved results', () => {
+    const raw = JSON.stringify([queued(1), queued(2)]);
+    const entries = JSON.parse(raw);
+    entries[0].previewPoints = { 1: -1, 2: 0, 3: 99, bad: 4, '1.5': 2, 0: 2 };
+    entries[1].previewPoints = { 1: '3', 2: null };
+    const restored = parseOutboxBackup(JSON.stringify(entries), 1)!;
+    expect(restored[0].previewPoints).toEqual({ 2: 0 });
+    expect(restored[1].previewPoints).toEqual({});
+    expect(restored[0].places).toEqual(mine);
+    expect(parseOutboxBackup(JSON.stringify([queued(1, { previewPoints: [] as unknown as Record<number, number> })]), 1)![0].previewPoints).toBeUndefined();
+  });
+
   it('accepts a raw array, applies fallback competitionId and viaLink overrides, and merges into existing outbox', () => {
     const raw = JSON.stringify([
       {

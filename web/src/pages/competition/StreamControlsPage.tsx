@@ -59,7 +59,7 @@ export function StreamControlsPage() {
   const tiles = useOverlayTiles({ competitionId: competition.id, overlay, saveOverlay, onAir, setAutoOn: setOn });
   const clips = useSavedReplays(competition.id);
   const arenaName = onAir?.arenaName || competition.sessions[0]?.arenaName || 'Arena 1';
-  const replay = useControllerReplay({ competitionId: competition.id, arena: arenaName, streamId: onAir?.id ?? null, media, scoreCards });
+  const replay = useControllerReplay({ competitionId: competition.id, arena: arenaName, streamId: onAir?.id ?? null, media, scoreCards, sessions: competition.sessions });
   const requested = params.get('tab');
   const tab: StreamControlsTab = TABS.some((item) => item.id === requested) ? (requested as StreamControlsTab) : 'overlay';
   const choose = useCallback((next: StreamControlsTab) => setParams({ tab: next }, { replace: true }), [setParams]);
@@ -107,7 +107,7 @@ export function StreamControlsPage() {
         {onAir ? (
           <div className="sx-video">
             <LiveVideo competitionId={competition.id} streams={liveStreams} sessions={competition.sessions} invoke={invoke} ready={ready}
-              messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={onMedia} />
+              messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={onMedia} enableDvr={false} />
           </div>
         ) : <div className="sx-notlive" role="status">{t('desk.stream.page.notLive')}</div>}
         </div>

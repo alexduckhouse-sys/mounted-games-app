@@ -23,7 +23,7 @@ import type { CompetitionDetail, ScorerLink } from '../../types';
 import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { useToast } from '../../components/Toast';
-import { getStoredCards } from '../competition/ScoringParts';
+import { OfficialResultsDownload } from './OfficialResultsDownload';
 import { competitionDateText } from '../../lib/competitionDates';
 
 /** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
@@ -79,7 +79,6 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   const [printing, setPrinting] = useState(false);
   const [linksLoadedId, setLinksLoadedId] = useState<string | null>(null);
   const loadingLinks = view === 'posters' && linksLoadedId !== String(competitionId ?? '');
-  const [exportingResults, setExportingResults] = useState(false);
   const toast = useToast();
   const [searchParams] = useSearchParams();
   const sessionId = view === 'draw' || view === 'score-sheets' || view === 'results' ? parseSessionId(searchParams.get('sessionId')) : null;
@@ -194,118 +193,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     window.print();
   }
 
-  async function exportOfficialResultsCsv() {
-    if (!competitionId) return;
-    setExportingResults(true);
-    try {
-      // Referee cards live on the teams: fetch the competition if the page hasn't already (only posters and the sponsor report do).
-      const detail = compDetail ?? (await api.get<CompetitionDetail>(`/competitions/${competitionId}`)).data;
-      const [resultsRes, sheetsRes] = await Promise.all([
-        api.get<PrintableResults>(`/event-tools/competitions/${competitionId}/print/results`).catch(() => null),
-        api.get<PrintableScoreSheets>(`/event-tools/competitions/${competitionId}/print/score-sheets`).catch(() => null),
-      ]);
 
-      const storedCards: Record<number, 'yellow' | 'red' | null> = { ...getStoredCards(Number(competitionId)) };
-      const teamMap = new Map<number, string>();
-      if (detail.teams) {
-        for (const t of detail.teams) {
-          teamMap.set(t.id, t.displayName);
-          if (t.refereeCard === 'yellow' || t.refereeCard === 'red') {
-            storedCards[t.id] = t.refereeCard;
-          }
-        }
-      }
-      const header = [
-        'Section',
-        'Session',
-        'Heat',
-        'Race',
-        'Type',
-        'Rank',
-        'Team',
-        'Club / Bib',
-        'Points',
-        'Card',
-        'Notes',
-      ];
-      const rows: (string | number)[][] = [];
-
-      if (resultsRes?.data?.sections) {
-        for (const section of resultsRes.data.sections) {
-          for (const res of section.results ?? []) {
-            teamMap.set(res.teamId, res.teamName);
-            const card = storedCards[res.teamId];
-            const cardLabel = card ? (card === 'yellow' ? 'Yellow card' : 'Red card') : '';
-            rows.push([
-              section.sectionName,
-              'Finals / Overall',
-              '',
-              '',
-              'Standings',
-              res.rank,
-              res.teamName,
-              res.clubName,
-              res.totalPoints,
-              cardLabel,
-              res.bonusPoints ? `Bonus: ${res.bonusPoints}` : '',
-            ]);
-          }
-        }
-      }
-
-      if (sheetsRes?.data?.heats) {
-        for (const heat of sheetsRes.data.heats) {
-          for (const race of heat.races ?? []) {
-            for (const team of race.teams ?? []) {
-              teamMap.set(team.teamId, team.teamName);
-              const card = storedCards[team.teamId];
-              const cardLabel = card ? (card === 'yellow' ? 'Yellow card' : 'Red card') : '';
-              rows.push([
-                heat.sectionName || '',
-                heat.sessionName || '',
-                heat.label || '',
-                race.name || '',
-                'Heat Race',
-                team.placing ?? '',
-                team.teamName,
-                team.bib ?? '',
-                scoreText(team),
-                cardLabel,
-                team.status ? (statusLetter(team.eliminated, team.status) ?? '') : '',
-              ]);
-            }
-          }
-        }
-      }
-
-      const cardEntries = Object.entries(storedCards).filter(([, c]) => !!c);
-      if (cardEntries.length > 0) {
-        for (const [teamIdStr, card] of cardEntries) {
-          const tId = Number(teamIdStr);
-          rows.push([
-            '',
-            '',
-            '',
-            '',
-            'Referee Card Incident',
-            '',
-            teamMap.get(tId) ?? 'Unnamed team',
-            '',
-            '',
-            card === 'yellow' ? 'Yellow card' : 'Red card',
-            'Card recorded in scoring sheet',
-          ]);
-        }
-      }
-
-      const compName = competition?.name || 'competition';
-      downloadCsv(`${safeFilename(compName)}-official-results-pack.csv`, toCsv(header, rows));
-    } catch (caught) {
-      toast.show(message(caught));
-    } finally {
-      setExportingResults(false);
-    }
-  }
 
   return (
     <article className="event-print-page">
@@ -319,14 +207,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
             <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
               <QrCodeIcon className="h-4 w-4" />{tr('ops2.print.view.posters')}
             </Link>
-            <button
-              type="button"
-              onClick={() => void exportOfficialResultsCsv()}
-              disabled={exportingResults}
-              className="mg-btn mg-btn-secondary"
-            >
-              <Download className="h-4 w-4" />{exportingResults ? tr('ops2.print.exporting') : tr('ops2.print.officialPack')}
-            </button>
+            <OfficialResultsDownload competitionId={Number(competitionId)} className="mg-btn mg-btn-secondary" />
             <button
               type="button"
               aria-pressed={sponsorMode}

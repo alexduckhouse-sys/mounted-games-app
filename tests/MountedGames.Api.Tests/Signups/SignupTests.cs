@@ -269,7 +269,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task UpdateStatus_SetsPaidAt_OnlyWhenPaid()
+    public async Task UpdateStatus_PreservesOriginalReceiptDate_WhenRefunded()
     {
         var section = await _f.NewSectionAsync();
         var created = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
@@ -278,7 +278,31 @@ public class SignupTests : IClassFixture<ApiFactory>
         var refunded = await (await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status",
             new UpdateSignupStatusRequest(SignupPaymentStatus.Refunded))).ReadAsync<SectionSignupDto>();
 
-        Assert.Equal((SignupPaymentStatus.Refunded, (DateTime?)null), (refunded.Status, refunded.PaidAt));
+        Assert.NotNull(created.PaidAt);
+        Assert.Equal((SignupPaymentStatus.Refunded, created.PaidAt), (refunded.Status, refunded.PaidAt));
+    }
+
+    [Theory]
+    [InlineData(SignupPaymentStatus.Refunded)]
+    [InlineData(SignupPaymentStatus.Cancelled)]
+    public async Task UpdateStatus_KeepsReceiptDateForPaidEntries_WithoutInventingOneForUnpaidEntries(SignupPaymentStatus status)
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 4000);
+        var entrant = await _f.TrainerAsync();
+        var admin = await _f.AdminAsync();
+        var created = await (await entrant.PostAsJsonAsync(Url(section), Entry("Synthetic receipt"))).ReadAsync<SectionSignupDto>();
+        var paid = await (await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status",
+            new UpdateSignupStatusRequest(SignupPaymentStatus.Paid))).ReadAsync<SectionSignupDto>();
+        var closed = await (await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status",
+            new UpdateSignupStatusRequest(status))).ReadAsync<SectionSignupDto>();
+        Assert.NotNull(paid.PaidAt);
+        Assert.Equal(paid.PaidAt, closed.PaidAt);
+        Assert.Equal(status, closed.Status);
+
+        var unpaid = await (await entrant.PostAsJsonAsync(Url(section), Entry("Synthetic unpaid"))).ReadAsync<SectionSignupDto>();
+        var closedUnpaid = await (await admin.PutAsJsonAsync($"/api/signups/{unpaid.Id}/status",
+            new UpdateSignupStatusRequest(status))).ReadAsync<SectionSignupDto>();
+        Assert.Null(closedUnpaid.PaidAt);
     }
 
     [Fact]

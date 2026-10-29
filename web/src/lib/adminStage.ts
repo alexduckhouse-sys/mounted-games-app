@@ -34,7 +34,7 @@ export function stageAction(stage: Stage, id: number): { label: string; to: stri
   switch (stage) {
     case 'live': return { label: 'Run day', to: `/competitions/${id}` };
     case 'format':
-    case 'ready': return { label: 'On the day', to: `/admin/competitions/${id}/format` };
+    case 'ready': return { label: 'Before the day', to: `/competitions/${id}/operations` };
     case 'finished': return { label: 'Results', to: `/competitions/${id}/toplists` };
     default: return { label: 'Edit', to: `/admin/competitions/${id}` };
   }

@@ -433,3 +433,21 @@ it('uses director stream ID without a value in the public multi-camera layout an
   rerender(<MemoryRouter><LiveVideo {...p} publicLayout streams={[]} fallback="https://example.test/live" /></MemoryRouter>);
   expect(screen.getByRole('link', { name: 'Open stream' })).toHaveAttribute('href', 'https://example.test/live');
 });
+
+it('leaves recording to the controller and keeps saved replay playback available', async () => {
+  replayBufferFixture([replayFixture('one')]);
+  const media = asMedia(new FakeMediaStream());
+  const { rerender, unmount } = render(<StreamPlayer media={media} stream={liveStream()} label={null} enableDvr={false} />);
+  await settle(); expect(replayBuffers.createReplayBuffer).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: 'Instant 15 second replay' })).toBeNull();
+  expect(screen.getByRole('button', { name: /Saved replays/ })).toBeVisible();
+  rerender(<StreamPlayer media={media} stream={liveStream()} label={null} />);
+  expect(replayBuffers.createReplayBuffer).toHaveBeenCalledOnce(); unmount();
+});
+it('passes controller DVR ownership through the connected live player', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  replayBufferFixture(); const onMedia = vi.fn();
+  const view = render(<MemoryRouter><LiveVideo {...props()} onMedia={onMedia} enableDvr={false} /></MemoryRouter>);
+  await settle(); act(() => FakePeer.instances[0].track()); await tick(2000);
+  expect(onMedia).toHaveBeenCalled(); expect(replayBuffers.createReplayBuffer).not.toHaveBeenCalled(); view.unmount();
+});
