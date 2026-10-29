@@ -187,7 +187,6 @@ export const competition = {
   'competition.heat.sectionHeats': '{section} heats',
   'competition.heat.raceOf': 'Race {n} of {total} · {name}',
   'competition.heat.finalResult': 'Final result',
-  'competition.heat.starts': 'Starts {time}',
   'competition.heat.startsLate': 'Starts {time} · running {delay} late',
   'competition.heat.startTbc': 'Start time to be confirmed',
   'competition.heat.stageFinal': 'Final',

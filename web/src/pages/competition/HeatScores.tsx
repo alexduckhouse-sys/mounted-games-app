@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -21,6 +21,7 @@ import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules'
 import { HeatChooser } from './HeatChooser';
 import { TeamCardBadge, getStoredCards, parseRefereeCard, useCardsEnabled, type RefereeCard } from './ScoringParts';
 import './heat.css';
+import { useHeatHeadHeight } from './useHeatHeadHeight';
 import { formatPoints } from '../../lib/formatPoints';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { resultStatusText } from '../../lib/toplistText';
@@ -40,6 +41,12 @@ interface ColumnDef {
   race: Race;
   label: string;
   roundHeats?: Heat[];
+}
+
+/** A plain elimination scores 0 and shows as a red 0; DNS, DNF and Retired keep their letters. */
+function elimMark(status?: number): string | null {
+  const letter = statusLetter(true, status);
+  return letter === 'E' ? '0' : letter;
 }
 
 function HeatScoresPageBar({ backTo, title, subtitle, badge }: {
@@ -148,7 +155,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
     ? t('competition.heat.raceOf', { n: runningIndex + 1, total: columns.length, name: runningRace.name })
     : finished
       ? [time, t('competition.heat.finalResult')].filter(Boolean).join(' · ')
-      : time ? (status === 'late' && row ? t('competition.heat.startsLate', { time, delay: formatDelayDuration(row.delayMinutes) }) : t('competition.heat.starts', { time })) : t('competition.heat.startTbc');
+      : time ? (status === 'late' && row ? t('competition.heat.startsLate', { time, delay: formatDelayDuration(row.delayMinutes) }) : time) : t('competition.heat.startTbc');
   const compactSubtitle = [section ? t('competition.heat.sectionHeats', { section }) : t('competition.scoring.heats'), session.arenaName?.trim()].filter(Boolean).join(' · ');
   const compactBadge = status === 'live' ? 'live' : finished ? 'finished' : 'next';
 
@@ -340,7 +347,9 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
     label: col.label,
     underReview: col.roundHeats ? col.roundHeats.some((h) => h.races.some((r) => r.underReview)) : Boolean(col.race.underReview),
   })));
-  const manyRaces = columns.length >= 6;
+  const manyRaces = columns.length >= 8;
+  const headRef = useRef<HTMLTableSectionElement>(null);
+  const headHeight = useHeatHeadHeight(headRef, `${columns.map((col) => col.label).join('|')}|${manyRaces}|${showCarriedForward}`);
   // When a race re-ranks the heat, climbers swell and lift and big climbs sparkle.
   const rowsRef = useRankMotion<HTMLTableSectionElement>(grid.teams.map((team) => team.id));
 
@@ -361,8 +370,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
         <section aria-label={t('competition.scoring.scores')} className={bare ? 'overflow-hidden' : 'mg-card overflow-hidden'}>
           {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noTeams')}</p> : (
             <div className="overflow-hidden">
-              <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`}>
-                <thead>
+              <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ '--heat-head-h': `${headHeight}px` } as CSSProperties}>
+                <thead ref={headRef}>
                   <tr>
                     {finished && <th scope="col" className="heat-rank">#</th>}
                     <th scope="col" className="heat-team-head">
@@ -372,7 +381,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                         <span className={`heat-title-meta ${status === 'live' ? 'heat-title-meta-live' : status === 'late' ? 'heat-title-meta-late' : ''}`}>{tableMeta}</span>
                         {reviewNames.length > 0 && <span className="heat-title-review" data-testid="heat-under-review">Under review: {reviewNames.join(', ')}</span>}
                       </div>
-                      <span>{t('competition.toplist.team')}</span>
+                      <span className="sr-only">{t('competition.toplist.team')}</span>
                     </th>
                     {showCarriedForward && (
                       <th scope="col" className="heat-race heat-cf-head" title={t('competition.heat.carried')}>
@@ -400,7 +409,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                         {finished && <td className="heat-rank-cell"><span className="sr-only">{t('competition.heat.position')} </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
                           <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
-                            <span data-grow="start" className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
+                            <span data-grow="start" className="heat-team-name">
                               {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}
                               {team.isFav && <Star aria-hidden="true" className="ml-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
@@ -410,15 +419,15 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                           </Link>
                         </th>
                         {showCarriedForward && (
-                          <td className="heat-cell heat-cell-first heat-cf" title={t('competition.heat.carried')}>{formatPoints(team.carriedForward)}</td>
+                          <td className="heat-cell heat-cf" title={t('competition.heat.carried')}>{formatPoints(team.carriedForward)}</td>
                         )}
                         {columns.map((col, i) => {
                           const cell = grid.cells.get(`${team.id}|${col.key}`);
-                          return <td key={col.key} className={`heat-cell ${i === 0 && !showCarriedForward ? 'heat-cell-first' : ''}`}>
-                            {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">{t('competition.heat.notRaced')}</span></>
+                          return <td key={col.key} className={`heat-cell${i === runningIndex ? ' heat-cell-running' : ''}`}>
+                            {cell == null ? <><span aria-hidden="true" className="heat-dash-empty" /><span className="sr-only">{t('competition.heat.notRaced')}</span></>
                               : cell.sitOut ? <><span aria-hidden="true" className="heat-dash sitout">S</span><span className="sr-only">{t('competition.heat.satOut')}</span></>
                               : !cell.scored && cell.stageBadge ? <span className="heat-stage-badge">{cell.stageBadge}</span>
-                              : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{resultStatusText(true, cell.status, t)}</span></>
+                              : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{elimMark(cell.status)}</span><span className="sr-only">{resultStatusText(true, cell.status, t)}</span></>
                               : formatPoints(cell.points)}
                           </td>;
                         })}

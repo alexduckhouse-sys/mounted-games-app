@@ -112,7 +112,7 @@ it('shows S for a team that sat a race out', () => {
   expect(screen.getByText('Sat out this race')).toBeInTheDocument();
 });
 
-it('shows the letters for a team that did not start, did not finish, retired or was eliminated', () => {
+it('shows the letters for a team that did not start, did not finish or retired, and a 0 for an elimination', () => {
   const entries = [1, 2, 3, 4].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
   const out = (id: number, status?: number) => ({ id, teamId: id, teamName: `Team ${id}`, placing: null, eliminated: true, points: 0, ...(status === undefined ? {} : { status }) });
   const shownHeat = heat(16, { sessionId: 6, orderIndex: 0, label: 'Heat 1', entries,
@@ -121,12 +121,12 @@ it('shows the letters for a team that did not start, did not finish, retired or 
   state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
   render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={16} /></MemoryRouter></CompactPageBarProvider>);
 
-  const cell = (name: string) => within(screen.getByRole('row', { name: new RegExp(name) })).getAllByRole('cell').find((c) => /DNS|DNF|^R|^E/.test(c.textContent ?? ''))!;
+  const cell = (name: string) => within(screen.getByRole('row', { name: new RegExp(name) })).getAllByRole('cell').find((c) => /DNS|DNF|^R|^0/.test(c.textContent ?? ''))!;
   expect(cell('Team 1')).toHaveTextContent('DNS');
   expect(cell('Team 2')).toHaveTextContent('DNF');
   expect(cell('Team 3')).toHaveTextContent('R');
   // Results saved before the choice existed have no status and were all eliminations.
-  expect(cell('Team 4')).toHaveTextContent('E');
+  expect(cell('Team 4')).toHaveTextContent(/^0Eliminated$/);
   expect(screen.getByText('Did not start')).toBeInTheDocument();
 });
 
@@ -318,8 +318,8 @@ it('hides the CF column on a Final heat when no points are carried forward', () 
   expect(screen.queryByRole('columnheader', { name: /CF/ })).toBeNull();
 });
 
-it('applies compact many-race styling and two-line wrapping when a heat has 6 or more races', () => {
-  const manyRaces = [1, 2, 3, 4, 5, 6, 7].map((i) => race(80 + i, { name: `Race ${i}`, orderIndex: i - 1 }));
+it('applies compact many-race styling and two-line wrapping when a heat has 8 or more races', () => {
+  const manyRaces = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => race(80 + i, { name: `Race ${i}`, orderIndex: i - 1 }));
   const shownHeat = heat(50, {
     sessionId: 30,
     orderIndex: 0,
@@ -340,7 +340,8 @@ it('applies compact many-race styling and two-line wrapping when a heat has 6 or
   expect(table.style.minWidth).toBe('');
   expect(screen.getByRole('columnheader', { name: 'Pts' })).toBeVisible();
   const teamSpan = screen.getByText('Northamptonshire Valiant Riders');
-  expect(teamSpan).toHaveClass('heat-team-name', 'heat-team-name-long');
+  expect(teamSpan).toHaveClass('heat-team-name');
+  expect(table.style.getPropertyValue('--heat-head-h')).toBe('82px');
 });
 
 it('marks one team\'s row, drops the card and ignores ?heat= when told to', () => {
