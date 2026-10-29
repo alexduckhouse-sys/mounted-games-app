@@ -15,6 +15,7 @@ import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { cameraArenas, onAirStream } from '../../lib/streamControls';
 import type { LiveStream } from '../../types';
 import { RotateCcw } from 'lucide-react';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { RefineHeader, RefinePage, type RefineTab } from '../refine/Refine';
 import { useCompetition } from './context';
@@ -27,12 +28,19 @@ import './streamControls/streamControls.css';
 
 export type StreamControlsTab = 'overlay' | 'auto' | 'replay' | 'camera';
 const TABS: { id: StreamControlsTab }[] = [{ id: 'overlay' }, { id: 'auto' }, { id: 'replay' }, { id: 'camera' }];
+// On a phone the four become three, so each fits one screen under the pinned picture. Auto sits with Graphics, as it only decides when the graphics change.
+const PHONE_TABS: { id: StreamControlsTab; key: 'cameras' | 'graphics' | 'replays'; covers: StreamControlsTab[] }[] = [
+  { id: 'camera', key: 'cameras', covers: ['camera'] },
+  { id: 'overlay', key: 'graphics', covers: ['overlay', 'auto'] },
+  { id: 'replay', key: 'replays', covers: ['replay'] },
+];
 
 export function StreamControlsPage() {
   const { t, locale } = useLanguage();
   const { competition, streams, streamTelemetry, lastStreamCommand, invoke, ready, streamMessages, overlay: ctxOverlay, saveOverlay, scoreCards } = useCompetition();
   const { canOrganise } = useAuth();
   const [params, setParams] = useSearchParams();
+  const phone = useMediaQuery('(max-width: 767px)');
   const [pickedId, setPickedId] = useState<number | null>(null);
   const [ending, setEnding] = useState(false);
   const [media, setMedia] = useState<MediaStream | null>(null);
@@ -74,7 +82,10 @@ export function StreamControlsPage() {
     setEnding(false);
   }
 
-  const tabs: RefineTab[] = TABS.map(({ id }) => ({ label: t(`desk.stream.tab.${id}`), active: tab === id, onSelect: () => choose(id) }));
+  const tabs: RefineTab[] = phone
+    ? PHONE_TABS.map(({ id, key, covers }) => ({ label: t(`desk.stream.tab.${key}`), active: covers.includes(tab), onSelect: () => choose(id) }))
+    : TABS.map(({ id }) => ({ label: t(`desk.stream.tab.${id}`), active: tab === id, onSelect: () => choose(id) }));
+  const panelLabel = phone ? t(`desk.stream.tab.${PHONE_TABS.find((item) => item.covers.includes(tab))?.key ?? 'graphics'}`) : t(`desk.stream.tab.${tab}`);
   const arenas = cameraArenas(competition.sessions);
   const pick = (stream: LiveStream) => setPickedId(stream.id);
 
@@ -92,12 +103,14 @@ export function StreamControlsPage() {
       />
       <div className="sx-body">
         {error && <Notice actionLabel={t('common.tryAgain')} onAction={() => void endStream(false)} actionDisabled={ending}>{error}</Notice>}
+        <div className="sx-pin">
         {onAir ? (
           <div className="sx-video">
             <LiveVideo competitionId={competition.id} streams={liveStreams} sessions={competition.sessions} invoke={invoke} ready={ready}
               messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={onMedia} />
           </div>
         ) : <div className="sx-notlive" role="status">{t('desk.stream.page.notLive')}</div>}
+        </div>
 
         <div className="sx-chips">
           <button type="button" className="sx-btn" disabled={!replay.recording || replay.progress !== null}
@@ -111,9 +124,9 @@ export function StreamControlsPage() {
           </button>
         </div>
 
-        <div key={tab} role="tabpanel" className="mg-settle" aria-label={t(`desk.stream.tab.${tab}`)}>
-          {tab === 'overlay' && <OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} />}
-          {tab === 'auto' && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule}
+        <div key={tab} role="tabpanel" className="mg-settle" aria-label={panelLabel}>
+          {(tab === 'overlay' || (phone && tab === 'auto')) && <OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} />}
+          {(tab === 'auto' || (phone && tab === 'overlay')) && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule}
             prizeGiving={{ on: tiles.options.autoPrizeGiving, disabled: tiles.busy || !saveOverlay, set: (on) => void tiles.setOptions({ autoPrizeGiving: on }) }} />}
           {tab === 'replay' && (
             <ReplayTab clips={clips} openId={openClipId} onOpen={setOpenClipId} controller={replay} instantLength={instantLength}
