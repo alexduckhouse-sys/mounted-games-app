@@ -1,9 +1,10 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { describe, expect, it, vi } from 'vitest';
+import { CompactPageBarProvider, InAppShell, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { RefineChoiceRow, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineMenu, RefineQty, RefineSection, RefineSheet, RefineStatus } from './Refine';
 
 describe('RefineHeader', () => {
@@ -18,6 +19,37 @@ describe('RefineHeader', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(onBack).toHaveBeenCalledOnce();
     expect(screen.queryByText('DEMO')).not.toBeInTheDocument();
+  });
+
+  it('in the app, moves its back arrow, title and context into the top bar and keeps only what is left', async () => {
+    const refresh = vi.fn();
+    function Bar() {
+      const { header } = useCompactPageBarState();
+      return <output data-testid="bar">{header ? `${header.title}|${header.subtitle}|${header.backTo}|${header.backLabel}|${header.plain}` : 'none'}<button type="button" onClick={header?.refresh}>bar refresh</button></output>;
+    }
+    const shell = (header: ReactNode) => <MemoryRouter><CompactPageBarProvider><Bar /><InAppShell>{header}</InAppShell></CompactPageBarProvider></MemoryRouter>;
+    const view = render(shell(<RefineHeader back="/ops" backLabel="Back to Before the day" context="Spring Open" title="Tack check" />));
+    expect(screen.getByTestId('bar')).toHaveTextContent('Tack check|Spring Open|/ops|Back to Before the day|true');
+    expect(screen.queryByRole('heading', { name: 'Tack check' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Back to Before the day' })).not.toBeInTheDocument();
+    expect(document.querySelector('.rf-hd')).toBeNull();
+
+    view.rerender(shell(<RefineHeader back="/ops" context="Spring Open" title="Sections" subtitle="3 age groups" onRefresh={refresh} refreshLabel="Recheck" />));
+    expect(document.querySelector('.rf-hd-slim')).toHaveTextContent('3 age groups');
+    expect(screen.queryByRole('button', { name: 'Recheck' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'bar refresh' }));
+    expect(refresh).toHaveBeenCalledOnce();
+
+    // An in-page back step has no route for the top bar, so that header stays whole.
+    view.rerender(shell(<RefineHeader onBack={vi.fn()} context="x" title="Basket" />));
+    expect(screen.getByRole('heading', { name: 'Basket' })).toBeInTheDocument();
+  });
+
+  it('shows its own refresh button outside the app', async () => {
+    const refresh = vi.fn();
+    render(<MemoryRouter><RefineHeader context="x" title="Before the day" onRefresh={refresh} refreshLabel="Recheck" /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: 'Recheck' }));
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it('puts a page-level action on the right of the title row', () => {

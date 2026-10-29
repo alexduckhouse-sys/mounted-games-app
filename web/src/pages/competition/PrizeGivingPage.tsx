@@ -5,6 +5,8 @@ import { useCompetition } from './context';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { problemMessage } from '../../lib/apiError';
 import { revealOrder, riderLines } from '../../lib/prizeGiving';
 import { displaySectionName } from '../../lib/section';
@@ -72,6 +74,10 @@ export function PrizeGivingPage() {
   const clubOf = (teamId: number) => rows?.find((row) => row.teamId === teamId)?.clubName || null;
   const unfinished = toplist ? toplist.rows.some((row) => row.racesLeft > 0) : false;
 
+  // The set-up lives in a sheet opened from the dock; with no dock (page on its own) it stays on the page.
+  const [setupOpen, setSetupOpen] = useState(false);
+  const docked = useDockAction(mayRun ? { label: t('screen.pg.setUpTitle'), icon: 'settings', onClick: () => setSetupOpen(true) } : null);
+
   if (!mayRun) {
     return (
       <RefinePage>
@@ -112,11 +118,8 @@ export function PrizeGivingPage() {
     : shown === order.length - 1 && upNext.place === 1 ? t('screen.pg.revealWinners')
       : t(upNext.joint ? 'screen.pg.revealJoint' : 'screen.pg.reveal', { place: ordinal(upNext.place) });
 
-  return (
-    <RefinePage className="pg-page">
-      <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel={t('screen.pg.backToStream')} context={competition.name} title={t('screen.pg.title')} />
-
-      <RefineSection title={t('screen.pg.setUp')} />
+  const setup = (
+    <>
       <RefineList as="div" label={t('screen.pg.setUpLabel')}>
         <RefineChoiceRow label={t('screen.pg.ageGroup')} value={String(sectionId ?? '')} disabled={shown > 0}
           options={sections.map((s) => ({ value: String(s.id), label: displaySectionName(s.displayName || s.ageGroup) }))}
@@ -127,6 +130,15 @@ export function PrizeGivingPage() {
         </div>
       </RefineList>
       {shown > 0 && <RefineNote>{t('screen.pg.clearToChange')}</RefineNote>}
+    </>
+  );
+
+  return (
+    <RefinePage className="pg-page">
+      <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel={t('screen.pg.backToStream')} context={competition.name} title={t('screen.pg.title')} />
+
+      {!docked && <RefineSection title={t('screen.pg.setUp')} />}
+      {!docked && setup}
 
       <div className="pg-body">
         {loadError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { setLoadError(null); setAttempt((n) => n + 1); }}>{loadError}</Notice>}
@@ -190,6 +202,7 @@ export function PrizeGivingPage() {
           </section>
         )}
       </div>
+      {docked && setupOpen && <Sheet title={t('screen.pg.setUpTitle')} onClose={() => setSetupOpen(false)}>{setup}</Sheet>}
     </RefinePage>
   );
 }

@@ -1,7 +1,7 @@
 import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
-import { MoreHorizontal, RefreshCw } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
@@ -171,11 +171,6 @@ function OperationsPageContent() {
       <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
     </button>
   );
-  const recheck = (
-    <button type="button" className="rf-ib" aria-label={loadingReadiness ? t('ops.page.checking') : t('ops.page.recheck')} onClick={() => void loadReadiness()} disabled={loadingReadiness}>
-      <RefreshCw className={`h-5 w-5 ${loadingReadiness ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
-    </button>
-  );
 
   const legacyTab = searchParams.get('tab');
   if (!tool && toolParam) return <Navigate to={hubPath} replace />;
@@ -188,7 +183,7 @@ function OperationsPageContent() {
   let title = t('ops.hub.title');
   let context = competition.name;
   let subtitle: string | undefined;
-  let actions: ReactNode = tool ? null : recheck;
+  let actions: ReactNode = null;
   if (tool === 'draw') {
     title = t('ops.view.draw');
     if (preview) {
@@ -206,7 +201,8 @@ function OperationsPageContent() {
   return (
     <RefinePage className={wide ? 'ops-wide' : ''}>
       {toast.node}
-      <RefineHeader back={tool ? hubPath : `/competitions/${competition.id}`} backLabel={tool ? t('ops.hub.back') : t('ops.page.backToEvent')} context={context} actions={actions} title={title} subtitle={subtitle} />
+      <RefineHeader back={tool ? hubPath : `/competitions/${competition.id}`} backLabel={tool ? t('ops.hub.back') : t('ops.page.backToEvent')} context={context} actions={actions}
+        onRefresh={tool ? undefined : () => void loadReadiness()} refreshLabel={t('ops.page.recheck')} title={title} subtitle={subtitle} />
 
       <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={() => { reloadCompetition(); void loadReadiness(); }} />
 

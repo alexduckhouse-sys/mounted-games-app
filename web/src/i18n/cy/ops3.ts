@@ -142,6 +142,7 @@ export const ops3: AreaCatalogue<typeof en> = {
   'ops3.rb.save': 'Cadw’r gwobrau',
   'ops3.tc.loadError': 'Methu llwytho’r archwiliad tac. Gwiriwch eich signal a rhowch gynnig arall arni.',
   'ops3.tc.title': 'Archwilio tac',
+  'ops3.tc.settingsSheet': 'Gosodiadau archwilio tac',
   'ops3.tc.form': 'Ffurflen archwilio tac',
   'ops3.tc.print': 'Argraffu ffurflenni archwilio tac',
   'ops3.tc.printSub': 'Un ffurflen i bob grŵp oedran, gyda beicwyr a ponis pob tîm',

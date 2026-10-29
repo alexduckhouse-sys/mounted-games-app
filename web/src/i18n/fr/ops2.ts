@@ -425,6 +425,7 @@ export const ops2: AreaCatalogue<typeof en> = {
   'ops2.entries.deadlineError': 'Impossible d’enregistrer la date limite.',
   'ops2.entries.decError': 'Impossible d’enregistrer le formulaire de déclaration.',
   'ops2.entries.title': 'Inscriptions et formulaires de déclaration',
+  'ops2.entries.toolsSheet': 'Outils des inscriptions et des formulaires de déclaration',
   'ops2.entries.closed': 'Inscriptions closes',
   'ops2.entries.open': 'Inscriptions ouvertes',
   'ops2.entries.paidNot': '{paid} payées · {unpaid} non payées',

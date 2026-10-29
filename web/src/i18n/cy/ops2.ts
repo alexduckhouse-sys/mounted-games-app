@@ -425,6 +425,7 @@ export const ops2: AreaCatalogue<typeof en> = {
   'ops2.entries.deadlineError': 'Methu cadw’r terfyn amser.',
   'ops2.entries.decError': 'Methu cadw’r ffurflen ddatgan.',
   'ops2.entries.title': 'Cofrestriadau a ffurflenni datgan',
+  'ops2.entries.toolsSheet': 'Offer cofrestriadau a ffurflenni datgan',
   'ops2.entries.closed': 'Cofrestriadau ar gau',
   'ops2.entries.open': 'Cofrestriadau ar agor',
   'ops2.entries.paidNot': '{paid} wedi talu · {unpaid} heb dalu',

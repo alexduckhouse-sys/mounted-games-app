@@ -282,6 +282,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.stream.dataNote': 'La vidéo consomme beaucoup de données : elle ne démarre que si vous touchez.',
   'teams.stream.connecting': 'Connexion…',
   'teams.stream.stream': 'Diffusion',
+  'teams.stream.controls': 'Commandes du direct',
   'teams.stream.openStream': 'Ouvrir la diffusion',
   'teams.stream.tapToLoad': 'Touchez pour charger la diffusion',
   'teams.stream.reconnecting': 'Reconnexion…',

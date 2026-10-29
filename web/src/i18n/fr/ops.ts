@@ -375,6 +375,8 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.tt.longer': '{label} plus longue',
   'ops.tt.addAfter': 'Ajouter une pause après',
   'ops.tt.addBreak': 'Ajouter une pause',
+  'ops.tt.toolsSheet': 'Outils de l’horaire',
+  'ops.tt.addBreakIn': 'Ajouter une pause : {arena}',
   'ops.tt.hatbands': 'Bandeaux',
   'ops.tt.moveBandUp': 'Monter {name}',
   'ops.tt.moveBandDown': 'Descendre {name}',

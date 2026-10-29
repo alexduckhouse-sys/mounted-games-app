@@ -20,7 +20,7 @@ import { BottomTabs } from './BottomTabs';
 import { GlobalTabs } from './GlobalTabs';
 import { useCompetitionMeta } from './competitionMeta';
 import { PageSkeleton } from './Skeletons';
-import { useCompactPageBarState } from './CompactPageBarContext';
+import { InAppShell, useCompactPageBarState } from './CompactPageBarContext';
 import './compact-page-bar.css';
 import { TrainerAccountNotice } from './TrainerAccountNotice';
 import { InstallCard } from './InstallCard';
@@ -165,7 +165,7 @@ function Shell({ width }: { width: PageWidth }) {
         {onProfile && <TrainerAccountNotice />}
         <InstallCard pathname={location.pathname} className={publicPage ? 'mt-4' : 'mb-3'} />
         <PageLoadBoundary page={location.pathname}>
-          <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
+          <InAppShell><Suspense fallback={<PageSkeleton />}><Outlet /></Suspense></InAppShell>
         </PageLoadBoundary>
       </main>
       <PageTransition mainRef={mainRef} disabled={filmingMode} />

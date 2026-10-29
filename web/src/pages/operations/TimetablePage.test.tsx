@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 import { TimetablePage } from './TimetablePage';
 
 const reload = vi.fn();
@@ -36,6 +39,18 @@ const preview = {
 
 function show() {
   return render(<MemoryRouter><TimetablePage /></MemoryRouter>);
+}
+function showDocked() {
+  return render(
+    <MemoryRouter>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <TimetablePage />
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
 }
 const startOf = (id: number) => at(id === 3 ? 80 : id === 2 ? 40 : 0);
 
@@ -436,5 +451,22 @@ describe('TimetablePage after the draw', () => {
     show();
     await user.click(await screen.findByRole('button', { name: /Under 12 · Session 1/ }));
     expect(screen.getByText(/has started or has scores/)).toBeInTheDocument();
+  });
+
+  it('puts the timetable tools in a sheet opened from the dock, with the break form back on the page', async () => {
+    const user = userEvent.setup();
+    showDocked();
+    await screen.findByRole('button', { name: /Under 12 · Session 1/ });
+    expect(screen.queryByText('Move everything')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a hatband' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a break' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Timetable tools' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Timetable tools' });
+    for (const name of ['Move everything', 'Each one follows on from the one before', 'Drag to change the order', 'Send the timetable', 'Hatbands', 'Lanes for heat 1']) {
+      expect(within(sheet).getByText(name)).toBeInTheDocument();
+    }
+    await user.click(within(sheet).getByRole('button', { name: 'Add a break' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Timetable tools' })).not.toBeInTheDocument());
+    expect(await screen.findByRole('button', { name: 'Add break' })).toBeInTheDocument();
   });
 });

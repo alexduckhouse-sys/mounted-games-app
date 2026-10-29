@@ -142,6 +142,7 @@ export const ops3: AreaCatalogue<typeof en> = {
   'ops3.rb.save': 'Enregistrer les prix',
   'ops3.tc.loadError': 'Impossible de charger le contrôle du harnachement. Vérifiez votre signal et réessayez.',
   'ops3.tc.title': 'Contrôle du harnachement',
+  'ops3.tc.settingsSheet': 'Réglages du contrôle du harnachement',
   'ops3.tc.form': 'Formulaire de contrôle du harnachement',
   'ops3.tc.print': 'Imprimer les formulaires de contrôle',
   'ops3.tc.printSub': 'Un formulaire par catégorie d’âge, avec les cavaliers et poneys de chaque équipe',

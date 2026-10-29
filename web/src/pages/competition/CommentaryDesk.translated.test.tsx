@@ -75,7 +75,8 @@ describe.each([
       </LanguageProvider>,
     );
     expect(await screen.findByText(new RegExp(words.desk))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: words.sideBySide })).toBeInTheDocument();
+    // The view is a dropdown row now; its button shows the chosen view.
+    expect(screen.getByText(words.sideBySide)).toBeInTheDocument();
     expect(screen.getAllByText(words.upNext).length).toBeGreaterThan(0);
     expect(screen.queryByText(words.english)).toBeNull();
     expect(screen.queryByText('Up next')).toBeNull();

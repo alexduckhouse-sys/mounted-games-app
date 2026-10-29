@@ -375,6 +375,8 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.tt.longer': '{label} hirach',
   'ops.tt.addAfter': 'Ychwanegu egwyl ar ôl hon',
   'ops.tt.addBreak': 'Ychwanegu egwyl',
+  'ops.tt.toolsSheet': 'Offer yr amserlen',
+  'ops.tt.addBreakIn': 'Ychwanegu egwyl yn {arena}',
   'ops.tt.hatbands': 'Bandiau het',
   'ops.tt.moveBandUp': 'Symud {name} i fyny',
   'ops.tt.moveBandDown': 'Symud {name} i lawr',

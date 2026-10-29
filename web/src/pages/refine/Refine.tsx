@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { BackLink } from '../../components/BackLink';
+import { useInAppShell, usePageHeader } from '../../components/CompactPageBarContext';
 import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useExitDelay } from '../../hooks/useExitDelay';
@@ -28,6 +29,9 @@ interface HeaderProps {
   context: string;
   /** Trailing controls in the top row (an overflow button, a star, "+ Add item"). */
   actions?: ReactNode;
+  /** A refresh button: the app's own one in the top bar, or one in the top row outside the app. */
+  onRefresh?: () => void;
+  refreshLabel?: string;
   title: string;
   /** A page-level action on the right of the title row (for example "End stream"). */
   titleAction?: ReactNode;
@@ -54,9 +58,13 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
   tabs[next].click();
 }
 
-export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
+export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, onRefresh, refreshLabel, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
   const tabsRef = useRef<HTMLElement>(null);
   const [moreTabs, setMoreTabs] = useState(false);
+  // In the app the back arrow, title and context go up into the top bar, so the page doesn't stack a second
+  // header under it. An in-page back step (onBack) has no route for the top bar, so that header stays whole.
+  const inTopBar = useInAppShell() && !(onBack && !back);
+  usePageHeader(inTopBar ? { title, subtitle: context || undefined, plain: true, backTo: back, backLabel: back ? backLabel : undefined, onRefresh, refreshLabel } : null, 1);
   const activeTab = tabs?.findIndex((tab) => tab.active) ?? -1;
   // A long tab strip scrolls sideways on a phone: keep the open tab in view and fade the edge while more tabs are hidden.
   useEffect(() => {
@@ -72,6 +80,29 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
     window.addEventListener('resize', update);
     return () => { nav.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
   }, [activeTab]);
+  const tabStrip = tabs && tabs.length > 0 && (
+    <nav ref={tabsRef} className={`rf-tabs ${moreTabs ? 'rf-tabs-more' : ''}`} aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
+      {tabs.map((tab) => tabsKind === 'tablist' ? (
+        <button key={tab.label} type="button" role="tab" aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} className="rf-tab" onClick={tab.onSelect}>{tab.label}</button>
+      ) : tab.to ? (
+        <Link key={tab.label} to={tab.to} className="rf-tab" aria-current={tab.active ? 'page' : undefined}>{tab.label}</Link>
+      ) : (
+        <button key={tab.label} type="button" className="rf-tab" aria-current={tab.active ? 'page' : undefined} onClick={tab.onSelect}>{tab.label}</button>
+      ))}
+    </nav>
+  );
+  if (inTopBar) {
+    const row = actions || titleAction || demo;
+    if (!row && !subtitle && !children && !tabStrip) return null;
+    return (
+      <header className="rf-hd rf-hd-slim">
+        {row && <div className="rf-hd-top">{demo && <DemoChip />}<span className="rf-ctx" />{actions}{titleAction}</div>}
+        {subtitle && <p className="rf-sub">{subtitle}</p>}
+        {children}
+        {tabStrip}
+      </header>
+    );
+  }
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
@@ -79,6 +110,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
         {!back && onBack && <button type="button" className="rf-ib" aria-label={backLabel} onClick={onBack}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>}
         <span className="rf-ctx">{context}</span>
         {actions}
+        {onRefresh && <button type="button" className="rf-ib" aria-label={refreshLabel ?? 'Refresh'} onClick={onRefresh}><RefreshCw className="h-5 w-5" aria-hidden="true" /></button>}
       </div>
       {titleAction ? (
         <div className="rf-ttl-row">
@@ -88,17 +120,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
       ) : <h1 className="rf-ttl">{title}{demo && <DemoChip />}</h1>}
       {subtitle && <p className="rf-sub">{subtitle}</p>}
       {children}
-      {tabs && tabs.length > 0 && (
-        <nav ref={tabsRef} className={`rf-tabs ${moreTabs ? 'rf-tabs-more' : ''}`} aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
-          {tabs.map((tab) => tabsKind === 'tablist' ? (
-            <button key={tab.label} type="button" role="tab" aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} className="rf-tab" onClick={tab.onSelect}>{tab.label}</button>
-          ) : tab.to ? (
-            <Link key={tab.label} to={tab.to} className="rf-tab" aria-current={tab.active ? 'page' : undefined}>{tab.label}</Link>
-          ) : (
-            <button key={tab.label} type="button" className="rf-tab" aria-current={tab.active ? 'page' : undefined} onClick={tab.onSelect}>{tab.label}</button>
-          ))}
-        </nav>
-      )}
+      {tabStrip}
     </header>
   );
 }
@@ -245,7 +267,8 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
       if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
     };
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); return; }
+      // preventDefault keeps a sheet around the row from closing along with the list.
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); anchor.current?.focus(); return; }
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
       const items = [...(ref.current?.querySelectorAll<HTMLElement>(PANEL_ITEMS) ?? [])];
       if (items.length === 0 || !ref.current?.contains(document.activeElement)) return;
@@ -284,7 +307,7 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
       if (document.activeElement == null || document.activeElement === document.body) trigger?.focus();
     };
   }, [anchor]);
-  return createPortal(<div ref={ref} id={id} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);
+  return createPortal(<div ref={ref} id={id} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, anchor.current?.closest('dialog') ?? document.body);
 }
 
 /**

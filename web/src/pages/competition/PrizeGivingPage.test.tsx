@@ -10,6 +10,9 @@ import { LanguageProvider } from '../../i18n/LanguageContext';
 import type { Lang } from '../../i18n/translate';
 import { CompetitionContext } from './context';
 import { PrizeGivingPage } from './PrizeGivingPage';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 const auth = vi.hoisted(() => ({ organise: true }));
@@ -25,7 +28,7 @@ const FORMS = [{
   ],
 }] as unknown as DeclarationForm[];
 
-function mount(url = '/competitions/1/prize-giving', lang: Lang = 'en') {
+function mount(url = '/competitions/1/prize-giving', lang: Lang = 'en', docked = false) {
   const value = {
     competition: competition({ sections: [{ id: 5, competitionId: 1, format: 2, ageGroup: 'Open', displayName: 'Open', finalistCount: null }, { id: 6, competitionId: 1, format: 2, ageGroup: 'U12', displayName: 'Under 12', finalistCount: null }], sessions: [], teams: [] }),
     reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [],
@@ -35,7 +38,9 @@ function mount(url = '/competitions/1/prize-giving', lang: Lang = 'en') {
     <MotionConfig reducedMotion="always">
       <MemoryRouter initialEntries={[url]}>
         <CompetitionContext.Provider value={value as never}>
-          <Routes><Route path="/competitions/:id/prize-giving" element={<PrizeGivingPage />} /></Routes>
+          {docked
+            ? <CurrentCompetitionProvider><TickerProvider><Routes><Route path="/competitions/:id/prize-giving" element={<PrizeGivingPage />} /></Routes><TopBarTicker /></TickerProvider></CurrentCompetitionProvider>
+            : <Routes><Route path="/competitions/:id/prize-giving" element={<PrizeGivingPage />} /></Routes>}
         </CompetitionContext.Provider>
       </MemoryRouter>
     </MotionConfig>
@@ -50,6 +55,19 @@ beforeEach(() => {
 });
 
 const posted = () => vi.mocked(api.post).mock.calls.map(([, body]) => body);
+
+describe('PrizeGivingPage in the dock', () => {
+  it('moves the set-up into a sheet opened from the dock', async () => {
+    const user = userEvent.setup();
+    mount('/competitions/1/prize-giving', 'en', true);
+    const dockButton = await screen.findByRole('button', { name: 'Prize-giving set-up' });
+    expect(screen.queryByText('Places to give')).not.toBeInTheDocument();
+    await user.click(dockButton);
+    const sheet = within(await screen.findByRole('dialog', { name: 'Prize-giving set-up' }));
+    expect(sheet.getByText('Age group')).toBeInTheDocument();
+    expect(sheet.getByText('Places to give')).toBeInTheDocument();
+  });
+});
 
 describe('PrizeGivingPage', () => {
   it('tells people who cannot organise that it is for the organiser', () => {

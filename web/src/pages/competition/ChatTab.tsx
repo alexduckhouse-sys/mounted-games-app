@@ -491,29 +491,31 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
   const [editing, setEditing] = useState(false);
   const closeSettings = useCallback(() => setEditing(false), []);
   const changeRef = useRef<HTMLButtonElement>(null);
+  // Before a stream starts the card's button is the way to go live; once one is on it changes the stream.
+  const action = active ? 'Change' : 'Go live';
   const streamName = active ? active.caption || `${active.arenaName} · ${active.angleName}` : fallback ? 'Competition stream' : 'No stream is set';
   return <div className="staff-stream-wrap">
     <div className="staff-stream mg-card">
       <span className="staff-stream-thumb"><Video aria-hidden="true" /></span>
       <span className="staff-stream-copy"><strong>{active ? 'Stream is on' : fallback ? 'Stream link is set' : 'Stream hasn’t started'}</strong><span>{streamName}</span></span>
-      {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
-        : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
+      {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>{action}</button>
+        : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>{action}</Link> : null}
     </div>
     {canBroadcast && (
       <div className="staff-stream-actions">
-        {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
         {active
           ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
           : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
       </div>
     )}
-    {streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}
-    {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
+    {streamingNotSetUp && <Notice tone="info">Streaming isn’t switched on for this site yet. A site admin can turn it on.</Notice>}
+    {editing && canEditStream && <StreamSettingsOverlay live={active != null} competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }
 
-function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef }: {
+function StreamSettingsOverlay({ live, competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef }: {
+  live: boolean;
   competitionId: number;
   fallback: string | null;
   canBroadcast: boolean;
@@ -528,7 +530,7 @@ function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditS
     <div ref={dialogRef} {...handlers} style={style} className={`staff-stream-dialog${dragging ? ' is-dragging' : ''}`} role="dialog" aria-modal="true" aria-label="Stream settings">
       <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>Stream settings</h2><button type="button" className="mg-icon-btn" aria-label="Close stream settings" onClick={onClose}><X aria-hidden="true" /></button></div>
-      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />Change camera</Link>}
+      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />{live ? 'Change camera' : 'Go live'}</Link>}
       <CompStreamEditor competition={{ id: competitionId, streamUrl: fallback }} canEditStream={canEditStream} onSaved={onSaved} />
     </div>
   </div>;

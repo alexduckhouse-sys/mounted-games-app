@@ -55,6 +55,7 @@ export const screen: AreaCatalogue<typeof en> = {
   'screen.pg.loadError': 'Impossible de charger le classement de cette catégorie d’âge. Vérifiez votre signal et réessayez.',
   'screen.pg.updateError': 'Impossible de mettre à jour le direct. Vérifiez votre signal et réessayez.',
   'screen.pg.setUp': 'Réglages',
+  'screen.pg.setUpTitle': 'Réglages de la remise des prix',
   'screen.pg.setUpLabel': 'Réglages de la remise des prix',
   'screen.pg.ageGroup': 'Catégorie d’âge',
   'screen.pg.placesToGive': 'Nombre de places',

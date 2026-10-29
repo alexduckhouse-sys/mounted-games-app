@@ -288,11 +288,11 @@ it('renders ProducePage as the 2nd phone remote stream controller and dual-camer
   });
 
   // Centred overlay triggers from 2nd phone
-  fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Toplist' }));
   await settle();
   expect(state.overlay?.look).toMatchObject({ liveCard: 'toplist' });
 
-  fireEvent.click(screen.getByRole('button', { name: 'Hide overlay' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Off' }));
   await settle();
   expect(state.overlay?.look).toMatchObject({ liveCard: 'none' });
 
