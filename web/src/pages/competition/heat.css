@@ -66,7 +66,7 @@
 .heat-grid thead th.heat-race:nth-last-child(2) .heat-name { max-width: 66px; }
 .heat-grid thead th.heat-race:nth-last-child(3) .heat-name { max-width: 111px; }
 
-.heat-grid tbody th, .heat-grid tbody td { height: 36px; border-bottom: 1px solid rgb(var(--mg-rule)); }
+.heat-grid tbody th, .heat-grid tbody td { height: 42px; border-bottom: 1px solid rgb(var(--mg-rule)); }
 .heat-grid tbody tr:last-child > th, .heat-grid tbody tr:last-child > td { border-bottom: 0; }
 /* Alternate rows are shaded as well, so each team's row reads at a glance. */
 .heat-grid tbody tr:nth-child(even) { background: rgb(var(--mg-heading) / .028); }
