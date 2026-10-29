@@ -76,6 +76,8 @@ public class AuthController : ControllerBase
     /// <summary>The sign-in providers that are switched on (a provider with no client ID is left out).</summary>
     [HttpGet("providers")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public ActionResult<IReadOnlyList<ExternalProviderDto>> GetProviders([FromServices] IExternalTokenValidator externalValidator)
         => Ok(externalValidator.GetEnabledProviders());
 
@@ -650,6 +652,7 @@ public class AuthController : ControllerBase
 
         var user = await _users.FindByEmailAsync("admin@mg.local");
         if (user is null) return StatusCode(500, new { message = "The shared admin account isn’t set up yet." });
+        await ipRecorder.RecordAsync(user.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
 
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user, titleOverride, emailOverride);
         return new AuthResponse(token, expiresAt,
@@ -711,6 +714,8 @@ public class AuthController : ControllerBase
 
         // Identity needs an email-like UserName for uniqueness; synthesise one if a bare username was given.
         var realEmail = raw.Contains('@');
+        if (!realEmail && raw.Length > 100)
+            return BadRequest(new { message = "Username must be 100 characters or fewer." });
         var email = raw.ToLowerInvariant();
         if (realEmail)
         {
@@ -866,12 +871,7 @@ public class AuthController : ControllerBase
             errorCodes = result.Errors.Select(e => e.Code),
         });
 
-    private static string Sanitise(string s)
-    {
-        var chars = s.Where(c => char.IsLetterOrDigit(c) || c == '.' || c == '_' || c == '-').ToArray();
-        var cleaned = new string(chars).ToLowerInvariant();
-        return cleaned.Length == 0 ? "user" : cleaned;
-    }
+    private static string Sanitise(string s) => SignupAccountNames.Sanitise(s);
 
     /// <summary>
     /// An admin makes an account for someone. The address is whatever the admin typed, so it starts unconfirmed and gets

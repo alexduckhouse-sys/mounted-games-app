@@ -193,7 +193,8 @@ public static class Mappings
     /// </summary>
     public static RiderEntryDto ToPublicDto(this RiderEntry r) => r.ToDto() with
     {
-        FullName = RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
+        FullName = RiderNames.Display(r.FullName, r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false),
+        UseInitialOnly = r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false),
         DateOfBirth = null, SavedRiderId = null,
         // Every adaptive dec form field is personal data about a child: none of it goes on a public page.
         BirthYear = null, AgeGroup = null, WeightKg = null, PonyPassportNumber = null, PonyOwnerFullName = null, PonyAge = null,

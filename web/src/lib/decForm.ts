@@ -24,6 +24,7 @@ export interface DecRider {
   ponyOwnerFullName?: string;
   isCaptain: boolean;
   useInitialOnly: boolean;
+  privacyChoiceMade?: boolean;
   isGuestRider: boolean;
   /** Answers to the parts the organiser added (weight, passport number, their own questions and so on). */
   extra: ExtraAnswers;
@@ -317,7 +318,24 @@ export interface DecFormDraft extends Omit<DecFormFields, 'teamId'> {
 }
 
 /** One draft per team, so opening another team never writes over unfinished work. */
-export const decDraftKey = (competitionId: number, teamId: number): string => `mg.draft.decform.v2:${competitionId}:${teamId}`;
+export const decDraftKey = (competitionId: number, teamId: number, userId = ''): string => `mg.draft.decform.v3:${encodeURIComponent(userId)}:${competitionId}:${teamId}`;
+
+export function readDecDraft(competitionId: number, teamId: number, required: number, userId: string | undefined, now = Date.now()): DecFormDraft | null {
+  if (!userId) return null;
+  try {
+    localStorage.removeItem(`mg.draft.decform.v2:${competitionId}:${teamId}`);
+    const key = decDraftKey(competitionId, teamId, userId);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (value?.userId !== userId || !Number.isFinite(value?.savedAt)
+      || value.savedAt > now || now - value.savedAt >= 24 * 60 * 60 * 1000 || value.teamId !== teamId) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parseDraft(raw, required);
+  } catch { return null; }
+}
 
 export function parseDraft(raw: string | null, required: number): DecFormDraft | null {
   if (!raw) return null;

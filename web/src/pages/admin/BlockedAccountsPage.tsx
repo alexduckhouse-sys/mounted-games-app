@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
-import { api } from '../../api';
+import { api, getIpBlocks, createIpBlock, deleteIpBlock, type IpBlock } from '../../api';
 import { Notice } from '../../components/Notice';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { problemMessage } from '../../lib/apiError';
 import { useT } from '../../i18n/LanguageContext';
+import { useAuth } from '../../auth/AuthContext';
 import { activeLocale, tr } from '../../i18n/translate';
 import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import { accountKind, type AdminUser, type BlockedAccount } from './accountAccessTypes';
@@ -18,6 +19,8 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString(activeLocale
 /** Find an account, block it with a reason only admins see, and unblock accounts from the list below. */
 export function BlockedAccountsPage() {
   const t = useT();
+  const { hasRole } = useAuth();
+  const master = hasRole('MasterAdmin');
   const [blocked, setBlocked] = useState<BlockedAccount[] | null>(null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string | null>(null);
@@ -25,6 +28,28 @@ export function BlockedAccountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const search = useAccountSearch(query);
+  const [ipError, setIpError] = useState<string | null>(null);
+  const [ipBlocks, setIpBlocks] = useState<IpBlock[] | null>(null);
+  const [ip, setIp] = useState('');
+  const [ipReason, setIpReason] = useState('');
+  const [ipFormOpen, setIpFormOpen] = useState(false);
+  const loadIpBlocks = () => getIpBlocks().then(({ data }) => { setIpError(null); setIpBlocks(Array.isArray(data) ? data.filter((block) => block && typeof block.id === 'number' && typeof block.ipAddress === 'string' && typeof block.createdAt === 'string') : []); })
+    .catch(() => { setIpError('Couldn’t load blocked IP addresses. Try again.'); });
+  useEffect(() => { if (master) void loadIpBlocks(); }, [master]);
+
+  async function addIpBlock() {
+    if (!ip.trim() || busy) return;
+    if (!(await confirmDialog({ title: 'Block this IP address?', message: 'This blocks everyone using this network, which may include other people at the event.', confirmLabel: 'Block address', destructive: true }))) return;
+    await run(async () => {
+      await createIpBlock({ ip: ip.trim(), reason: ipReason.trim() });
+      setIp(''); setIpReason(''); setIpFormOpen(false);
+      await loadIpBlocks();
+    }, 'Couldn’t block that address. Check it and try again.');
+  }
+
+  const maskedIp = (value: string) => value.startsWith('sha256:') || value.length > 45
+    ? `Network ${value.slice(-8)}`
+    : value.includes(':') ? `${value.split(':').slice(0, 2).join(':')}:…` : value.replace(/\.\d+$/, '.*');
 
   const load = () => api.get<BlockedAccount[]>('/admin/blocked-users')
     .then(({ data }) => setBlocked(Array.isArray(data) ? data : []))
@@ -120,6 +145,24 @@ export function BlockedAccountsPage() {
             {blocked.length === 0 && <div className="rf-row"><span className="rf-t2">{t('admin.accounts.blocked.none')}</span></div>}
           </RefineList>
         )}
+        {master && <>
+        <h2 className="rf-sec ops-tt-head">Blocked IP addresses</h2>
+        {ipError && <Notice role="status">{ipError}</Notice>}
+        <RefineList as="div" label="Blocked IP addresses">
+          {ipBlocks === null && <div className="rf-row"><span role="status">Loading blocked addresses…</span><button type="button" className="rf-btn" onClick={() => void loadIpBlocks()}>Retry</button></div>}
+          {ipBlocks?.map((block) => <div className="rf-row" key={block.id}>
+            <span className="rf-grow"><span className="rf-t1">{maskedIp(block.ipAddress)}</span><span className="rf-t2">{[block.reason, shortDate(block.createdAt)].filter(Boolean).join(' · ')}</span></span>
+            <button type="button" className="ops-danger-link" disabled={busy} aria-label={`Unblock ${maskedIp(block.ipAddress)}`} onClick={() => void run(async () => { await deleteIpBlock(block.id); await loadIpBlocks(); }, 'Couldn’t unblock that address. Try again.')}>Unblock</button>
+          </div>)}
+          {ipBlocks?.length === 0 && <div className="rf-row"><span className="rf-t2">No manually blocked addresses.</span></div>}
+        </RefineList>
+        <button type="button" className="sp-add" aria-expanded={ipFormOpen} onClick={() => setIpFormOpen(!ipFormOpen)}>+ Block an IP address</button>
+        {ipFormOpen && <form className="sp-card p-4 space-y-3" onSubmit={(event) => { event.preventDefault(); void addIpBlock(); }}>
+          <label className="rf-fld">IP address<input value={ip} maxLength={45} autoComplete="off" onChange={(event) => setIp(event.target.value)} /></label>
+          <label className="rf-fld">Reason<input value={ipReason} maxLength={500} onChange={(event) => setIpReason(event.target.value)} /></label>
+          <button type="submit" className="ops-danger-link" disabled={busy || !ip.trim()}>Block address</button>
+        </form>}
+        </>}
       </div>
     </RefinePage>
   );

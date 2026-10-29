@@ -30,7 +30,7 @@ vi.mock('../../auth/AuthContext', () => ({
     canOrganise: () => state.organise,
   }),
 }));
-vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, put: state.put, delete: state.del } }));
+vi.mock('../../api', () => ({ readStoredAuth: () => state.user ? { user: state.user } : null, api: { get: state.get, post: state.post, put: state.put, delete: state.del } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: state.download }));
 
 const saved: SavedRider[] = [
@@ -607,7 +607,7 @@ describe('DeclarationsTab: drafts', () => {
   it('keeps nothing until something is typed', async () => {
     mount();
     await screen.findByRole('heading', { name: 'Stockport C' });
-    expect(localStorage.getItem(decDraftKey(4, 7))).toBeNull();
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).toBeNull();
   });
 
   it('keeps work in progress on the device, and brings it back with the same team open', async () => {
@@ -617,7 +617,7 @@ describe('DeclarationsTab: drafts', () => {
     await user.click(addBar());
     await user.click(screen.getByRole('button', { name: 'Ella Hughes · Pickle' }));
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
-    expect(JSON.parse(localStorage.getItem(decDraftKey(4, 7))!)).toMatchObject({ teamId: 7, bibs: 'Green stripes' });
+    expect(JSON.parse(localStorage.getItem(decDraftKey(4, 7, 'u1'))!)).toMatchObject({ teamId: 7, bibs: 'Green stripes' });
     first.unmount();
 
     mount();
@@ -630,7 +630,7 @@ describe('DeclarationsTab: drafts', () => {
     const user = userEvent.setup();
     mount();
     await user.type(await screen.findByLabelText('Bibs'), 'Green');
-    expect(localStorage.getItem(decDraftKey(4, 7))).not.toBeNull();
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).not.toBeNull();
     await user.click(addBar());
     for (const name of ['Ella Hughes · Pickle', 'Oliver Smith · Bramble', 'Maisie Clarke · Toffee', 'Harry Wood · Jasper', 'Ruby Ash · Domino']) {
       await user.click(screen.getByRole('button', { name }));
@@ -639,11 +639,11 @@ describe('DeclarationsTab: drafts', () => {
     await user.click(agree());
     await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     await screen.findByText('Declaration form sent. You can still change it.');
-    expect(localStorage.getItem(decDraftKey(4, 7))).toBeNull();
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).toBeNull();
   });
 
   it('ignores a draft that does not fit the team', async () => {
-    localStorage.setItem(decDraftKey(4, 7), JSON.stringify({ teamId: 7, slots: [null, null] }));
+    localStorage.setItem(decDraftKey(4, 7, 'u1'), JSON.stringify({ teamId: 7, slots: [null, null] }));
     mount();
     expect(await screen.findByText('0 of 5 · 4 needed · reserve optional')).toBeInTheDocument();
   });
@@ -962,5 +962,31 @@ describe('DeclarationsTab: organiser tools in the dock', () => {
     await opened();
     expect(screen.getByRole('button', { name: 'Show dec form QR code' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Dec form tools' })).not.toBeInTheDocument();
+  });
+});
+
+describe('declaration security privacy controls', () => {
+  it('defaults children to initials and preserves a deliberate opt-out during date edits', async () => {
+    const user = userEvent.setup();
+    mount(); await opened();
+    await user.click(addBar());
+    const control = screen.getByRole('switch', { name: 'Show surname as initial only on public start lists and results' });
+    await user.type(screen.getByLabelText('Date of birth'), '01/01/2015');
+    expect(control).toHaveAttribute('aria-checked', 'true');
+    await user.click(control);
+    await user.clear(screen.getByLabelText('Date of birth'));
+    await user.type(screen.getByLabelText('Date of birth'), '02/01/2015');
+    expect(control).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('does not restore the previous account’s draft after switching users', async () => {
+    const user = userEvent.setup();
+    const view = mount(); await opened();
+    await user.type(screen.getByLabelText('Bibs'), 'Fake private draft');
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).toContain('Fake private draft');
+    view.unmount();
+    state.user = { ...state.user!, id: 'u2' }; state.organise = true;
+    mount(); await opened();
+    expect(screen.getByLabelText('Bibs')).toHaveValue('');
   });
 });

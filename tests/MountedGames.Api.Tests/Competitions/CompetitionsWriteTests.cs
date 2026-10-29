@@ -170,8 +170,15 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         Assert.Equal(lon, c.Longitude);
     }
 
+    [Fact]
+    public async Task Create_RefusesMalformedAppleMapsUrl()
+    {
+        var admin = await _f.AdminAsync();
+        var response = await admin.PostAsJsonAsync("/api/competitions", CreateBody(apple: "not a url at all"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
-    [InlineData("not a url at all")]
     [InlineData("https://maps.apple.com/?q=Some%20Pub")]
     [InlineData("https://maps.apple.com/?ll=abc,def")]
     [InlineData("https://maps.apple.com/place/nowhere")]
@@ -683,13 +690,13 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task DeleteSection_Returns403_ForTrainer()
+    public async Task DeleteSection_Returns404_ForUnrelatedTrainer()
     {
         var comp = await _f.SeedCompetitionAsync();
         var sec = await _f.SeedSectionAsync(comp);
         var trainer = await _f.TrainerAsync();
         var r = await trainer.DeleteAsync($"/api/competitions/{comp}/sections/{sec}");
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]

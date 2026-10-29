@@ -174,6 +174,8 @@ public class ClubMembersController(AppDbContext db, UserManager<AppUser> users) 
         if (target is null || target.ClubId != clubId) return (null, null, NotFound());
         var roles = await users.GetRolesAsync(target);
         if (roles.Contains(Roles.Admin)) return (null, null, NotFound());
+        if (target.LockedAt != null || target.BlockedAt != null)
+            return (null, null, Conflict(new { message = "This account is locked or blocked. A site admin must restore access before its club role can change." }));
         if (target.Id == ClubAccess.UserIdOf(User))
             return (null, null, Conflict(new { message = "You can't change your own place in the club." }));
         return (target, roles, null);

@@ -30,6 +30,18 @@ public class ScopedStreamSecurityTests(StreamingApiFactory f) : IClassFixture<St
     }
 
     [Theory]
+    [InlineData(ScorerLink.ScopeScore)]
+    [InlineData(ScorerLink.ScopeCamera)]
+    [InlineData(ScorerLink.ScopeScoreAndStream)]
+    public async Task NoQrLinkCanReadPublisherNames(int scope)
+    {
+        var competition = await f.SeedCompetitionAsync();
+        using var link = await Link(competition, scope);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await link.GetAsync(Path(competition, suffix: "/publishers"))).StatusCode);
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(2)]
     public async Task LinkCanManageItsOwnPublisherAndTakeOverItsOwnAngle(int scope)

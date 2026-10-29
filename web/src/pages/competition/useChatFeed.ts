@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { updateChatMessage } from '../../lib/announcements';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { ChatMessage } from '../../types';
@@ -34,7 +35,7 @@ export function useChatFeed(competitionId: number, failure: string) {
   }, [request]);
 
   const add = useCallback((message: ChatMessage) =>
-    setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]), []);
+    setMessages((current) => updateChatMessage(current, message)), []);
   const remove = useCallback((id: number) => setMessages((current) => current.filter((item) => item.id !== id)), []);
 
   useLiveHub(competitionId, {

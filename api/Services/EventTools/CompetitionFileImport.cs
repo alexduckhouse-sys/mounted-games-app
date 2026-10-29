@@ -399,7 +399,8 @@ public static class CompetitionFileImport
     private static Team NewTeam(Competition competition, CompetitionSection section, Club club, List<string> riders, int ridersPerTeam)
     {
         // Named the way a find-a-pair match names a pair: "Rider & Rider".
-        var names = riders.Count < ridersPerTeam ? riders.Append(MissingPartner) : riders;
+        var formatted = riders.Select(r => RiderNames.Display(r, DecForms.DecFormRules.HasSingleLetterSurnameInitial(r), viewerSeesFullNames: false));
+        var names = riders.Count < ridersPerTeam ? formatted.Append(MissingPartner) : formatted;
         var team = new Team
         {
             Competition = competition,
@@ -410,7 +411,7 @@ public static class CompetitionFileImport
         };
         var form = new DeclarationForm { Team = team };
         for (var i = 0; i < riders.Count; i++)
-            form.Riders.Add(new RiderEntry { DeclarationForm = form, FullName = riders[i], IsCaptain = i == 0, OrderIndex = i });
+            form.Riders.Add(new RiderEntry { DeclarationForm = form, FullName = riders[i], UseInitialOnly = DecForms.DecFormRules.HasSingleLetterSurnameInitial(riders[i]), IsCaptain = i == 0, OrderIndex = i });
         team.DeclarationForms.Add(form);
         competition.Teams.Add(team);
         section.Teams.Add(team);

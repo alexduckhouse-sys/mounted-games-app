@@ -37,10 +37,10 @@ function mayLock(account: { id: string; email: string | null; roles: readonly st
 /** Site admin: invite organisers and site admins, lock staff accounts, and find anyone to make an admin or block. */
 export function UsersPage() {
   const t = useT();
-  const accessOptions: { value: 'organiser' | 'admin'; label: string }[] = [{ value: 'organiser', label: t('admin.accounts.users.organiser') }, { value: 'admin', label: t('admin.accounts.users.siteAdmin') }];
   const accessHint = { organiser: t('admin.accounts.users.hintOrganiser'), admin: t('admin.accounts.users.hintAdmin') };
   const { user, hasRole } = useAuth();
   const isMaster = hasRole('MasterAdmin');
+  const accessOptions: { value: 'organiser' | 'admin'; label: string }[] = [{ value: 'organiser', label: t('admin.accounts.users.organiser') }, ...(isMaster ? [{ value: 'admin' as const, label: t('admin.accounts.users.siteAdmin') }] : [])];
   const [staff, setStaff] = useState<StaffAccount[] | null>(null);
   const [invites, setInvites] = useState<AccountInvite[] | null>(null);
   const [email, setEmail] = useState('');
@@ -71,7 +71,7 @@ export function UsersPage() {
 
   const canSend = EMAIL_PATTERN.test(email.trim());
   const sendInvite = () => run(async () => {
-    const { data } = await api.post<AccountInvite>('/admin/invites', { email: email.trim(), access: (access === 'admin' ? 1 : 0) satisfies InviteAccess });
+    const { data } = await api.post<AccountInvite>('/admin/invites', { email: email.trim(), access: (isMaster && access === 'admin' ? 1 : 0) satisfies InviteAccess });
     setInvites((current) => [data, ...(current ?? []).filter((i) => i.id !== data.id)]);
     setEmail('');
   }, t('admin.accounts.users.inviteFailed'));
@@ -151,8 +151,8 @@ export function UsersPage() {
                 <LeavingRow as="div" key={invite.id} className="rf-row">
                   <span className="rf-grow"><span className="rf-t1">{invite.email}</span><span className="rf-t2">{inviteDetail(invite)}</span></span>
                   <span className="ops-acts">
-                    <button type="button" className="rf-btn" aria-label={t('admin.accounts.users.resendAria', { email: invite.email })} disabled={busy} onClick={() => void resend(invite)}>{t('admin.accounts.users.resend')}</button>
-                    <button type="button" className="ops-danger-link" aria-label={t('admin.accounts.users.cancelAria', { email: invite.email })} disabled={busy} onClick={() => void cancel(invite)}>{t('admin.accounts.users.cancelInvite')}</button>
+                    <button type="button" className="rf-btn" aria-label={t('admin.accounts.users.resendAria', { email: invite.email })} disabled={busy || (invite.access === 1 && !isMaster)} onClick={() => void resend(invite)}>{t('admin.accounts.users.resend')}</button>
+                    <button type="button" className="ops-danger-link" aria-label={t('admin.accounts.users.cancelAria', { email: invite.email })} disabled={busy || (invite.access === 1 && !isMaster)} onClick={() => void cancel(invite)}>{t('admin.accounts.users.cancelInvite')}</button>
                   </span>
                 </LeavingRow>
               ))}

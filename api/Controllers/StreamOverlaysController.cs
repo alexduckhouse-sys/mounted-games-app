@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
@@ -24,6 +26,9 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
     private const int MaxArenaLength = 80;
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<StreamOverlayDto>> Get(int competitionId)
     {
         if (!await db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();

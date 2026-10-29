@@ -15,6 +15,8 @@ public static class CustomEmailAudiences
 {
     public sealed record Recipient(string Address, int? OptInId);
 
+    public static bool RequiresConsent(CustomEmailAudience audience) => audience is CustomEmailAudience.News or CustomEmailAudience.Trainers or CustomEmailAudience.OrganisersAndAdmins;
+
     public static string Label(CustomEmailAudience audience) => audience switch
     {
         CustomEmailAudience.News => "People who said yes to news",
@@ -25,8 +27,9 @@ public static class CustomEmailAudiences
     };
 
     /// <summary>
-    /// News: everyone still opted in, one row per address. The others: accounts holding the role whose address is confirmed,
-    /// that haven't been emptied by account deletion or locked or blocked by an admin, and are a real mailbox (not a made-up username address).
+    /// News: everyone still opted in, one row per address. Role audiences: accounts whose address is confirmed,
+    /// that haven't been emptied by account deletion or locked or blocked by an admin, and have a real mailbox.
+    /// Every audience that includes trainers also requires active news consent; admin-only messages remain operational.
     /// Duplicates are removed, ignoring case.
     /// </summary>
     public static async Task<List<Recipient>> ResolveAsync(AppDbContext db, CustomEmailAudience audience, CancellationToken ct)
@@ -58,7 +61,17 @@ public static class CustomEmailAudiences
             var people = await db.Users.AsNoTracking()
                 .Where(u => holders.Contains(u.Id) && u.EmailConfirmed && u.Email != null && u.LockedAt == null && u.BlockedAt == null)
                 .OrderBy(u => u.Id).Select(u => new { u.Email, u.LockoutEnd }).ToListAsync(ct);
-            foreach (var person in people.Where(p => p.LockoutEnd != DateTimeOffset.MaxValue)) Add(person.Email, null);
+            // Role membership is not promotional consent. Reuse the existing news opt-in and unsubscribe mechanism.
+            var consents = RequiresConsent(audience)
+                ? (await db.EmailOptIns.AsNoTracking().Where(o => o.UnsubscribedAt == null)
+                    .OrderBy(o => o.Id).Select(o => new { o.Email, o.Id }).ToListAsync(ct))
+                    .GroupBy(o => o.Email, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase)
+                : null;
+            foreach (var person in people.Where(p => p.LockoutEnd != DateTimeOffset.MaxValue))
+            {
+                if (consents is null) Add(person.Email, null);
+                else if (EmailAddresses.TryNormalise(person.Email, out var address) && consents.TryGetValue(address, out var optInId)) Add(address, optInId);
+            }
         }
         return found.Values.ToList();
     }
@@ -368,7 +381,7 @@ public sealed class CustomEmailService(
 
         // Someone who unsubscribed since the send began is left out.
         HashSet<string>? stillOptedIn = null;
-        if (email.Audience == CustomEmailAudience.News && mine.Count > 0)
+        if (CustomEmailAudiences.RequiresConsent(email.Audience) && mine.Count > 0)
         {
             var addresses = mine.Select(r => r.Address).ToList();
             stillOptedIn = (await db.EmailOptIns.AsNoTracking().Where(o => o.UnsubscribedAt == null && addresses.Contains(o.Email))
@@ -381,7 +394,7 @@ public sealed class CustomEmailService(
         for (var i = 0; i < mine.Count; i++)
         {
             var recipient = mine[i];
-            if (stillOptedIn is not null && !stillOptedIn.Contains(recipient.Address))
+            if (stillOptedIn is not null && (recipient.OptInId is null || !stillOptedIn.Contains(recipient.Address)))
             {
                 await SettleAsync(email.Id, recipient, token, CustomEmailRecipientStatus.Sent, 0, 0, 1, ct);
                 skipped++;
@@ -494,7 +507,7 @@ public sealed class CustomEmailService(
     {
         string? unsubscribe = null;
         Dictionary<string, string>? headers = null;
-        if (email.Audience == CustomEmailAudience.News && recipient.OptInId is { } optInId)
+        if (CustomEmailAudiences.RequiresConsent(email.Audience) && recipient.OptInId is { } optInId)
         {
             unsubscribe = $"{site}/unsubscribe?token={Uri.EscapeDataString(EmailUnsubscribeTokens.Create(configuration, optInId))}";
             // RFC 8058 one-click: a mail app POSTs to the first address without opening a page.
