@@ -1,5 +1,8 @@
 import type { Heat, Session, StandingRow, Team } from '../types';
 import { lanesInUse, sitsOut } from './lanes.ts';
+import { ordinal } from './ordinalText.ts';
+
+export { ordinal };
 
 export interface ToplistRow {
   teamId: number;
@@ -191,13 +194,6 @@ function inSection(session: Session, sectionId: number, teamIds: ReadonlySet<num
   if (teamIds.size === 0) return false;
   return session.heats.some((heat) => heat.entries.some((entry) => teamIds.has(entry.teamId))
     || heat.races.some((race) => race.results.some((result) => teamIds.has(result.teamId))));
-}
-
-/** "1st", "2nd", "3rd", "11th", "22nd". */
-export function ordinal(n: number): string {
-  const teen = n % 100 >= 11 && n % 100 <= 13;
-  const suffix = teen ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
-  return `${n}${suffix}`;
 }
 
 /**

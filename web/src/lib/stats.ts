@@ -1,7 +1,8 @@
 import type { StatsBrowse, StatsGame, StatsHit, StatsProfile, StatsSubjectKind, StatsSummary } from '../types';
 import { formatPoints } from './formatPoints';
 import { tr } from '../i18n/translate';
-import { localOrdinal } from './ordinalText';
+
+export { ordinalPlace } from './ordinalText';
 
 /** The API's limits on a search or profile name (`StatsNames` in the API). */
 export const STATS_MIN_QUERY = 2;
@@ -44,11 +45,6 @@ export function isSearchableQuery(value: string): boolean {
 export function formatPercent(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
-}
-
-/** 1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st. */
-export function ordinalPlace(place: number): string {
-  return localOrdinal(place);
 }
 
 /** "A Final" for tier 0, "B Final" for 1, and so on; null when not in a lettered final. */

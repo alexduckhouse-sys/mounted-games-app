@@ -10,28 +10,42 @@ namespace MountedGames.Api.Services;
 /// </summary>
 public static class UkTime
 {
-    private static readonly TimeZoneInfo? Zone = Find();
+    private static readonly TimeZoneInfo? SystemZone = Find();
+
+    /// <summary>Shared UK time zone (<c>Europe/London</c> / <c>GMT Standard Time</c>, falling back to UTC when the host has no zone database).</summary>
+    public static TimeZoneInfo Zone { get; } = SystemZone ?? TimeZoneInfo.Utc;
 
     private static TimeZoneInfo? Find()
     {
         try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException) { return null; }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time"); }
+            catch (Exception fallbackEx) when (fallbackEx is TimeZoneNotFoundException or InvalidTimeZoneException) { return null; }
+        }
     }
 
     private static DateTime AsUtc(DateTime value) =>
         value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
+    public static DateTime Now => ToUk(DateTime.UtcNow);
+
+    public static DateTime FromUtc(DateTime utc) => ToUk(utc);
+
     public static DateTime ToUk(DateTime utc)
     {
         utc = AsUtc(utc);
-        return Zone is null ? ToUkByRule(utc) : TimeZoneInfo.ConvertTimeFromUtc(utc, Zone);
+        return SystemZone is null ? ToUkByRule(utc) : TimeZoneInfo.ConvertTimeFromUtc(utc, SystemZone);
     }
 
-    /// <summary>The UTC instant of a UK wall-clock time (not for the hour that is skipped or repeated at a clock change).</summary>
+    /// <summary>The UTC instant of a UK wall-clock time (advancing past the spring-forward skipped hour if needed).</summary>
     public static DateTime FromUk(DateTime ukLocal)
     {
         var local = DateTime.SpecifyKind(ukLocal, DateTimeKind.Unspecified);
-        return Zone is null ? FromUkByRule(local) : DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeToUtc(local, Zone), DateTimeKind.Utc);
+        if (SystemZone is null) return FromUkByRule(local);
+        if (SystemZone.IsInvalidTime(local)) local = local.AddHours(1);
+        var offset = SystemZone.GetUtcOffset(local);
+        return DateTime.SpecifyKind(local - offset, DateTimeKind.Utc);
     }
 
     /// <summary>The UK calendar date of an instant, as <c>yyyy-MM-dd</c>.</summary>

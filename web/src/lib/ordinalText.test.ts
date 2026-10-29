@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { setActiveLang } from '../i18n/translate';
-import { localOrdinal } from './ordinalText';
+import { localOrdinal, ordinal, ordinalPlace } from './ordinalText';
 
 describe('localOrdinal', () => {
-  it('matches the English ordinals', () => {
+  it('matches the English ordinals and returns non-positive numbers as plain digits', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 101, 111].map((n) => localOrdinal(n, 'en'))).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '101st', '111th']);
+    expect([0, -1, -11].map(ordinal)).toEqual(['0', '-1', '-11']);
+    expect([0, -1].map((n) => localOrdinal(n, 'fr'))).toEqual(['0', '-1']);
+    expect([0, -1].map((n) => localOrdinal(n, 'cy'))).toEqual(['0', '-1']);
   });
 
   it('writes French ordinals', () => {
@@ -16,8 +19,11 @@ describe('localOrdinal', () => {
   });
 
   it('follows the active language by default', () => {
+    setActiveLang('en');
     expect(localOrdinal(1)).toBe('1st');
+    expect(ordinalPlace(1)).toBe('1st');
     setActiveLang('fr');
     expect(localOrdinal(1)).toBe('1er');
+    expect(ordinalPlace(1)).toBe('1er');
   });
 });

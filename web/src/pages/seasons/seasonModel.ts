@@ -1,13 +1,9 @@
 import { activeLocale, tr } from '../../i18n/translate';
-import { localOrdinal } from '../../lib/ordinalText';
 import type { SectionFormat } from '../../types';
 import type { StatusTone } from '../refine/Refine';
 import type { SeasonRoundView, SeasonView, StandingView } from './seasonViewTypes';
 
-/** 1st, 2nd, 3rd in English; 1af, 2il, 3ydd in Welsh; 1er, 2e in French. */
-export function ordinal(value: number): string {
-  return localOrdinal(value);
-}
+export { ordinalPlace as ordinal } from '../../lib/ordinalText';
 
 /** Tied teams share a rank; show those as "=3". */
 export function positionLabels(standings: StandingView[]): Map<string, string> {

@@ -674,7 +674,10 @@ public class TieBreakerUnitTests
 
         Assert.Equal("0", TieBreaker.Ordinal(0));
         Assert.Equal("-1", TieBreaker.Ordinal(-1));
+        Assert.Equal("0", PushNotifier.Ordinal(0));
+        Assert.Equal("-5", PushNotifier.Ordinal(-5));
         Assert.Equal("1st", TieBreaker.Ordinal(1));
+        Assert.Equal("1st", PushNotifier.Ordinal(1));
         Assert.Equal("2nd", TieBreaker.Ordinal(2));
         Assert.Equal("3rd", TieBreaker.Ordinal(3));
         Assert.Equal("4th", TieBreaker.Ordinal(4));

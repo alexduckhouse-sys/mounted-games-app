@@ -58,39 +58,27 @@ public sealed record CompetitionSetup(
         catch (JsonException) { return null; }
     }
 
-    internal static readonly TimeZoneInfo UkTimeZone = ResolveUkTimeZone();
+    internal static TimeZoneInfo UkTimeZone => UkTime.Zone;
 
-    static TimeZoneInfo ResolveUkTimeZone()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
-        catch { return TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time"); }
-    }
-
-    internal static DateTime ToLondonWallClock(DateTime value)
-    {
-        var utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        return TimeZoneInfo.ConvertTimeFromUtc(utc, UkTimeZone);
-    }
+    internal static DateTime ToLondonWallClock(DateTime value) => UkTime.ToUk(value);
 
     internal static DateTime AnchorWallClock(DateTime eventStart)
     {
         var utc = eventStart.Kind == DateTimeKind.Local ? eventStart.ToUniversalTime() : DateTime.SpecifyKind(eventStart, DateTimeKind.Utc);
         return utc.TimeOfDay == TimeSpan.Zero
             ? DateTime.SpecifyKind(utc.Date, DateTimeKind.Unspecified)
-            : TimeZoneInfo.ConvertTimeFromUtc(utc, UkTimeZone);
+            : UkTime.ToUk(utc);
     }
 
-    internal static DateTime FromLondonWallClock(DateTime wallClock)
+    internal static DateTime FromLondonWallClock(DateTime wallClock) => UkTime.FromUk(wallClock);
+
+    internal static double OffsetMinutesFromStart(DateTime scheduledStart, DateTime eventStart)
     {
-        var unspecified = DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified);
-        if (UkTimeZone.IsInvalidTime(unspecified))
-            unspecified = unspecified.AddHours(1);
-        var offset = UkTimeZone.GetUtcOffset(unspecified);
-        return DateTime.SpecifyKind(unspecified - offset, DateTimeKind.Utc);
+        var schedWall = scheduledStart.TimeOfDay == TimeSpan.Zero && eventStart.TimeOfDay == TimeSpan.Zero
+            ? AnchorWallClock(scheduledStart)
+            : ToLondonWallClock(scheduledStart);
+        return (schedWall - AnchorWallClock(eventStart)).TotalMinutes;
     }
-
-    internal static double OffsetMinutesFromStart(DateTime scheduledStart, DateTime eventStart) =>
-        (ToLondonWallClock(scheduledStart) - AnchorWallClock(eventStart)).TotalMinutes;
 
     internal static DateTime ApplyOffsetMinutes(DateTime eventStart, double offsetMinutes) =>
         FromLondonWallClock(AnchorWallClock(eventStart).AddMinutes(offsetMinutes));
