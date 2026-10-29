@@ -68,7 +68,7 @@ beforeEach(() => {
 describe('step 1: what you are entering', () => {
   it('lists each age group with its entry types and fees, and a three-step stepper', () => {
     mount('/competitions/1/enter', [section(), section({ id: 6, displayName: 'Under 16', format: 3, priceMinor: 2550 })]);
-    expect(screen.getByRole('heading', { name: 'What are you entering?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Choose your entry' })).toBeInTheDocument();
     expect(stepLabels()).toEqual(['1Section', '2Your details', '3Pay']);
     const teams = screen.getByRole('region', { name: 'Under 12' });
     expect(within(teams).getByRole('link', { name: /^Team£10/ })).toHaveAttribute('href', '/competitions/1/enter/5');

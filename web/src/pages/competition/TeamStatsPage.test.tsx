@@ -42,16 +42,25 @@ function mount(teamId = 1, data: CompetitionDetail = comp) {
 const fact = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling as HTMLElement;
 
 describe('TeamStatsPage', () => {
-  it('lists every fact: averages, wins, point quota, best and hardest race, total points and the finals reached', () => {
+  it('leads with total points, points per race and races won, then the placings and points behind them', () => {
     mount();
-    expect(fact('Average per race')).toHaveTextContent('1.8 pts');
-    expect(fact('Average place')).toHaveTextContent('1.8');
+    const summary = screen.getByRole('region', { name: 'At a glance' });
+    expect(within(summary).getAllByRole('term').map((node) => node.textContent)).toEqual(['Total points', 'Points per race', 'Races won']);
+    expect(fact('Total points')).toHaveTextContent('9');
+    expect(fact('Points per race')).toHaveTextContent('1.8');
     expect(fact('Races won')).toHaveTextContent('2 of 5');
-    expect(fact('Avg points')).toHaveTextContent('%');
+    expect(summary).not.toHaveTextContent('scored races');
+    expect(fact('Average place')).toHaveTextContent('1.8');
+    // 9 of the 15 points on offer in the five races it rode.
+    expect(fact('Share of the maximum points')).toHaveTextContent('60%');
     expect(fact('Best race')).toHaveTextContent('Mug Shuffle · 2.7 avg');
     expect(fact('Hardest race')).toHaveTextContent('Two Flag · 0.5 avg');
-    expect(fact('Total points')).toHaveTextContent('9');
     expect(fact('Finals reached')).toHaveTextContent('A Final');
+    // The page bar already says Stats, so no heading repeats it.
+    expect(screen.queryByRole('heading', { name: 'Stats' })).toBeNull();
+    // The placings and points are folded away until asked for.
+    const more = screen.getByText('Placings and points').closest('details')!;
+    expect(more).not.toHaveAttribute('open');
   });
 
   it('says none when the team reached no final, and leaves out best and hardest with a single race', () => {
@@ -62,56 +71,45 @@ describe('TeamStatsPage', () => {
     expect(screen.queryByText('Hardest race', { selector: 'dt' })).toBeNull();
   });
 
-  it('gives each race its points per run, with its runs, best place and total underneath', () => {
+  it('shows the first game as a graph of every run, with the points over each bar and only the heat or final under it', () => {
     mount();
-    const races = screen.getByRole('heading', { name: 'Each race' }).closest('section')!;
-    const items = within(races).getAllByRole('listitem');
-    expect(items).toHaveLength(2);
-    expect(items[0]).toHaveTextContent('Mug Shuffle');
-    expect(items[0]).toHaveTextContent('3 runs · best 1st · 8 pts in total');
-    expect(items[0]).toHaveTextContent('2.7 avg');
-    expect(items[1]).toHaveTextContent('Two Flag');
-    expect(items[1]).toHaveTextContent('2 runs · best 3rd · 1 pts in total');
-  });
-
-  it('opens a race into a graph of every run, with the place over each bar and the heat or final under it', async () => {
-    mount();
-    const toggle = screen.getByRole('button', { name: /Mug Shuffle/ });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('img', { name: 'Every run of Mug Shuffle' })).toBeNull();
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const graph = screen.getByRole('img', { name: 'Every run of Mug Shuffle' });
+    const section = screen.getByRole('heading', { name: 'Race performance' }).closest('section')!;
+    expect(within(section).getByLabelText('Game')).toHaveValue('Mug Shuffle');
+    expect(within(section).getAllByRole('option').map((node) => node.textContent)).toEqual(['Mug Shuffle', 'Two Flag']);
+    const graph = within(section).getByRole('img', { name: 'Every run of Mug Shuffle' });
     const drawn = [...graph.querySelectorAll('text')].map((node) => node.textContent);
-    expect(drawn).toEqual(expect.arrayContaining(['1st', '2nd', 'Heat 1', 'Heat B', 'A Final']));
+    // Points over the bars (not the places), heat names only underneath, no scale numbers.
+    expect(drawn).toEqual(['3', 'Heat 1', '2', 'Heat B', '3', 'A Final']);
     expect(graph.querySelectorAll('rect')).toHaveLength(3);
-    expect(screen.getByText('Average 2.7 pts a run')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Every run of Mug Shuffle' })).toHaveTextContent('A Final, 1st, 3 pts');
-    // Only one race is open at a time.
-    await userEvent.click(screen.getByRole('button', { name: /Two Flag/ }));
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(section).getByText('Average 2.7 points · 3 runs')).toBeInTheDocument();
+    // The placings are still there for screen readers.
+    expect(within(section).getAllByText('A Final, 1st, 3 pts').length).toBeGreaterThan(0);
   });
 
-  it('writes a put-out run as its letter, and an unplaced one in words', async () => {
+  it('switches the graph to another game from the picker, writing a put-out run in words', async () => {
     mount();
-    await userEvent.click(screen.getByRole('button', { name: /Two Flag/ }));
-    const graph = screen.getByRole('img', { name: 'Every run of Two Flag' });
-    expect([...graph.querySelectorAll('text')].map((node) => node.textContent)).toContain('DNF');
-    expect(screen.getByRole('region', { name: 'Every run of Two Flag' })).toHaveTextContent('Heat B, Did not finish, 0 pts');
+    await userEvent.selectOptions(screen.getByLabelText('Game'), 'Two Flag');
+    const section = screen.getByRole('heading', { name: 'Race performance' }).closest('section')!;
+    const graph = within(section).getByRole('img', { name: 'Every run of Two Flag' });
+    expect(graph.querySelectorAll('rect')).toHaveLength(2);
+    expect(within(section).queryByRole('img', { name: 'Every run of Mug Shuffle' })).toBeNull();
+    expect(within(section).getAllByText('Heat B, Did not finish, 0 pts').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('Heat 1, 3rd, 1 pts').length).toBeGreaterThan(0);
+    expect(within(section).getByText('Average 0.5 points · 2 runs')).toBeInTheDocument();
   });
 
-  it('closes an open race when it is tapped again', async () => {
+  it('goes back to the first game when it is picked again', async () => {
     mount();
-    const toggle = screen.getByRole('button', { name: /Mug Shuffle/ });
-    await userEvent.click(toggle);
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const picker = screen.getByLabelText('Game');
+    await userEvent.selectOptions(picker, 'Two Flag');
+    await userEvent.selectOptions(picker, 'Mug Shuffle');
+    expect(screen.getByRole('img', { name: 'Every run of Mug Shuffle' })).toBeInTheDocument();
   });
 
   it('says stats show once the team has raced', () => {
     mount(2, competition({ teams: comp.teams, sessions: [session(1, { heats: [heat(1, { entries, races: [race(1, { name: 'Mug Shuffle' })] })] })] }));
     expect(screen.getByText('Stats show once Rockwood has raced.')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Each race' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Race performance' })).toBeNull();
   });
 
   it('handles an unknown team', () => {

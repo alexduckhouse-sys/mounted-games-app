@@ -1,0 +1,49 @@
+/* The Teams tab in the flat page language (theme/flat.css): each age group is a heading and a list of rows on the
+   page, with hairlines between them and a navy rule under each age group's heading (as on Enter). Team and club names
+   wrap rather than truncate. A team you follow is a soft tinted band running to the screen edges, with its filled star. */
+.tm { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.tm-group { display: flex; flex-direction: column; }
+.tm-group > .fl-heading { margin-top: 10px; padding-bottom: 8px; border-bottom: 2px solid rgb(var(--mg-heading)); }
+
+/* Compact rows: one line when the team's name says it all, two when there is something more to tell. The 44px star
+   keeps the row a comfortable target either way. */
+.tm-row { position: relative; gap: 4px; padding-block: 2px; padding-right: 0; min-height: 48px; }
+.tm-row:has(.fl-sub) { padding-block: 6px; }
+.tm-row .fl-grow { gap: 1px; }
+.tm-row .fl-sub { line-height: 1.25; }
+.tm-row:has(.tm-link:active) { background: var(--fl-press); }
+@media (hover: hover) { .tm-row:has(.tm-link:hover) { background: rgb(var(--mg-subtle)); } }
+.tm-row:has(.tm-link:focus-visible) { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.tm-link { color: inherit; text-decoration: none; outline: 0; }
+/* The name stretches over the whole row, so the row is one big target; the star and staff controls sit above it. */
+.tm-link::after { content: ""; position: absolute; inset: 0; }
+.tm-flag { display: inline-block; width: 20px; height: 14px; margin-right: 6px; border-radius: 2px; object-fit: cover; vertical-align: -1px; }
+.tm-out .fl-title { color: rgb(var(--mg-muted)); }
+.tm-flagged { color: rgb(var(--mg-late-time)); }
+.tm-over { position: relative; z-index: 1; }
+/* The follow star is its own 44px button beside the row link. Not following: muted and thin, so a column of them doesn't
+   shout. Following: gold and filled (the pop is FollowStar's). Pressing it dips for 160ms. */
+.tm-star { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background: transparent; cursor: pointer; color: rgb(var(--mg-muted)); transition: scale 160ms var(--mg-ease-out), color 160ms var(--mg-ease-out); }
+.tm-star svg { stroke-width: 1.5; }
+.tm-star:active { scale: .88; }
+.tm-star:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+@media (hover: hover) { .tm-star:hover { background: rgb(var(--mg-subtle)); color: rgb(var(--mg-heading)); } }
+.tm-star[aria-pressed="true"] { color: #C08308; }
+.tm-star[aria-pressed="true"] svg { stroke-width: 2; }
+
+/* Followed: a soft tint to the screen edges (the filled star says it), and the lines beside it go. */
+.tm-on { width: auto; margin-inline: -16px; padding-inline: 16px; background: var(--fl-follow); }
+.tm-on:has(.tm-link:active) { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
+.fl-list > .tm-on + *, .fl-list > * + .tm-on { border-top-color: transparent; }
+
+/* Wide screens: the age groups as a list down the side. */
+.tm-rail { display: flex; flex-direction: column; gap: 12px; }
+.tm-rail .fl-row { min-height: 48px; padding-block: 8px; font: 500 15px/1.3 var(--mg-font); }
+.tm-rail .fl-row[aria-pressed="true"] { color: rgb(var(--mg-heading)); font-weight: 600; box-shadow: inset 3px 0 0 rgb(var(--mg-heading)); padding-left: 12px; }
+.tm-rail .fl-row > span:first-child { flex: 1; min-width: 0; overflow-wrap: break-word; }
+.tm-rail .fl-row > span:last-child { flex: none; color: rgb(var(--mg-muted)); font: 500 13px/1 var(--mg-font); }
+
+@media (min-width: 1024px) { .tm-on { margin-inline: 0; padding-inline: 12px 0; border-radius: 8px; } }
+@media (prefers-reduced-motion: reduce) { .tm-row, .tm-star { transition: none; } .tm-star:active { scale: none; } }
+html[data-lite="true"] .tm-row, html[data-lite="true"] .tm-star { transition: none; }
+html[data-lite="true"] .tm-star:active { scale: none; }

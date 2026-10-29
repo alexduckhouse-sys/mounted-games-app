@@ -14,12 +14,12 @@
 .live-stream-caption .live-caption-sound { display: flex; width: 44px; align-items: center; justify-content: center; }
 .live-stream-caption .live-caption-sound svg { width: 18px; height: 18px; }
 .live-stream-caption .mg-badge-outline { border-color: rgb(255 255 255 / .7); background: rgb(var(--mg-header-deep) / .45); color: #fff; }
-.live-pinned { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1.5px solid rgb(var(--mg-heading)); border-radius: 12px; background: rgb(var(--mg-surface)); }
-.live-pinned-label { display: flex; align-items: center; gap: 6px; color: rgb(var(--mg-heading)); font: 700 12.5px/1 var(--mg-font); }
-.live-pinned-label svg { width: 14px; height: 14px; }
-.live-pinned strong { overflow-wrap: anywhere; font: 600 16px/1.35 var(--mg-font); color: rgb(var(--mg-ink)); }
-.live-pinned-meta { color: rgb(var(--mg-muted)); font: 500 12.5px/1 var(--mg-font); }
-.live-pinned-unpin { align-self: flex-start; min-height: 44px; margin-block: -6px -10px; padding: 0 2px; color: rgb(var(--mg-elim)); font: 600 14px/1 var(--mg-font); text-decoration: underline; text-underline-offset: 4px; }
+/* The pinned announcement is the page's one navy panel (.fl-panel in theme/flat.css). */
+.live-pinned { gap: 6px; }
+.live-pinned-label { font: 600 13px/1.2 var(--mg-font); opacity: .78; }
+.live-pinned strong { overflow-wrap: break-word; font: 600 17px/1.35 var(--mg-font); }
+.live-pinned-meta { font: 500 13px/1.2 var(--mg-font); opacity: .78; }
+.live-pinned-unpin { align-self: flex-start; min-height: 44px; margin-block: -6px -10px; padding: 0 2px; color: inherit; font: 600 14px/1 var(--mg-font); text-decoration: underline; text-underline-offset: 4px; }
 .live-announcements { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 7px; }
 .live-announcements .mg-section-head { flex-shrink: 0; padding-bottom: 0; border-bottom: 0; }
 .live-announcements .mg-section-head button { min-height: 36px; color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); }
@@ -81,6 +81,7 @@
 @keyframes live-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes live-dialog-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .live-overlay, .live-all-dialog, .staff-stream-dialog { animation: none; } }
+html[data-lite="true"] :is(.live-overlay, .live-all-dialog, .staff-stream-dialog) { animation: none; }
 /* Phones keep one column: the two groups are transparent. */
 .live-col { display: contents; }
 .live-stream-head { display: none; }
@@ -111,3 +112,35 @@
 }
 
 .live-all-dialog.is-dragging, .staff-stream-dialog.is-dragging { transition: none; }
+
+/* The flat page language (theme/flat.css) for the page around the player: the title sits on the page, section headings
+   are sentence case, and announcements are rows with hairlines rather than a card. The player is left as it is. */
+.live-page.mg-flat .live-page-band { min-height: 0; padding-block: 8px 0; margin-bottom: 0; border-image: none; }
+.live-page.mg-flat .live-page-band h1 { font: 700 28px/1.12 var(--mg-font); letter-spacing: -.015em; overflow-wrap: break-word; }
+.live-page.mg-flat .live-page-band .mg-badge-live { font: 600 12.5px/1 var(--mg-font); letter-spacing: 0; text-transform: none; }
+.live-page.mg-flat .live-role-badge { font: 600 12.5px/1 var(--mg-font); text-transform: none; }
+.live-page.mg-flat .mg-section-head { align-items: baseline; padding-bottom: 0; border-bottom: 0; }
+.live-page.mg-flat .mg-section-head h2 { font: 600 20px/1.2 var(--mg-font); letter-spacing: -.005em; text-transform: none; }
+.live-page.mg-flat .live-announcements { gap: 4px; margin-top: 12px; }
+.live-page.mg-flat .live-announcements .mg-section-head :is(a, button) { display: inline-flex; align-items: center; justify-content: flex-end; min-width: 44px; min-height: 44px; font: 600 14px/1 var(--mg-font); color: rgb(var(--mg-heading)); }
+.live-page.mg-flat .live-announcements > .live-pinned { margin-block: 4px 8px; }
+
+/* Before the stream starts: one plain line where the picture will be. */
+.live-page-public.mg-flat .live-stream-placeholder { justify-content: flex-start; min-height: 0; padding: 4px 0 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.live-page-public.mg-flat .live-stream-placeholder strong { font: 500 15.5px/1.45 var(--mg-font); color: rgb(var(--mg-muted)); }
+
+/* Announcements: rows on the page, the time in Barlow Condensed, each message in full. */
+.live-page.mg-flat .live-announcement-list, .live-page.mg-flat .live-feed-state { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+.live-page.mg-flat .live-announcement-list > * + * { border-top: 1px solid var(--fl-line); }
+.live-page.mg-flat .live-announcement-row { grid-template-columns: 46px minmax(0, 1fr); align-items: baseline; min-height: 56px; padding: 12px 4px 12px 0; background: transparent; }
+.live-page.mg-flat .live-announcement-row-staff { grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; }
+.live-page.mg-flat .live-announcement-row time { font: 700 17px/1.3 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.live-page-public.mg-flat .live-announcement-copy > span { display: block; overflow: visible; overflow-wrap: break-word; white-space: normal; -webkit-line-clamp: initial; font: 500 15.5px/1.45 var(--mg-font); color: rgb(var(--mg-ink)); }
+.live-page.mg-flat .live-empty, .live-page.mg-flat .live-feed-state { padding: 14px 0; font: 500 15px/1.45 var(--mg-font); color: rgb(var(--mg-muted)); }
+.live-page.mg-flat .fl-cta { margin-top: 8px; }
+
+@media (min-width: 1024px) {
+  .live-page.mg-flat .live-announcement-row { grid-template-columns: 52px minmax(0, 1fr); padding: 12px 4px 12px 0; }
+  .live-page.mg-flat .live-announcement-row-staff { grid-template-columns: 52px minmax(0, 1fr) auto; }
+  .live-page.mg-flat .live-stream-head { margin-bottom: 0; }
+}

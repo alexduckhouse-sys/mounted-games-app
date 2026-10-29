@@ -35,7 +35,7 @@ function renderBoard(ui = <TimetableBoard />) {
 function HeaderProbe() {
   const { header } = useCompactPageBarState();
   return <>
-    <output data-testid="header">{JSON.stringify({ title: header?.title, subtitle: header?.subtitle, label: header?.refreshLabel })}</output>
+    <output data-testid="header">{JSON.stringify({ title: header?.title, subtitle: header?.subtitle, tail: header?.subtitleTail, label: header?.refreshLabel })}</output>
     <button type="button" onClick={header?.refresh}>probe refresh</button>
     {header?.edit && <button type="button" aria-pressed={!!header.editing} onClick={header.edit}>{header.editLabel}</button>}
   </>;
@@ -53,7 +53,7 @@ function renderWithDock(ui = <TimetableBoard />) {
 }
 const filterButton = () => screen.queryByRole('button', { name: /^Day, arena and age group/ });
 const openFilters = () => { fireEvent.click(filterButton()!); return screen.getByRole('dialog', { name: 'Day, arena and age group' }); };
-const header = () => JSON.parse(screen.getByTestId('header').textContent!) as { title: string; subtitle: string; label: string };
+const header = () => JSON.parse(screen.getByTestId('header').textContent!) as { title: string; subtitle: string; tail?: string; label: string };
 const weekday = (key: string) => new Date(`${key}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
 
 beforeEach(() => {
@@ -68,14 +68,15 @@ beforeEach(() => {
 
 afterEach(() => { vi.useRealTimers(); });
 
-it('shows a late row with just "+6" beside it, no struck-out planned time', () => {
+it('shows a late row with "Delayed · +6 min" under it and no planned time', () => {
   // Delays cascade within an arena, so the second session shares the first one's arena.
   setCompetition({}, null, 'Main Arena');
   const { container } = renderBoard();
   const late = container.querySelector('.tt-late')!;
   expect(late).toHaveTextContent('Heat 2');
-  expect(late.querySelector('.tt-planned')!.textContent).toBe('+6');
-  expect(late.querySelector('.tt-planned s')).toBeNull();
+  expect(late.querySelector('.tt-shift')!.textContent).toBe('Delayed · +6 min');
+  // The planned time is only read out to screen readers; nothing on screen repeats it.
+  expect(late.querySelector('.tt-event')).not.toHaveTextContent(/planned/i);
   expect(late.querySelector('.tt-time')).toHaveClass('tt-time-late');
   expect(late.querySelector('.tt-shift-card')).toBeNull();
   // Screen readers get the planned time, the new time and the status in words.
@@ -86,12 +87,13 @@ it('shows a late row with just "+6" beside it, no struck-out planned time', () =
   expect(screen.queryByText('Main Arena · 6 min late')).toBeNull();
 });
 
-it('marks the running heat "ON NOW" without a planned-time note or late summary on the live session', () => {
+it('marks the running heat on now for screen readers only, without a planned-time note or late summary on the live session', () => {
   const { container } = renderBoard();
   const live = container.querySelector('.tt-live')!;
   expect(live).toHaveTextContent('Heat 1');
-  expect(within(live as HTMLElement).getByText('ON NOW')).toBeInTheDocument();
-  expect(live.querySelector('.tt-planned')).toBeNull();
+  // No races to count, so the status dot stands in and "On now" is spoken, not shown.
+  expect(within(live as HTMLElement).getByText('On now')).toHaveClass('sr-only');
+  expect(live.querySelector('.tt-shift')).toBeNull();
   expect(live.querySelector('.tt-time')).not.toHaveClass('tt-time-late');
   expect(screen.getByText('Main Arena · 1 heat')).toBeVisible();
   expect(screen.queryByRole('status')).toBeNull();
@@ -102,6 +104,31 @@ it('uses the count in the group summary when nothing is late', () => {
   renderBoard();
   expect(screen.getByText('Main Arena · 2 heats')).toBeVisible();
   expect(document.querySelector('.tt-summary-late')).toBeNull();
+});
+
+it('opens an arena\'s delay line when it falls behind and closes it once it has caught up', async () => {
+  setCompetition({}, null, 'Main Arena');
+  const { rerender } = renderBoard();
+  expect(screen.getByRole('status')).toHaveTextContent(/^Main Arena is running 6 minutes late$/);
+  setCompetition();
+  rerender(<MemoryRouter><TimetableBoard /></MemoryRouter>);
+  await waitFor(() => expect(screen.queryByText(/is running .* late/)).toBeNull());
+});
+
+it('shows the live heat\'s race count as a progress ring beside the red live dot, with no visible "On now"', () => {
+  setCompetition({
+    sessions: [
+      session(1, { status: 1, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, startedAt: `${day}T10:06:00`, heats: [
+        heat(11, { sessionId: 1, orderIndex: 0, label: 'Heat 1', races: [race(1, { isComplete: true }), race(2, { isComplete: false }), race(3, { isComplete: false })] }),
+      ] }),
+    ],
+  });
+  const { container } = renderBoard();
+  const live = container.querySelector('.tt-live') as HTMLElement;
+  const marks = live.querySelector('.tt-marks') as HTMLElement;
+  expect(marks.querySelector('.tt-live-dot')).not.toBeNull();
+  expect(within(marks).getByRole('img', { name: 'On now: race 2 of 3, 1 finished' })).toHaveTextContent('2');
+  expect(live).not.toHaveTextContent(/On now/i);
 });
 
 it('shows only the most recent finished heat, greyed, until "Show full timetable" is tapped', () => {
@@ -132,11 +159,18 @@ it('hides earlier finished heats behind "Show full timetable", which becomes "Hi
   expect(screen.queryByText('Early heat')).toBeNull();
   expect(screen.queryByText('Middle heat')).toBeNull();
 
+  // It sits under the list as a plain link, with no count.
   const toggle = screen.getByRole('button', { name: 'Show full timetable' });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(toggle).toHaveTextContent(/^Show full timetable$/);
+  expect(toggle.compareDocumentPosition(screen.getByText('Upcoming heat')) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   fireEvent.click(toggle);
   expect(screen.getByText('Early heat')).toBeVisible();
   expect(screen.getByText('Middle heat')).toBeVisible();
+  // The heats it brings back fade in; the one that was already showing does not.
+  expect(screen.getByRole('link', { name: /Early heat/ })).toHaveClass('tt-unfold');
+  expect(screen.getByRole('link', { name: /Latest heat/ })).not.toHaveClass('tt-unfold');
+  expect(screen.getByRole('button', { name: 'Hide finished heats' })).not.toHaveTextContent('hidden');
 
   fireEvent.click(screen.getByRole('button', { name: 'Hide finished heats' }));
   expect(screen.queryByText('Early heat')).toBeNull();
@@ -249,7 +283,7 @@ it('has no day tabs on a one-day event', () => {
 it('publishes its title, competition and update time, and the refresh, to the app header when there is nothing to filter', () => {
   setCompetition({ sessions: [session(1, { arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] })] }, new Date(2026, 5, 1, 10, 54));
   const { container } = render(<MemoryRouter><CompactPageBarProvider><HeaderProbe /><TimetableBoard title="Seniors" /></CompactPageBarProvider></MemoryRouter>);
-  expect(JSON.parse(screen.getByTestId('header').textContent!)).toEqual({ title: 'Seniors', subtitle: 'Spring Games · 10:54', label: 'Refresh timetable' });
+  expect(JSON.parse(screen.getByTestId('header').textContent!)).toEqual({ title: 'Seniors', subtitle: 'Spring Games', tail: '10:54', label: 'Refresh timetable' });
   fireEvent.click(screen.getByRole('button', { name: 'probe refresh' }));
   expect(reload).toHaveBeenCalledTimes(1);
   // The page body no longer carries its own title band or refresh button.
@@ -270,7 +304,8 @@ it('keeps the competition name and update time in the header line, with no day o
     { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
   ] }, new Date(2026, 5, 1, 10, 54));
   renderWithDock();
-  expect(header().subtitle).toBe('Spring Games · 10:54');
+  expect(header().subtitle).toBe('Spring Games');
+  expect(header().tail).toBe('10:54');
   expect(header().subtitle).not.toMatch(/All ages|▾/);
 });
 
@@ -333,7 +368,7 @@ it('shows everyone an age group’s finals at the time the organiser set, before
   expect(screen.queryByRole('note')).not.toBeInTheDocument();
 });
 
-it('shows ON NOW · Race X of Y when a live heat has races, highlights followed teams, and keeps multi-arena sessions grouped chronologically by session', () => {
+it('shows a progress ring (race X of Y) when a live heat has races, highlights followed teams, and keeps multi-arena sessions grouped chronologically by session', () => {
   localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 1, teamId: 7 }]));
   setCompetition({
     sessions: [
@@ -373,7 +408,10 @@ it('shows ON NOW · Race X of Y when a live heat has races, highlights followed 
 
   const { container } = renderBoard();
   const live = container.querySelector('.tt-live') as HTMLElement;
-  expect(live).toHaveTextContent('ON NOW · Race 2 of 3');
+  // The running heat says "On now" only through its progress ring (race 2 of 3, one finished), never in visible words.
+  expect(within(live).getByRole('img', { name: 'On now: race 2 of 3, 1 finished' })).toBeInTheDocument();
+  expect(live.querySelector('.tt-live-dot')).not.toBeNull();
+  expect(live).not.toHaveTextContent(/On now/i);
   expect(live).toHaveAttribute('data-followed', 'true');
   // The star comes after the heat's name.
   const title = live.querySelector('.tt-event strong')!;
@@ -521,20 +559,22 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
   expect(screen.getByRole('link', { name: /Heat 1/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
   expect(container.querySelectorAll('.tt-shift-card')).toHaveLength(0);
 
-  // Live session rows do not show how late they are running.
+  // The live heat does not show a shift; a later heat in the running session that has slipped late says by how much,
+  // so its amber time never shows without the delay.
   const liveRow = screen.getByRole('link', { name: /Heat 1/ });
   const sameSessionRow = screen.getByRole('link', { name: /Heat 2/ });
-  expect(liveRow.querySelector('.tt-planned')).toBeNull();
-  expect(sameSessionRow.querySelector('.tt-planned')).toBeNull();
+  expect(liveRow.querySelector('.tt-shift')).toBeNull();
+  expect(sameSessionRow).toHaveClass('tt-late');
+  expect(sameSessionRow.querySelector('.tt-shift')!.textContent).toMatch(/^Delayed · \+\d+ min$/);
 
   // Subsequent session in the same arena shows how late it is running and colours the time.
   const upcomingLateRow = screen.getByRole('link', { name: /Upcoming Late Heat/ });
-  expect(upcomingLateRow.querySelector('.tt-planned')!.textContent).toBe('+15');
+  expect(upcomingLateRow.querySelector('.tt-shift')!.textContent).toBe('Delayed · +15 min');
   expect(upcomingLateRow.querySelector('.tt-time')).toHaveClass('tt-time-late');
 
   // Early-shifted session shows negative shift and colours the time green.
   const earlyRow = screen.getByRole('link', { name: /Early Heat 3/ });
-  expect(earlyRow.querySelector('.tt-planned')!.textContent).toBe('−15');
+  expect(earlyRow.querySelector('.tt-shift')!.textContent).toBe('15 min early');
   expect(earlyRow.querySelector('.tt-time')).toHaveClass('tt-time-early');
 
   // Switching to Day 2 in a 2-day, 2-arena competition keeps the arena slider available.
@@ -585,8 +625,9 @@ it('formats delays of an hour or more as hours and minutes, and sends organisers
 
   renderWithDock();
   const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
-  expect(lateRow.querySelector('.tt-planned')!.textContent).toBe('+1h 34m');
+  expect(lateRow.querySelector('.tt-shift')!.textContent).toBe('Delayed · +1h 34m');
   expect(screen.getByText('Main Arena is running 1h 34m late')).toHaveClass('tt-late-line');
+  expect(screen.getByText('Main Arena is running 1h 34m late').parentElement).toHaveClass('tt-late-wrap');
 
   // The pencil goes straight to the full page (no pop-up first), where the times are moved.
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -633,3 +674,23 @@ it('warms a row once when a delay moves its start time while you watch, but not 
 
 // Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
 vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));
+
+it('says the next heat has not started once its expected time has gone by, to screen readers only, without turning its time amber', () => {
+  setCompetition({
+    sessions: [
+      session(1, { status: 0, arenaName: 'Main Arena', scheduledStart: `${day}T08:00:00`, heats: [
+        heat(11, { sessionId: 1, orderIndex: 0, label: 'Overdue heat' }),
+        heat(12, { sessionId: 1, orderIndex: 1, label: 'Following heat' }),
+      ] }),
+    ],
+  });
+  renderBoard();
+  const overdue = screen.getByRole('link', { name: /Overdue heat/ });
+  // "Not started yet" is spoken, not shown: nothing visible sits under the heat's name.
+  expect(overdue.querySelector('.tt-shift')).toBeNull();
+  expect(within(overdue).getByText('Not started yet')).toHaveClass('sr-only');
+  expect(overdue.querySelector('.tt-time')).not.toHaveClass('tt-time-late');
+  expect((overdue.querySelector('.tt-dot') as HTMLElement).style.backgroundColor).toBe('rgb(46, 139, 79)');
+  // Only the next heat says so; the ones behind it just follow on.
+  expect(screen.getByRole('link', { name: /Following heat/ }).querySelector('.tt-shift')).toBeNull();
+});

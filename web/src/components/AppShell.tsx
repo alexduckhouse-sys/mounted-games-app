@@ -134,6 +134,7 @@ function Shell({ width }: { width: PageWidth }) {
                   <span className="truncate text-[20px] font-semibold leading-none tracking-[-0.01em]">{pageHeader.title}</span>
                   <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-4">
                     <span className="truncate">{pageHeader.subtitle ?? title ?? t('common.mountedGames')}</span>
+                    {pageHeader.subtitleTail && <span className="shrink-0 tabular-nums">· {pageHeader.subtitleTail}</span>}
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
                   <span className="sr-only">{t('shell.header.events')}</span>

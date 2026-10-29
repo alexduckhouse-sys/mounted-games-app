@@ -10,6 +10,7 @@ import { CompetitionContext, type CompetitionCtx } from './context';
 import { AfterDrawOnly, CompetitionHome } from './CompetitionHome';
 import { EntryPage } from './EntryPage';
 import { entryFeeText } from '../../lib/competitionPhase';
+import { TickerProvider, useTicker } from '../../components/TickerContext';
 
 vi.mock('../../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api')>()),
@@ -56,11 +57,12 @@ function asRole(role: string) {
 beforeEach(() => asRole('Member'));
 
 describe('the entry page', () => {
-  it('opens a new competition on the first step of entering, with the stepper', async () => {
+  it('opens a new competition on its age groups, with no stepper until an entry starts', async () => {
     mount(null);
-    expect(await screen.findByRole('heading', { name: 'What are you entering?' }, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Entry steps' })).toBeInTheDocument();
-    expect(screen.getByText(/open once the teams are drawn/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Choose your entry' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Entry steps' })).not.toBeInTheDocument();
+    // The note about the timetable opening after the draw lives on Details, not here.
+    expect(screen.queryByText(/open once the teams are drawn/)).not.toBeInTheDocument();
     expect(screen.queryByText('Timetable board')).not.toBeInTheDocument();
     // Signed out, every choice goes to sign in first.
     for (const link of screen.getAllByRole('link', { name: /^Pair/ })) expect(link).toHaveAttribute('href', '/login');
@@ -95,21 +97,51 @@ describe('the entry page', () => {
     asRole('Admin');
     mount(['Admin']);
     expect(await screen.findByText('Timetable board')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'What are you entering?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Choose your entry' })).not.toBeInTheDocument();
   });
 
   it('keeps the entry page as home while teams are formed but no heats exist (BUG-32)', async () => {
     mount(null, { teams: [team(1)] });
-    expect(await screen.findByRole('heading', { name: 'What are you entering?' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Choose your entry' }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.queryByText('Timetable board')).not.toBeInTheDocument();
   });
 
   it('returns to the timetable once a generated timetable has heats', async () => {
     mount(null, { sessions: [session(1, { heats: [heat(1)] })] });
     expect(await screen.findByText('Timetable board')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'What are you entering?' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Choose your entry' })).not.toBeInTheDocument());
   });
 });
+
+function QuietProbe() { return <p>{useTicker().quiet ? 'ticker quiet' : 'ticker on'}</p>; }
+
+describe('the ticker during entry', () => {
+  it('goes quiet on the entry steps and comes back when the page closes', async () => {
+    asRole('Member');
+    localStorage.setItem('mg.auth', JSON.stringify({ token: 'test-token', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'u1', fullName: 'Test Person', email: 'test@example.com', roles: ['Member'] } }));
+    const ctx = { competition: competition({ sections, name: 'TEST COMP1' }), reload: vi.fn() } as unknown as CompetitionCtx;
+    render(
+      <AuthProvider>
+        <TickerProvider>
+          <MemoryRouter initialEntries={['/competitions/1/enter']}>
+            <CompetitionContext.Provider value={ctx}>
+              <QuietProbe />
+              <Routes>
+                <Route path="/competitions/:id/enter/*" element={<EntryPage />} />
+                <Route path="/competitions/:id/details" element={<p>Details</p>} />
+              </Routes>
+            </CompetitionContext.Provider>
+          </MemoryRouter>
+        </TickerProvider>
+      </AuthProvider>,
+    );
+    expect(await screen.findByText('ticker quiet')).toBeInTheDocument();
+    await userEvent.click((await screen.findAllByRole('link', { name: /^Pair/ }))[0]);
+    expect(await screen.findByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByText('ticker quiet')).toBeInTheDocument();
+  });
+});
+
 
 describe('entryFeeText', () => {
   const at = (...prices: number[]) => prices.map((priceMinor, i) => ({ id: i, priceMinor }) as CompetitionSection);

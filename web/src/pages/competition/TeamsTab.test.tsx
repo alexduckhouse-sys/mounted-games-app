@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition, team } from '../../test/factories';
 import { TeamsTab } from './TeamsTab';
+import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { chooseOption, optionLabels } from '../../test/select';
 
-const state = vi.hoisted(() => ({ edit: true, many: false, arenas: [] as string[], toggle: vi.fn() }));
+const state = vi.hoisted(() => ({ edit: true, many: false, same: false, arenas: [] as string[], toggle: vi.fn() }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./context', () => ({
   useCompetition: () => ({
@@ -21,6 +22,11 @@ vi.mock('./context', () => ({
         teams: [
           team(1, { displayName: 'Oak A', clubName: 'Oak Pony Club', clubId: 7, trainerUserId: null, trainerName: 'Pat Trainer' }),
           team(2, { displayName: 'Beech B', clubName: 'Beech Hunt', clubId: 8, competitionSectionId: 6, sectionName: 'Teams Juniors' }),
+          ...(state.same ? [
+            team(3, { displayName: 'Atherstone', clubName: ' atherstone ', clubId: 9 }),
+            team(4, { displayName: 'Atherstone Juniors', clubName: 'Atherstone', clubId: 9 }),
+            team(5, { displayName: 'Deeside Novices', clubName: 'Dee', clubId: 10, isHorsConcours: true }),
+          ] : []),
         ],
       })
       : competition({ teams: [team(1, { displayName: 'Oak A', clubId: 7, trainerUserId: null })] }),
@@ -105,6 +111,7 @@ describe('TeamsTab list', () => {
   beforeEach(() => {
     state.edit = false;
     state.many = true;
+    state.same = false;
     state.arenas = [];
     state.toggle.mockReset();
     vi.mocked(api.get).mockResolvedValue({ data: [] });
@@ -171,10 +178,44 @@ describe('TeamsTab list', () => {
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
     const star = screen.getByRole('button', { name: 'Follow Oak A' });
     expect(star).toHaveAttribute('aria-pressed', 'false');
-    expect(star).toHaveClass('h-11', 'w-11');
+    expect(star).toHaveClass('tm-star');
     expect(star.className).not.toMatch(/border|mg-icon-btn/);
     await user.click(star);
     expect(state.toggle).toHaveBeenCalledWith({ competitionId: 1, teamId: 1 });
   });
-});
 
+  it('shows the club only when it adds something to the team name', () => {
+    state.same = true;
+    render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    // Named after its club, in any case or spacing: no second line.
+    const atherstone = screen.getByRole('link', { name: 'Atherstone' }).closest('li') as HTMLElement;
+    expect(atherstone.querySelector('.fl-sub')).toBeNull();
+    // The name already carries the club: no second line either.
+    expect(screen.getByRole('link', { name: 'Atherstone Juniors' }).closest('li')!.querySelector('.fl-sub')).toBeNull();
+    // A club that is only part of a word is new information, and so is "Hors concours".
+    expect(screen.getByRole('link', { name: 'Deeside Novices' }).closest('li')!.querySelector('.fl-sub')).toHaveTextContent('Dee · Hors concours');
+    // Still shown when it differs from the name.
+    expect(screen.getByText('Oak Pony Club')).toBeVisible();
+  });
+
+  it('makes each whole row one link, with the star its own button beside it and nothing nested', () => {
+    render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    const row = screen.getByRole('link', { name: 'Oak A' }).closest('li') as HTMLElement;
+    const link = within(row).getByRole('link', { name: 'Oak A' });
+    const star = within(row).getByRole('button', { name: 'Follow Oak A' });
+    expect(link).toHaveAttribute('href', '/competitions/1/teams/1');
+    expect(link.contains(star)).toBe(false);
+    expect(star.closest('a')).toBeNull();
+    expect(link.querySelector('button, a, input')).toBeNull();
+    expect(row.querySelectorAll('a')).toHaveLength(1);
+  });
+
+  it('puts the team count in the header apart from the event name, so a long name is cut short first', () => {
+    function Header() {
+      const { header } = useCompactPageBarState();
+      return <p data-testid="header">{[header?.title, header?.subtitle, header?.subtitleTail].join('|')}</p>;
+    }
+    render(<MemoryRouter><CompactPageBarProvider><Header /><TeamsTab /></CompactPageBarProvider></MemoryRouter>);
+    expect(screen.getByTestId('header')).toHaveTextContent('Teams|Spring Games|2 teams');
+  });
+});

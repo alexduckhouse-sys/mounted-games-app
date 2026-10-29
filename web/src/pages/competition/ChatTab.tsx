@@ -1,7 +1,7 @@
 import { isPinnedAnnouncement, updateChatMessage } from '../../lib/announcements';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Lock, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Lock, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,6 +11,7 @@ import { useDialogFocus } from '../../components/useDialogFocus';
 import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { LiveVideo } from '../../components/stream/LiveVideo';
 import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
@@ -223,11 +224,12 @@ function ChatTabSession() {
               Messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
           )}
-          {!desktop && listed.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>{t('teams.chat.all', { count: listed.length })}</button>}
+          {/* Only offered when the page shows fewer than all of them, so the count is always more than you can see. */}
+          {listed.length > latest.length && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>{t('teams.chat.all', { count: listed.length })}</button>}
         </div>
         {banner && (
-          <div className="live-pinned" role="status" aria-label={t('teams.chat.pinnedAria')}>
-            <span className="live-pinned-label"><Pin aria-hidden="true" />{t('teams.chat.pinned')}</span>
+          <div className="live-pinned fl-panel" role="status" aria-label={t('teams.chat.pinnedAria')}>
+            <span className="live-pinned-label">{t('teams.chat.pinned')}</span>
             <strong>{banner.body}</strong>
             <span className="live-pinned-meta">{t('teams.chat.organisers')} · {messageTime(banner)}</span>
             {canModerate && <button type="button" className="live-pinned-unpin" onClick={() => void unpinBanners()}>Unpin</button>}
@@ -282,8 +284,7 @@ function ChatTabSession() {
 
       {!canCompose && canMessageOrganisers && (
         privateMessagingAvailable ? (
-          <Link to={`/competitions/${competition.id}/contact`} className="mg-btn mg-btn-secondary">
-            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+          <Link to={`/competitions/${competition.id}/contact`} className="fl-cta">
             {t('teams.chat.messageOrganisers')}
           </Link>
         ) : (
@@ -294,7 +295,7 @@ function ChatTabSession() {
   );
 
   return (
-    <div className={`live-page ${canPost ? 'live-page-staff' : 'live-page-public'}`}>
+    <div className={`live-page mg-flat ${canPost ? 'live-page-staff' : 'live-page-public'}`}>
       <div className="live-page-band mg-band">
         <h1 className="mg-h1 mg-h1-sm">{t('teams.chat.liveStream')}</h1>
         {canPost ? <span className="live-role-badge">Organiser</span> : liveNow && <span className="mg-badge mg-badge-live">{t('common.live')}</span>}
@@ -317,7 +318,7 @@ function ChatTabSession() {
       ) : (
         <>
           <div className="live-col live-col-main">
-            <div className="mg-section-head live-stream-head"><h2>{t('teams.stream.stream')}</h2></div>
+            {/* No "Stream" heading here: the page title above already says Live stream. */}
             <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
           </div>
           <div className="live-col live-col-rail">
@@ -358,7 +359,8 @@ function AnnouncementList({ messages, staff, canModerate, canBlockAuthors, pinne
   onBlock: (id: number) => Promise<void>;
   full?: boolean;
 }) {
-  const reduceMotion = useReducedMotion();
+  // Lite mode and reduced motion both keep new rows still.
+  const reduceMotion = useStillMotion();
   const { t } = useLanguage();
   return <div className={`live-announcement-list mg-card mg-list ${full ? 'live-announcement-list-full' : ''}`}>
     <AnimatePresence initial={false}>

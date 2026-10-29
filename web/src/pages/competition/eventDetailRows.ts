@@ -1,26 +1,28 @@
-import { horseboxEntrance } from '../operations/lorryEntrance';
 import { cleanWhat3Words } from '../../lib/lorryAndVolunteers';
 import type { CompetitionDetail } from '../../types';
 
 /** The words the rows and their summary need, in the viewer's language. */
 export interface DetailLabels {
-  venue: string; postcode: string; lorryPark: string; organiser: string; email: string; competitionNo: string;
+  venue: string; postcode: string; organiser: string; email: string; competitionNo: string;
+  /** The value of the venue row when only its position is known. */
+  openMaps: string;
   /** Lower-case names for the one-line summary. */
-  summary: { venue: string; postcode: string; what3words: string; lorryPark: string; organiser: string; email: string; competitionNo: string };
+  summary: { venue: string; postcode: string; what3words: string; organiser: string; email: string; competitionNo: string };
 }
 
 export interface DetailRow {
-  key: 'venue' | 'postcode' | 'what3words' | 'lorry' | 'organiser' | 'email' | 'compNo';
+  key: 'venue' | 'postcode' | 'what3words' | 'organiser' | 'email' | 'compNo' | 'starts' | 'finishes' | 'entriesClose' | 'stables' | 'hookups';
+  /** All of them fold away under "Show full details"; the arrival rows (how to get there) come first. */
+  group: 'arrival' | 'more';
   label: string;
-  /** What it is called in the summary line under "See details". */
+  /** What it is called in the summary line under "Show full details". */
   summaryName: string;
   value: string;
   href?: string;
   icon?: 'pin' | 'w3w' | 'mail';
 }
 
-type DetailFields = Pick<CompetitionDetail, 'location' | 'postcode' | 'what3Words' | 'lorryWhat3Words' | 'lorryLatitude' | 'lorryLongitude' | 'lorryDirectionsNote'
-  | 'organiserName' | 'contactEmail' | 'competitionNumber' | 'latitude' | 'longitude' | 'appleMapsUrl'>;
+type DetailFields = Pick<CompetitionDetail, 'location' | 'postcode' | 'what3Words' | 'organiserName' | 'contactEmail' | 'competitionNumber' | 'latitude' | 'longitude' | 'appleMapsUrl'>;
 
 const present = (value: string | null | undefined) => (value?.trim() ? value.trim() : null);
 
@@ -38,24 +40,25 @@ export function venueMapUrl(competition: Pick<DetailFields, 'appleMapsUrl' | 'la
   return null;
 }
 
-/** One row for every organiser-set detail that has a value, in the order they are shown. Nothing is made up. */
+/**
+ * One row for every organiser-set detail that has a value, in the order they are shown. Nothing is made up. The horsebox
+ * entrance isn't here: HorseboxEntranceCard gives its directions and every map link, once.
+ */
 export function eventDetailRows(competition: DetailFields, labels: DetailLabels): DetailRow[] {
   const rows: DetailRow[] = [];
   const venue = present(competition.location);
   const map = venueMapUrl(competition);
-  if (venue) rows.push({ key: 'venue', label: labels.venue, summaryName: labels.summary.venue, value: venue, ...(map ? { href: map, icon: 'pin' as const } : {}) });
+  // A venue known only by its pin still gets a row, so the map link is never lost.
+  if (venue || map) rows.push({ key: 'venue', group: 'arrival', label: labels.venue, summaryName: labels.summary.venue, value: venue ?? labels.openMaps, ...(map ? { href: map, icon: 'pin' as const } : {}) });
   const postcode = present(competition.postcode);
-  if (postcode) rows.push({ key: 'postcode', label: labels.postcode, summaryName: labels.summary.postcode, value: postcode, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(postcode)}`, icon: 'pin' });
+  if (postcode) rows.push({ key: 'postcode', group: 'arrival', label: labels.postcode, summaryName: labels.summary.postcode, value: postcode, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(postcode)}`, icon: 'pin' });
   const w3w = cleanWhat3Words(competition.what3Words);
-  if (w3w) rows.push({ key: 'what3words', label: 'what3words', summaryName: labels.summary.what3words, value: `///${w3w}`, href: `https://what3words.com/${encodeURIComponent(w3w)}`, icon: 'w3w' });
-  const entrance = horseboxEntrance(competition);
-  const lorryText = [entrance?.what3WordsDisplay, present(entrance?.directionsNote)].filter(Boolean).join(' · ');
-  if (entrance && lorryText) rows.push({ key: 'lorry', label: labels.lorryPark, summaryName: labels.summary.lorryPark, value: lorryText, ...(entrance.what3WordsUrl ? { href: entrance.what3WordsUrl, icon: 'w3w' as const } : {}) });
+  if (w3w) rows.push({ key: 'what3words', group: 'arrival', label: 'what3words', summaryName: labels.summary.what3words, value: `///${w3w}`, href: `https://what3words.com/${encodeURIComponent(w3w)}`, icon: 'w3w' });
   const organiser = present(competition.organiserName);
-  if (organiser) rows.push({ key: 'organiser', label: labels.organiser, summaryName: labels.summary.organiser, value: organiser });
+  if (organiser) rows.push({ key: 'organiser', group: 'more', label: labels.organiser, summaryName: labels.summary.organiser, value: organiser });
   const email = present(competition.contactEmail);
-  if (email) rows.push({ key: 'email', label: labels.email, summaryName: labels.summary.email, value: email, href: `mailto:${email}`, icon: 'mail' });
+  if (email) rows.push({ key: 'email', group: 'more', label: labels.email, summaryName: labels.summary.email, value: email, href: `mailto:${email}`, icon: 'mail' });
   const number = present(competition.competitionNumber);
-  if (number) rows.push({ key: 'compNo', label: labels.competitionNo, summaryName: labels.summary.competitionNo, value: number });
+  if (number) rows.push({ key: 'compNo', group: 'more', label: labels.competitionNo, summaryName: labels.summary.competitionNo, value: number });
   return rows;
 }

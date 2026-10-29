@@ -77,12 +77,17 @@ describe('DetailsTab', () => {
     expect(screen.getByRole('heading', { name: 'Details & entries', level: 1 })).toBeInTheDocument();
   });
 
-  it('shortens a long description until More is tapped', async () => {
+  it('shortens a long description to three lines until Show full details is opened', async () => {
     renderTab();
-    const more = screen.getByRole('button', { name: 'More' });
-    expect(more).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.click(more);
-    expect(screen.getByRole('button', { name: 'Less' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    const body = screen.getByText(longText);
+    expect(body).toHaveClass('line-clamp-3');
+    const toggle = screen.getByRole('button', { name: /Show full details/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveTextContent('Description');
+    await userEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /Hide full details/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(body).not.toHaveClass('line-clamp-3');
   });
 
   it('lists each age group with its fees and one Enter bar, with no counts or progress bars', () => {
@@ -104,61 +109,78 @@ describe('DetailsTab', () => {
     expect(screen.getByRole('link', { name: 'Message the organisers' })).toBeInTheDocument();
   });
 
-  it('keeps the title card to the name, date and venue and description, with the details folded away under See details', async () => {
+  it('has no Getting there section: the venue, postcode and what3words sit inside Show full details, closed by default', async () => {
     vi.mocked(useCompetition).mockReturnValue({
       competition: { ...competition, what3Words: 'gravel.pony.flag', latitude: 51.9, longitude: -2.3 }, reload,
     } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
+    expect(screen.queryByRole('region', { name: 'Getting there' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Getting there')).not.toBeInTheDocument();
     const card = screen.getByRole('region', { name: 'About this event' });
     expect(within(card).getByRole('heading', { name: 'Hartpury Area Festival' })).toBeInTheDocument();
-    const toggle = within(card).getByRole('button', { name: /See details/ });
+    const toggle = within(card).getByRole('button', { name: /Show full details/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     // The muted line names what is inside, built from what is set.
-    expect(toggle).toHaveTextContent('Venue, what3words and organiser');
-    expect(screen.queryByRole('link', { name: /gravel/ })).not.toBeInTheDocument();
-    expect(screen.queryByText('Event facts')).not.toBeInTheDocument();
+    expect(toggle).toHaveTextContent(/venue/i);
+    expect(toggle).toHaveTextContent('what3words');
+    expect(toggle).toHaveTextContent('organiser');
+    // Closed: none of it is on the page, and the venue is not repeated under the event's name.
+    expect(screen.queryByRole('link', { name: /Venue\s*Hartpury/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Severn Vale Branch')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hartpury')).not.toBeInTheDocument();
 
     await userEvent.click(toggle);
-    const open = within(card).getByRole('button', { name: 'Hide details' });
+    const open = within(card).getByRole('button', { name: /Hide full details/ });
     expect(open).toHaveAttribute('aria-expanded', 'true');
-    expect(open).not.toHaveTextContent('what3words');
     expect(within(card).getByRole('link', { name: /Venue\s*Hartpury/ })).toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=51.9,-2.3');
     expect(within(card).getByRole('link', { name: /what3words\s*\/\/\/gravel\.pony\.flag/ })).toHaveAttribute('href', 'https://what3words.com/gravel.pony.flag');
     expect(within(card).getByText('Severn Vale Branch')).toBeInTheDocument();
-    // Only what is set: no postcode, email, competition number or lorry park rows.
-    for (const label of ['Postcode', 'Email', 'Competition no.', 'Lorry park']) expect(within(card).queryByText(label)).not.toBeInTheDocument();
+    // The venue is named once.
+    expect(screen.getAllByText('Hartpury')).toHaveLength(1);
 
     await userEvent.click(open);
     await waitFor(() => expect(within(card).queryByText('Severn Vale Branch')).not.toBeInTheDocument());
-    expect(within(card).getByRole('button', { name: /See details/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(card).getByRole('button', { name: /Show full details/ })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('shows the postcode, lorry park, email and competition number rows when the organiser has set them, with the organiser’s own map link', async () => {
+  it('shows the postcode with the venue, and the email and competition number, all under Show full details, with the organiser’s own map link', async () => {
     vi.mocked(useCompetition).mockReturnValue({
       competition: {
         ...competition, appleMapsUrl: 'https://maps.apple.com/?q=Hartpury', postcode: 'GL19 3BE', competitionNumber: '2026-041', contactEmail: 'entries@example.org',
-        lorryWhat3Words: 'bags.cool.lamp', lorryDirectionsNote: 'Enter by the north gate',
       }, reload,
     } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
     const card = screen.getByRole('region', { name: 'About this event' });
-    expect(card).toHaveTextContent('Venue, postcode, lorry park, organiser, email and competition number');
-    await userEvent.click(within(card).getByRole('button', { name: /See details/ }));
+    const toggle = within(card).getByRole('button', { name: /Show full details/ });
+    expect(toggle).toHaveTextContent(/Description, venue, postcode, organiser, email and competition number/);
+    expect(screen.queryByRole('link', { name: /Postcode/ })).not.toBeInTheDocument();
+    await userEvent.click(toggle);
     expect(within(card).getByRole('link', { name: /Venue\s*Hartpury/ })).toHaveAttribute('href', 'https://maps.apple.com/?q=Hartpury');
     expect(within(card).getByRole('link', { name: /Postcode\s*GL19 3BE/ })).toHaveAttribute('href', expect.stringContaining('GL19%203BE'));
-    expect(within(card).getByRole('link', { name: /Lorry park/ })).toHaveTextContent('///bags.cool.lamp · Enter by the north gate');
-    expect(within(card).getByRole('link', { name: /Lorry park/ })).toHaveAttribute('href', 'https://what3words.com/bags.cool.lamp');
     expect(within(card).getByRole('link', { name: /Email\s*entries@example.org/ })).toHaveAttribute('href', 'mailto:entries@example.org');
     expect(within(card).getByText('Competition no.')).toBeInTheDocument();
     expect(within(card).getByText('2026-041')).toBeInTheDocument();
   });
 
-  it('has no See details row when the organiser has set none of the details', () => {
+  it('keeps the map link when the venue is known only by its pin', async () => {
     vi.mocked(useCompetition).mockReturnValue({
-      competition: { ...competition, location: '', organiserName: null }, reload,
+      competition: { ...competition, location: '', latitude: 52.1, longitude: -1.5 }, reload,
     } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
-    expect(screen.queryByRole('button', { name: /See details/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Show full details/ }));
+    expect(screen.getByRole('link', { name: /Venue\s*Open in Maps/ }))
+      .toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=52.1,-1.5');
+  });
+
+  it('still offers Show full details when the organiser has set none of the details, and says so inside', async () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: { ...competition, description: '', location: '', organiserName: null }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    const toggle = screen.getByRole('button', { name: /Show full details/ });
+    expect(toggle).not.toHaveTextContent(/venue|organiser/i);
+    await userEvent.click(toggle);
+    expect(screen.getByText('The organiser hasn’t added anything else yet.')).toBeInTheDocument();
   });
 
   it('uses the cards look: a grey page with each list in its own white card under its heading', () => {
