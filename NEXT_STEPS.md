@@ -535,7 +535,7 @@ All items below have been reviewed and confirmed for upcoming implementation:
   - Create a separate `mounted-games-prod` Cloudflare Realtime SFU app and optionally a TURN key. Set `Streaming__Cloudflare__AppId`, `Streaming__Cloudflare__AppToken` and, optionally, `Streaming__Cloudflare__TurnKeyId` and `Streaming__Cloudflare__TurnKeyApiToken` on the `mounted-games-api` Vercel project.
   - Set a Cloudflare billing alert.
   - Test on two real phones (Safari and Android): lock, background, flip camera, mute, pause, end.
-  - Nest camera: tell the chat which model the club uses, so phase 2 can be checked.
+  - Nest camera: out (decided 30 Oct 2026, see `docs/decisions.md`). GoPro/DJI cameras and YouTube/Facebook simulcast are specced in `docs/specs/simulcast-and-external-cameras.md`; tell the chat which GoPro/DJI models the club uses.
 4. **Official EGUK navy hex.** `#1e3466` / `#17385f` — confirm exact brand hex.
 5. **Remaining decisions from earlier chats:**
   - Keep the colour key under the timetable dots?
