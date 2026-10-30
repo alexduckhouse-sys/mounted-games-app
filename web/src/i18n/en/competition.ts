@@ -217,6 +217,7 @@ export const competition = {
   'competition.heat.running': 'running',
   'competition.heat.position': 'Position',
   'competition.heat.notRaced': 'Not raced yet',
+  'competition.heat.notDrawn': 'Not drawn yet',
   'competition.heat.sectionToplist': '{section} toplist',
   'competition.heat.change': 'Change heat',
   'competition.heat.watch': 'Watch stream',

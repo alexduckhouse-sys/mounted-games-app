@@ -567,6 +567,7 @@ export function ScoringSection({
           onHc={(teamId) => { void attempt(() => onSetHc?.(teamId, !hcTeamIds.has(teamId))); }}
           onYellow={(teamId) => { void attempt(() => onSetCard?.(teamId, afterYellow(cardsByTeam[teamId] ?? null))); }}
           onRed={(teamId) => { void attempt(() => onSetCard?.(teamId, afterRed(cardsByTeam[teamId] ?? null))); }}
+          onClearCard={(teamId) => { void attempt(() => onSetCard?.(teamId, null)); }}
           onStepPoints={stepTeam}
           onEliminate={live ? toggleOut : undefined}
           onDeadHeat={live ? onDeadHeat : undefined}

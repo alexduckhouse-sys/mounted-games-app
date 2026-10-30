@@ -217,6 +217,7 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.heat.running': 'ar y gweill',
   'competition.heat.position': 'Safle',
   'competition.heat.notRaced': 'Heb rasio eto',
+  'competition.heat.notDrawn': 'Heb ei dynnu eto',
   'competition.heat.sectionToplist': 'Tabl safleoedd {section}',
   'competition.heat.change': 'Newid rhagras',
   'competition.heat.watch': 'Gwylio’r ffrwd',

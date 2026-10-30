@@ -217,6 +217,7 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.heat.running': 'en cours',
   'competition.heat.position': 'Position',
   'competition.heat.notRaced': 'Pas encore couru',
+  'competition.heat.notDrawn': 'Pas encore tiré au sort',
   'competition.heat.sectionToplist': 'Classement {section}',
   'competition.heat.change': 'Changer de manche',
   'competition.heat.watch': 'Regarder le direct',

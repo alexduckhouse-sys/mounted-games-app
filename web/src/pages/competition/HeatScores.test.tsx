@@ -387,3 +387,22 @@ it('marks a heat-heat-final round under review when any of its heats has a race 
   render(<CompactPageBarProvider><MemoryRouter><HeatScores session={{ ...shownSession, heats: [calm, q2] }} heats={[calm, q2]} activeHeatId={50} /></MemoryRouter></CompactPageBarProvider>);
   expect(screen.queryByTestId('heat-under-review')).toBeNull();
 });
+
+it('shows an undrawn final as its race columns over empty lanes, but an ordinary empty heat as a note', () => {
+  const races = [race(31, { name: 'Bending', orderIndex: 0 }), race(32, { name: 'Sack', orderIndex: 1 })];
+  const final = heat(31, { sessionId: 31, orderIndex: 0, label: 'A Final', races, entries: [] });
+  const finalSession = session(31, { name: 'Finals', sectionName: 'Teams Seniors', lanesPerHeat: 5, scheduledStart: '2026-10-16T15:00:00', heats: [final] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [finalSession] });
+  const { unmount } = render(<CompactPageBarProvider><MemoryRouter><HeatScores session={finalSession} heats={[final]} activeHeatId={31} /></MemoryRouter></CompactPageBarProvider>);
+  expect(screen.queryByText('No teams in this heat yet.')).toBeNull();
+  expect(screen.getAllByRole('columnheader', { name: /Bending|Sack/ })).toHaveLength(2);
+  expect(screen.getAllByRole('rowheader', { name: 'Not drawn yet' })).toHaveLength(5);
+  unmount();
+
+  const empty = heat(32, { sessionId: 32, orderIndex: 0, label: 'Heat 1', races, entries: [] });
+  const heatSession = session(32, { name: 'Heats', sectionName: 'Teams Seniors', scheduledStart: '2026-10-16T10:00:00', heats: [empty] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [heatSession] });
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={heatSession} heats={[empty]} activeHeatId={32} /></MemoryRouter></CompactPageBarProvider>);
+  expect(screen.getByText('No teams in this heat yet.')).toBeInTheDocument();
+  expect(screen.queryByRole('rowheader', { name: 'Not drawn yet' })).toBeNull();
+});
