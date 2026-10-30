@@ -221,6 +221,16 @@ public record MySignupDto(
 
 public record GeocodeResult(double? Latitude, double? Longitude, string? Source);
 
+/// <summary>
+/// The nearest hospital with an emergency department, from OpenStreetMap, for the organiser's emergency poster.
+/// <paramref name="Available"/> is false when the lookup could not be done (no venue position, or the map service did not answer);
+/// it is true with a null <paramref name="Hospital"/> when the service answered and nothing was within range.
+/// A suggestion to check, not an authority.
+/// </summary>
+public record NearestEmergencyDto(bool Available, NearestHospitalDto? Hospital);
+
+public record NearestHospitalDto(string Name, string? Address, string? Postcode, string? Phone, double Latitude, double Longitude, double DistanceMiles);
+
 public record BlockAuthorRequest(string? Reason = null);
 
 /// <param name="BaseName">The team race a Pairs or Individual version replaces, or the race a sponsored name is ridden as (<see cref="Services.RaceVariants"/>).</param>

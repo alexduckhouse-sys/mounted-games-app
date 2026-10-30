@@ -1818,3 +1818,21 @@ export interface Protest {
   /** The race (or a race in the heat) was already signed off when this was read. */
   raceSignedOff: boolean;
 }
+
+/** The nearest hospital with an emergency department, from OpenStreetMap (GET /api/competitions/{id}/nearest-emergency). A suggestion to check. */
+export interface NearestHospital {
+  name: string;
+  address: string | null;
+  postcode: string | null;
+  phone: string | null;
+  latitude: number;
+  longitude: number;
+  /** Straight-line distance from the venue, to one decimal place. */
+  distanceMiles: number;
+}
+
+/** `available` is false when the lookup could not be done; true with no `hospital` when nothing was in range. */
+export interface NearestEmergency {
+  available: boolean;
+  hospital: NearestHospital | null;
+}
