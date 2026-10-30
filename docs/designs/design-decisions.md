@@ -91,7 +91,7 @@ Some organiser and site admin pages shipped without following this file (found 2
 - **MG logo:** opens the site admin dashboard, on site admin pages only.
 - **Event app chrome:** keep the event app's top bar, notice line, "Main Arena running X behind" line and bottom tabs exactly as built. The top bar's look was reworked on 29 October 2026 (see Top bar below); the layout and lines stay as built.
 - **Top bar (option C, 29 October 2026):** everything on a 4px grid with 16px side margins. 40px content row, 12px above and 8px below.
-  - Logo: 40px rounded square (radius 12) with a thin inner ring.
+  - Logo: 34px rounded square (radius 10) with a thin inner ring, centred in the 40px row (owner, 30 October 2026; was 40px).
   - Header icons (refresh, menu, edit, back) are unboxed, 15px, in a 32×40 box with a 44×48 tap area (`.mg-hdr-icon`). Refresh is pale, the rest white. This replaces the squircle menu button; the box was dropped on purpose.
   - Refresh shows what happened (asked for by the owner, 30 October 2026): the arrow turns until the page has its answer (at least about 0.65s), then becomes a tick ("Updated" or "Up to date"), a no-signal icon ("No signal") or a cross ("Couldn’t refresh") for about 2 seconds, and turns back into the arrow. The words take the place of the time at the end of the subtitle. Reduced motion and Lite mode keep the icons and words but drop the turning and the ring (`components/RefreshButton.tsx`).
   - Page title is semibold 22px, subtitle medium 13px.

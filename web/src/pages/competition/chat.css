@@ -115,7 +115,7 @@ html[data-lite="true"] :is(.live-overlay, .live-all-dialog, .staff-stream-dialog
 
 /* The flat page language (theme/flat.css) for the page around the player: the title sits on the page, section headings
    are sentence case, and announcements are rows with hairlines rather than a card. The player is left as it is. */
-.live-page.mg-flat .live-page-band { min-height: 0; padding-block: 8px 0; margin-bottom: 0; border-image: none; }
+.live-page.mg-flat .live-page-band { min-height: 0; padding-block: 8px 12px; margin-bottom: 0; border-image: none; }
 .live-page.mg-flat .live-page-band h1 { font: 700 28px/1.12 var(--mg-font); letter-spacing: -.015em; overflow-wrap: break-word; }
 .live-page.mg-flat .live-page-band .mg-badge-live { font: 600 12.5px/1 var(--mg-font); letter-spacing: 0; text-transform: none; }
 .live-page.mg-flat .live-role-badge { font: 600 12.5px/1 var(--mg-font); text-transform: none; }

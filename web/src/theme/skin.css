@@ -185,10 +185,10 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 /* Header bar, live strip and bottom tabs */
 .mg-header { background: rgb(var(--mg-header)); color: #fff; font-family: var(--mg-font); }
 .mg-logo {
-  position: relative; box-sizing: border-box; flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; padding-top: 1px; display: flex; align-items: center; justify-content: center;
-  background: rgb(var(--mg-red)); color: #fff; font: 700 19px/1 var(--mg-font-display); letter-spacing: -0.02em; text-decoration: none !important;
+  position: relative; box-sizing: border-box; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; padding-top: 1px; display: flex; align-items: center; justify-content: center;
+  background: rgb(var(--mg-red)); color: #fff; font: 700 16px/1 var(--mg-font-display); letter-spacing: -0.02em; text-decoration: none !important;
 }
-.mg-logo::before { content: ""; position: absolute; inset: 3px; border-radius: 9px; border: 1px solid rgb(255 255 255 / .55); pointer-events: none; }
+.mg-logo::before { content: ""; position: absolute; inset: 3px; border-radius: 7px; border: 1px solid rgb(255 255 255 / .55); pointer-events: none; }
 .mg-header-sub { color: rgb(var(--mg-header-sub)); }
 .mg-nav-btn {
   flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 44px;
