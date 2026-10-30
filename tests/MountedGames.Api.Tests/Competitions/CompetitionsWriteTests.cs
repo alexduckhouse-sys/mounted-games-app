@@ -755,4 +755,38 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
             Assert.False(await db.Results.AnyAsync(x => x.TeamId == team));
         });
     }
+
+    // ---- payment details are owner/admin only ----
+
+    [Fact]
+    public async Task Update_LetsCollaboratorEditEvent_ButNotChangePaymentDetails()
+    {
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
+        var (collaborator, collabAuth) = await _f.SignupAsync("Member");
+        await _f.InDbAsync(async db =>
+        {
+            db.CompetitionCollaborators.Add(new CompetitionCollaborator
+            { CompetitionId = comp, UserId = collabAuth.User.Id, AddedByUserId = await _f.TrainerIdAsync() });
+            await db.SaveChangesAsync();
+        });
+
+        // Changing the payment destination entrants are shown is refused for a collaborator.
+        var change = await collaborator.PutAsJsonAsync($"/api/competitions/{comp}",
+            UpdateBody(name: "Collaborator edit", payment: "Sort 00-00-00 Acc 12345678"));
+        Assert.Equal(HttpStatusCode.Forbidden, change.StatusCode);
+
+        // Editing the rest of the event, leaving payment untouched, still works.
+        var ok = await collaborator.PutAsJsonAsync($"/api/competitions/{comp}",
+            UpdateBody(name: "Collaborator edit", payment: null));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var saved = await LoadAsync(comp);
+        Assert.Equal("Collaborator edit", saved.Name);
+        Assert.Null(saved.PaymentDestination);
+
+        // The owner can change the payment details.
+        var owner = await _f.TrainerAsync();
+        var byOwner = await owner.PutAsJsonAsync($"/api/competitions/{comp}", UpdateBody(payment: "BACS: pay the club"));
+        Assert.Equal(HttpStatusCode.OK, byOwner.StatusCode);
+        Assert.Equal("BACS: pay the club", (await LoadAsync(comp)).PaymentDestination);
+    }
 }
