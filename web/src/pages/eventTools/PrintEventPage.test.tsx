@@ -180,6 +180,39 @@ describe('PrintEventPage', () => {
     expect(screen.queryByText(/offline/i)).not.toBeInTheDocument();
   });
 
+  it('adds the nearest A&E to the poster’s emergency box, and still prints the box without it', async () => {
+    const posters = () => render(
+      <MemoryRouter initialEntries={['/event-tools/12/print/posters']}>
+        <Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes>
+      </MemoryRouter>,
+    );
+    const competition = { id: 12, name: 'Spring event', location: 'Field Lane, OX1 2AB', postcode: 'OX1 2AB', startDate: '2031-05-04T09:00:00Z', endDate: null, sections: [], sessions: [], teams: [] };
+    const hospital = { name: 'John Radcliffe Hospital', address: null, postcode: 'OX3 9DU', phone: null, latitude: 51.76, longitude: -1.22, distanceMiles: 2.1 };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/competitions/12/scorer-links')) return { data: [] };
+      if (path.endsWith('/competitions/12/nearest-emergency')) return { data: { available: true, hospital } };
+      return { data: competition };
+    });
+
+    const { unmount } = posters();
+    expect(await screen.findByText('John Radcliffe Hospital')).toBeInTheDocument();
+    expect(screen.getByText('about 2.1 miles away')).toBeInTheDocument();
+    expect(screen.getByText('OX1 2AB', { selector: 'p' })).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/competitions/12/scorer-links')) return { data: [] };
+      if (path.endsWith('/competitions/12/nearest-emergency')) throw new Error('offline');
+      return { data: competition };
+    });
+    posters();
+    expect(await screen.findByText('Check your nearest A&E before the day.')).toBeInTheDocument();
+    expect(screen.getByText('Emergency venue information (dial 999 or 112)')).toBeInTheDocument();
+    expect(screen.queryByText('John Radcliffe Hospital')).not.toBeInTheDocument();
+  });
+
   describe('headers, QR code and volunteer card', () => {
     const draw = (extra = {}) => ({ data: {
       competition: { id: 12, name: 'Spring event', location: null, startDate: '2031-05-04T09:00:00Z', endDate: null, ...extra },

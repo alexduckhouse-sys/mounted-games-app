@@ -24,6 +24,7 @@ import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { useToast } from '../../components/Toast';
 import { OfficialResultsDownload } from './OfficialResultsDownload';
+import { NearestAe } from './NearestAe';
 import { competitionDateText } from '../../lib/competitionDates';
 
 /** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
@@ -519,6 +520,7 @@ function QrPostersSection({
                 </p>
               </div>
             )}
+            <NearestAe competitionId={competition.id} />
             <div>
               <span className="font-semibold">{tr('ops2.print.p.accessNote')}</span>
               <p className="text-xs">{tr('ops2.print.p.quote')}</p>
