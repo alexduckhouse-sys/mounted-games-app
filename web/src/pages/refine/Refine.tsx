@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
 import { BackLink } from '../../components/BackLink';
 import { useInAppShell, usePageHeader } from '../../components/CompactPageBarContext';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -9,6 +9,9 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { useExitDelay } from '../../hooks/useExitDelay';
 import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 import { useT } from '../../i18n/LanguageContext';
+import { RefreshButton } from '../../components/RefreshButton';
+import { useRefreshFeedback } from '../../hooks/useRefreshFeedback';
+import type { RefreshHandler } from '../../lib/refreshOutcome';
 import './refine.css';
 
 /** Wraps a refined page so its tokens and type apply. Pass `aboveTabs` on competition pages that show the bottom tabs. */
@@ -30,7 +33,7 @@ interface HeaderProps {
   /** Trailing controls in the top row (an overflow button, a star, "+ Add item"). */
   actions?: ReactNode;
   /** A refresh button: the app's own one in the top bar, or one in the top row outside the app. */
-  onRefresh?: () => void;
+  onRefresh?: RefreshHandler;
   refreshLabel?: string;
   title: string;
   /** A page-level action on the right of the title row (for example "End stream"). */
@@ -56,6 +59,12 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
   event.preventDefault();
   tabs[next].focus();
   tabs[next].click();
+}
+
+/** The top row's refresh outside the app, with the same turn and result as the app header's. */
+function RefineRefresh({ onRefresh, label }: { onRefresh: RefreshHandler; label: string }) {
+  const feedback = useRefreshFeedback(onRefresh);
+  return <RefreshButton feedback={feedback} label={label} className="rf-ib" />;
 }
 
 export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, onRefresh, refreshLabel, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
@@ -110,7 +119,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
         {!back && onBack && <button type="button" className="rf-ib" aria-label={backLabel} onClick={onBack}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>}
         <span className="rf-ctx">{context}</span>
         {actions}
-        {onRefresh && <button type="button" className="rf-ib" aria-label={refreshLabel ?? 'Refresh'} onClick={onRefresh}><RefreshCw className="h-5 w-5" aria-hidden="true" /></button>}
+        {onRefresh && <RefineRefresh onRefresh={onRefresh} label={refreshLabel ?? 'Refresh'} />}
       </div>
       {titleAction ? (
         <div className="rf-ttl-row">

@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, Menu, Pencil, RotateCw } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Menu, Pencil } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
@@ -31,6 +31,8 @@ import { PageTransition } from './PageTransition';
 import { BackLink } from './BackLink';
 import { useT } from '../i18n/LanguageContext';
 import { ScreenChromeProvider, useChromeHidden } from './ScreenChrome';
+import { RefreshButton, RefreshTail } from './RefreshButton';
+import { useRefreshFeedback } from '../hooks/useRefreshFeedback';
 
 /** Pages with no news line in the dock: the legal tabs, unsubscribe, settings and seasons (their own dock button still shows). */
 const QUIET_TICKER_PATHS = /^\/(privacy|terms|refunds|cookies|safeguarding|data-deletion|unsubscribe|settings|seasons(\/[^/]+)?)\/?$/;
@@ -52,6 +54,8 @@ function Shell({ width }: { width: PageWidth }) {
   const openLiteSettings = () => navigate('/settings#lite-mode');
   const location = useLocation();
   const { count: needsYou } = useNeedsYou();
+  // A new page starts with a plain arrow, even if the last one was still showing how its refresh went.
+  const refresh = useRefreshFeedback(pageHeader?.refresh, location.pathname);
   // On the site admin pages an admin's MG logo goes to the site admin dashboard rather than the events list.
   const inAdminArea = hasRole('Admin') && /^\/admin(\/(competitions|trainer-requests|rules))?\/?$/.test(location.pathname);
   const onProfile = location.pathname === '/me' || location.pathname === '/me/';
@@ -127,14 +131,19 @@ function Shell({ width }: { width: PageWidth }) {
               {pageHeader?.plain ? (
                 <div className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5">
                   <h1 className="truncate text-[20px] font-semibold leading-none tracking-[-0.01em]">{pageHeader.title}</h1>
-                  {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] font-medium leading-4">{pageHeader.subtitle}</span>}
+                  {pageHeader.subtitle && (
+                    <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-4">
+                      <span className="truncate">{pageHeader.subtitle}</span>
+                      <RefreshTail phase={refresh.phase} tail={pageHeader.subtitleTail} />
+                    </span>
+                  )}
                 </div>
               ) : pageHeader ? (
                 <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="truncate text-[20px] font-semibold leading-none tracking-[-0.01em]">{pageHeader.title}</span>
                   <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-4">
                     <span className="truncate">{pageHeader.subtitle ?? title ?? t('common.mountedGames')}</span>
-                    {pageHeader.subtitleTail && <span className="shrink-0 tabular-nums">· {pageHeader.subtitleTail}</span>}
+                    <RefreshTail phase={refresh.phase} tail={pageHeader.subtitleTail} />
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
                   <span className="sr-only">{t('shell.header.events')}</span>
@@ -148,7 +157,7 @@ function Shell({ width }: { width: PageWidth }) {
               ) : (
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">{t('common.mountedGames')}</span>
               )}
-              {pageHeader?.refresh && <RefreshButton onRefresh={pageHeader.refresh} label={pageHeader.refreshLabel ?? t('shell.header.refresh')} />}
+              {pageHeader?.refresh && <RefreshButton feedback={refresh} label={pageHeader.refreshLabel ?? t('shell.header.refresh')} />}
               {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-hdr-icon" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil /></button>}
               <ConnectionPill />
               {!user && choosingCompetition && <Link to="/login" className="mg-hdr-signin">{t('common.signIn')}</Link>}
@@ -179,18 +188,4 @@ function Shell({ width }: { width: PageWidth }) {
       {current && !choosingCompetition && rememberChoice === 'ask' && !menuOpen && <RememberCompetitionDialog />}
     </div>
   );
-}
-
-/** The header's refresh button. The icon turns for a moment after a tap so you can see it took (the data often hasn't changed). */
-function RefreshButton({ onRefresh, label }: { onRefresh: () => void; label: string }) {
-  const [spinning, setSpinning] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  const tap = () => {
-    onRefresh();
-    setSpinning(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setSpinning(false), 900);
-  };
-  return <button type="button" onClick={tap} className="mg-hdr-icon mg-hdr-icon-sub" aria-label={label}><RotateCw className={spinning ? 'mg-spin-once' : undefined} /></button>;
 }

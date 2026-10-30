@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -182,4 +183,56 @@ it('finishes the active prefetch during session traffic, preserves patches and q
   act(() => state.handlers?.onSessionUpdated?.(session(6) as never));
   expect(signals[0].aborted).toBe(false);
   expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/competitions/1')).toHaveLength(2);
+});
+
+describe('CompetitionPage reload', () => {
+  it('tells the refresh button whether the event changed, came from the saved copy or failed', async () => {
+    const answers: Array<() => Promise<{ data: unknown; headers: object }>> = [];
+    const base = competition({ id: 1, name: 'Spring Championship' });
+    vi.mocked(api.get).mockImplementation(((url: string) => {
+      if (url === '/competitions/1') return (answers.shift() ?? (() => Promise.resolve({ data: base, headers: {} })))();
+      if (url.endsWith('/first-view')) return new Promise(() => {});
+      return Promise.resolve({ data: [], headers: {} });
+    }) as typeof api.get);
+    const page: { reload?: ReturnType<typeof useCompetition>['reload'] } = {};
+    function Probe() {
+      const { reload, competition: shown } = useCompetition();
+      useEffect(() => { page.reload = reload; });
+      return <p>{shown.name}</p>;
+    }
+    render(
+      <MemoryRouter initialEntries={['/competitions/1']}>
+        <Routes>
+          <Route path="/competitions/:id/*" element={<CompetitionPage />}>
+            <Route path="*" element={<Probe />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Spring Championship')).toBeVisible();
+
+    // Refresh the way the header does: the tap starts a load, and the answer settles once that load is in.
+    const refresh = async () => {
+      let answer!: ReturnType<NonNullable<typeof page.reload>>;
+      act(() => { answer = page.reload!(); });
+      let outcome: unknown;
+      await act(async () => { outcome = await answer; });
+      return outcome;
+    };
+    let outcome = await refresh();
+    expect(outcome).toBe('same');
+
+    answers.push(() => Promise.resolve({ data: { ...base, name: 'Spring Finals' }, headers: {} }));
+    outcome = await refresh();
+    expect(outcome).toBe('updated');
+    expect(await screen.findByText('Spring Finals')).toBeVisible();
+
+    answers.push(() => Promise.resolve({ data: base, headers: { 'x-mg-saved-copy': '1', 'x-mg-saved-at': '2026-01-01T00:00:00Z' } }));
+    outcome = await refresh();
+    expect(outcome).toBe('offline');
+
+    answers.push(() => Promise.reject(new Error('500')));
+    outcome = await refresh();
+    expect(outcome).toBe('failed');
+  });
 });

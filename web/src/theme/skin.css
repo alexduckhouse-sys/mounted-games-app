@@ -901,10 +901,20 @@ html[data-lite="true"] .mg-heat-ring[data-tone="live"] svg { animation: none !im
 .mg-pg-champ-sub { font-size: .9em; font-weight: 600; opacity: .8; }
 
 /* The header refresh icon turns once when tapped. */
-@keyframes mg-spin-once { to { transform: rotate(360deg); } }
-.mg-spin-once { animation: mg-spin-once .8s var(--mg-sheet-ease, ease-in-out); }
-@media (prefers-reduced-motion: reduce) { .mg-spin-once { animation: none; } }
-html[data-lite="true"] .mg-spin-once { animation: none; }
+/* The refresh button (components/RefreshButton.tsx): the arrow turns while the refresh is under way, then a tick,
+   no-signal icon or cross takes its place for a moment. The layers sit on top of each other so they cross-fade. */
+@keyframes mg-refresh-spin { to { transform: rotate(360deg); } }
+.mg-refresh-icon { position: relative; display: inline-grid; width: var(--mg-refresh-size, 15px); height: var(--mg-refresh-size, 15px); }
+.rf-ib .mg-refresh-icon { --mg-refresh-size: 20px; }
+.mg-refresh-layer { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; }
+.mg-refresh-layer svg { width: 100%; height: 100%; }
+.mg-refresh-spin { animation: mg-refresh-spin .8s linear infinite; }
+.mg-refresh-ring { position: absolute; inset: 0; border-radius: 9999px; border: 1.5px solid currentColor; pointer-events: none; }
+.mg-hdr-icon.mg-refresh:not([data-phase="idle"]):not([data-phase="loading"]) { color: rgb(var(--mg-header-ink)); }
+.mg-refresh-status { color: rgb(var(--mg-header-ink)); }
+@media (prefers-reduced-motion: reduce) { .mg-refresh-spin { animation: none; opacity: .55; } .mg-refresh-ring { display: none; } }
+html[data-lite="true"] .mg-refresh-spin { animation: none; opacity: .55; }
+html[data-lite="true"] .mg-refresh-ring { display: none; }
 
 /* A row's light sweep when its team is followed. */
 .mg-follow-glimmer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
