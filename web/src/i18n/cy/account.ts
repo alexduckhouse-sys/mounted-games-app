@@ -132,6 +132,7 @@ export const account: AreaCatalogue<typeof en> = {
   'account.signups.lookingGuests': 'Yn chwilio am farchogion gwadd',
   'account.signups.stabling': { other: 'Stablau: {count} stabl' },
   'account.signups.pairSent': 'Cais pâr wedi’i anfon at {name}, yn aros am ateb',
+  'account.signups.pairAwaitingPayment': 'Mewn pâr gyda {name}. Caiff y tîm ei greu pan fydd y ddau gais wedi’u talu',
   'account.signups.aRider': 'farchog',
   'account.signups.ponyClub': 'Clwb Merlod: {name}',
   'account.signups.howToPayAria': 'Sut i dalu am {competition}',

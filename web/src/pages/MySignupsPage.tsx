@@ -251,6 +251,9 @@ function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { si
     s.lookingForGuestRiders ? t('account.signups.lookingGuests') : null,
     (s.stablesCount ?? 0) > 0 ? `${t('account.signups.stabling', { count: s.stablesCount ?? 0 })}${s.stablingClubOrTeam ? ` (${s.stablingClubOrTeam})` : ''}` : null,
     s.pairRequestToSignupId && s.pairRequestStatus === 'Pending' ? t('account.signups.pairSent', { name: s.pairRequestToName ?? t('account.signups.aRider') }) : null,
+    // A pair accepted before both entries were paid: no team yet, so say why.
+    s.pairRequestStatus === 'AcceptedAwaitingPayment' && !s.teamId
+      ? t('account.signups.pairAwaitingPayment', { name: s.pairRequestToName ?? s.pairRequestFromName ?? t('account.signups.aRider') }) : null,
     s.ponyClubName ? t('account.signups.ponyClub', { name: s.ponyClubName }) : null,
     guestLine ? t('account.signups.riderLine', { rider: guestLine }) : null,
   ].filter((note): note is string => note !== null);
