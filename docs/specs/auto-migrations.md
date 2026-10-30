@@ -16,7 +16,7 @@ Nothing makes the second happen before the first.
 ## What we have to work with
 
 - **CI:** `.github/workflows/ci.yml` runs `api` and `web` on every PR and on push to `main`. There's no deploy step; Vercel deploys from Git on its own.
-- **Vercel env:** `DATABASE_URL` is set on the API project for **Production only** (checked 30 October, names only). Preview API deployments have no database, so a preview build can never touch production. `DATABASE_URL_UNPOOLED` isn't on Vercel at all, because the API host only needs the pooled URL (`docs/neon-setup.md`).
+- **Vercel env:** since the 30 October move to the Vercel-billed `mounted-games-db` (`docs/neon-setup.md`), the store's connection sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED` on the API project for **Production only**, as sensitive variables. Preview API deployments have no database, so a preview build can never touch production. Sensitive variables can't be read back, so the GitHub secret is still copied by the owner from the store's Quickstart (`DATABASE_URL_UNPOOLED`), and has to be updated whenever the store's secrets are rotated.
 - **Migrations:** every migration has an idempotent script. EF runs each migration in its own transaction, and Postgres DDL is transactional, so a failed migration rolls back cleanly. 2 of the 51 scripts so far drop or rename something; the rest only add.
 - **Repo:** it's public. GitHub never passes secrets to workflows triggered from forks, and environment secrets can be limited to the `main` branch.
 
