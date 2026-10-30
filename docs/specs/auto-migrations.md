@@ -1,6 +1,6 @@
 # Run Neon migrations automatically before the API deploys
 
-Status: spec only, waiting on the owner's answers (end of this file). Nothing in production changes until then, and nothing is switched on before West Mids Pairs (31 October 2026).
+Status: agreed 30 October 2026 (decisions at the end of this file), not built yet. Nothing is switched on before West Mids Pairs (31 October 2026).
 
 ## Why
 
@@ -74,9 +74,16 @@ On a paid Neon plan, point-in-time restore covers a bad additive migration, so t
 - `docs/neon-setup.md`: the new flow, the secret, how to re-run a failed `migrate`.
 - `docs/decisions.md`: record the choice.
 
-## Owner decisions needed
+## Owner decisions (30 October 2026)
 
-1. **A (fully automatic) or B (block the merge, still run by hand)?** Recommended: A.
-2. **Store the production unpooled connection string as a GitHub `production` environment secret, limited to `main`?** A needs it. B needs only a read-only one.
-3. **Destructive migrations stay manual and two-step?** Recommended: yes.
-4. **If A1 isn't available, use A2 (needs a Vercel token in GitHub)?**
+1. **Option A, fully automatic.** Merging to `main` migrates Neon first, and the API goes live only once that has worked.
+2. **The production unpooled connection string goes in a GitHub `production` environment secret, limited to `main`.** The owner adds it: Claude can't read production credentials.
+3. **Destructive migrations stay manual and two-step.** The guard stops them.
+4. **If Vercel can't hold promotion for the check (A1), use A2:** deploy from the workflow with a team-scoped Vercel token in the same environment.
+
+## Build order
+
+1. After the event: a branch with `deploy-api.yml` and the guard script. Test the guard against the 51 existing scripts; it must flag exactly the 2 destructive ones.
+2. The owner creates the GitHub `production` environment (branch rule: `main`), and adds `NEON_DATABASE_URL_UNPOOLED` and, for A2, `VERCEL_TOKEN`.
+3. Confirm A1 or A2, then switch the gate over in the same PR that makes the workflow required.
+4. Prove it with one no-op merge on a quiet day, and watch the run, the deploy and `/api/competitions`.
