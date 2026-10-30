@@ -9,15 +9,14 @@ using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
-using MountedGames.Api.Services.DecForms;
 using MountedGames.Api.Services.Payouts;
 
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
 /// A club's payout set-up: Stripe Connect hosted onboarding and/or manual BACS details. That club's Team
-/// Manager, an approved Trainer of that club, an organiser/collaborator of a competition pinned to that club,
-/// or a site Admin may use it; another club's staff gets 403, a club that doesn't exist 404.
+/// Manager, an approved Trainer of that club, or a site Admin may use it; anyone else (another club's staff, or
+/// a collaborator on a competition that pays the club) gets 403, a club that doesn't exist 404.
 /// Responses carry masked bank details only. Full account numbers and IBANs are checked, masked and dropped:
 /// they are never stored, logged, returned or put in an error message. This controller injects no logger on purpose.
 /// </summary>
@@ -204,8 +203,9 @@ public class ClubPayoutsController(
     // ---- helpers ----
 
     /// <summary>
-    /// The club, if the caller may run its payouts: an Admin for any club, a Team Manager or approved Trainer of that club,
-    /// or the creator/collaborator of a competition whose <c>PayoutClubId</c> is <paramref name="clubId"/>.
+    /// The club, if the caller may run its payouts: an Admin for any club, or a Team Manager or approved Trainer who
+    /// belongs to that club now. Running a competition that pays the club gives no access: a collaborator, or an
+    /// organiser who has since moved club, could otherwise change where the club's money goes.
     /// </summary>
     private async Task<(Club? Club, ActionResult? Denied)> ScopeAsync(int clubId, CancellationToken ct)
     {
@@ -216,17 +216,9 @@ public class ClubPayoutsController(
         if (string.IsNullOrEmpty(uid)) return (null, Forbid());
         // The token carries the roles it was issued with, so check the live role in the database.
         var me = await users.FindByIdAsync(uid);
-        if (me is null) return (null, Forbid());
+        if (me is null || me.ClubId != clubId) return (null, Forbid());
         var isManagerOrTrainer = await users.IsInRoleAsync(me, Roles.Manager) || await users.IsInRoleAsync(me, Roles.Trainer);
-        if (isManagerOrTrainer && me.ClubId == clubId) return (club, null);
-
-        var compConfigs = await db.Competitions.AsNoTracking()
-            .Where(c => c.CreatedByUserId == uid || db.CompetitionCollaborators.Any(cc => cc.CompetitionId == c.Id && cc.UserId == uid))
-            .Select(c => new { c.DecFormConfigJson, CreatorClubId = c.CreatedBy != null ? c.CreatedBy.ClubId : null })
-            .ToListAsync(ct);
-        var runsCompForClub = compConfigs.Any(c =>
-            (DecFormConfig.Parse(c.DecFormConfigJson)?.PayoutClubId ?? c.CreatorClubId) == clubId);
-        return runsCompForClub ? (club, null) : (null, Forbid());
+        return isManagerOrTrainer ? (club, null) : (null, Forbid());
     }
 
     private static ClubPayoutAccount NewAccount(int clubId) => new() { ClubId = clubId };
