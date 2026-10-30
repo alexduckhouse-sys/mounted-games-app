@@ -60,7 +60,7 @@ public class CompetitionPickerTests
         Assert.False(last.HasMore);
         Assert.Equal(5, first.Items.Concat(second.Items).Concat(last.Items).Select(c => c.Id).Distinct().Count());
         var json = JsonSerializer.SerializeToElement(first.Items[0], new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        Assert.Equal(new[] { "ageGroupCount", "endDate", "entriesOpen", "icon", "id", "isDemo", "live", "location", "name", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(new[] { "ageGroupCount", "endDate", "entriesOpen", "icon", "id", "isDemo", "live", "location", "name", "shortName", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
     }
 
     [Fact]

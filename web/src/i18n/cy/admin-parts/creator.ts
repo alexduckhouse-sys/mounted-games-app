@@ -18,6 +18,8 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.doneSr': ', wedi gorffen',
   'admin.creator.name': 'Enw',
   'admin.creator.organiser': 'Trefnydd',
+  'admin.creator.shortName': 'Enw byr',
+  'admin.creator.shortNameHint': 'Yn cael ei ddangos yn y rhestr digwyddiadau pan fydd yr enw llawn yn hir iawn. Mae’r enw llawn i’w weld bob amser ar y gystadleuaeth ei hun.',
   'admin.creator.noMatch': 'Dim canlyniad.',
   'admin.creator.choose': 'Dewiswch',
   'admin.creator.remove': 'Tynnu',

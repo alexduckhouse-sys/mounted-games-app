@@ -145,6 +145,13 @@ describe('readDraft', () => {
     expect(readDraft(older)).toMatchObject({ competitionNumber: '', contactEmail: '' });
   });
 
+  it('reads the short name, and defaults it for an older draft', () => {
+    expect(readDraft({ ...draft(), shortName: 'Midlands Pairs' })).toMatchObject({ shortName: 'Midlands Pairs' });
+    const older: Record<string, unknown> = { ...draft() };
+    delete older.shortName;
+    expect(readDraft(older)).toMatchObject({ shortName: '' });
+  });
+
   it('refuses anything that is not a draft', () => {
     for (const value of [null, 'x', 4, {}, { name: 'a' }, { name: 1, sections: [] }]) expect(readDraft(value)).toBeNull();
   });

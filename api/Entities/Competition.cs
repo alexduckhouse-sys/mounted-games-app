@@ -4,6 +4,8 @@ public class Competition
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    /// <summary>An optional shorter name for the events list when the official name is very long (at most 40 characters). Null uses <see cref="Name"/>; the competition itself always shows the full name.</summary>
+    public string? ShortName { get; set; }
     public string Icon { get; set; } = "flag";
     public string? Location { get; set; }
     public double? Latitude { get; set; }

@@ -298,6 +298,7 @@ public class CompetitionsController : ControllerBase
             What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim(),
             AppleMapsUrl = appleUrl,
             Postcode = CompetitionFields.Postcode(req.Postcode),
+            ShortName = CompetitionFields.Trimmed(req.ShortName),
             CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber),
             ContactEmail = contactEmail,
             LorryWhat3Words = lorryW3w,
@@ -382,6 +383,7 @@ public class CompetitionsController : ControllerBase
         // Null leaves these fields as they are (older clients don't send them); a blank value clears them.
         if (req.Postcode is not null) c.Postcode = CompetitionFields.Postcode(req.Postcode);
         if (req.CompetitionNumber is not null) c.CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber);
+        if (req.ShortName is not null) c.ShortName = CompetitionFields.Trimmed(req.ShortName);
         if (req.ContactEmail is not null) c.ContactEmail = contactEmail;
         if (req.LorryWhat3Words is not null)
         {

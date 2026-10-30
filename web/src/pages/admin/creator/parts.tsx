@@ -14,16 +14,16 @@ export interface StepProps<D> {
   clear: (key: string) => void;
 }
 
-export function TextBox({ label, error, value, onChange, placeholder, hint, className = '', autoComplete = 'off', inputClass = '' }: {
+export function TextBox({ label, error, value, onChange, placeholder, hint, className = '', autoComplete = 'off', inputClass = '', maxLength }: {
   label: ReactNode; error?: string | null; value: string; onChange: (value: string) => void; placeholder?: string; hint?: ReactNode;
-  className?: string; autoComplete?: string; inputClass?: string;
+  className?: string; autoComplete?: string; inputClass?: string; maxLength?: number;
 }) {
   return (
     <Field label={label} error={error} className={className}>
       {({ id, invalid, describedBy }) => (
         <>
           <div className={fieldClass} data-invalid={invalid}>
-            <input id={id} value={value} placeholder={placeholder} autoComplete={autoComplete} aria-invalid={invalid} aria-describedby={describedBy}
+            <input id={id} value={value} placeholder={placeholder} autoComplete={autoComplete} maxLength={maxLength} aria-invalid={invalid} aria-describedby={describedBy}
               className={inputClass} onChange={(e) => onChange(e.target.value)} />
           </div>
           {hint && <span className="text-xs text-[rgb(var(--mg-muted))]">{hint}</span>}

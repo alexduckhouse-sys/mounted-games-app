@@ -448,6 +448,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Competitions", "TermsText", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "Postcode", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "CompetitionNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "ShortName", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "ContactEmail", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "LorryWhat3Words", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "LorryLatitude", "REAL NULL");

@@ -45,7 +45,7 @@ public static class CompetitionPickerQuery
         var items = await ordered.ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize + 1)
             .Select(c => new CompetitionPickerItem(c.Id, c.Name, c.StartDate, c.EndDate, c.Icon, c.Location, c.Sections.Count, null,
                 db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo),
-                !past && !c.SignupsLocked && c.Sections.Any()))
+                !past && !c.SignupsLocked && c.Sections.Any(), c.ShortName))
             .ToListAsync(ct);
         var pageItems = items.Take(pageSize).ToList();
         if (!past) await AttachLiveAsync(db, pageItems, todayUtc, ct);
@@ -70,7 +70,7 @@ public static class CompetitionPickerQuery
             .OrderBy(c => c.StartDate).ThenBy(c => c.Id).Take(NearYouSetCap);
         var items = await upcoming
             .Select(c => new CompetitionPickerItem(c.Id, c.Name, c.StartDate, c.EndDate, c.Icon, c.Location, c.Sections.Count, null,
-                db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo), !c.SignupsLocked && c.Sections.Any()))
+                db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo), !c.SignupsLocked && c.Sections.Any(), c.ShortName))
             .ToListAsync(ct);
         var places = await upcoming.Where(c => c.Latitude != null && c.Longitude != null)
             .Select(c => new { c.Id, Lat = c.Latitude!.Value, Lon = c.Longitude!.Value }).ToDictionaryAsync(c => c.Id, ct);
