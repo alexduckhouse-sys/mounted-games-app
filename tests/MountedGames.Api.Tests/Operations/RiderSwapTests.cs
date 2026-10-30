@@ -261,4 +261,55 @@ public class RiderSwapTests : IClassFixture<ApiFactory>
         Assert.Equal("Example rider note", rider.MedicalNotes);
         Assert.Equal("Example Old Pony", await _f.WithDbAsync(db => db.SavedRiders.Where(r => r.Id == savedId).Select(r => r.HorseName).SingleAsync()));
     }
+
+    private async Task SetReserveAsync(Form f, Action<RiderEntry> change) => await _f.WithDbAsync(async db =>
+    {
+        change(await db.RiderEntries.SingleAsync(r => r.Id == f.ReserveId));
+        await db.SaveChangesAsync();
+    });
+
+    [Fact]
+    public async Task Promoting_ARiderOverTheSectionAgeLimit_IsRefusedAndChangesNothing()
+    {
+        var f = await BuildAsync(locked: false);
+        // The arena's section is U12 and its competition runs this year, so a rider born 15 years ago is over the limit.
+        await SetReserveAsync(f, r => r.DateOfBirth = DateTime.UtcNow.Date.AddYears(-15));
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(SwapUrl(f),
+            new SwapRiderRequest(f.RiderId, f.ReserveId, "Pony lame", false, "over-age"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("over the U12 limit", await response.Content.ReadAsStringAsync());
+        var riders = await RidersAsync(f.FormId);
+        Assert.True(riders.Single(r => r.Id == f.ReserveId).IsReserve);
+        Assert.False(riders.Single(r => r.Id == f.RiderId).IsReserve);
+        Assert.Empty(await _f.WithDbAsync(db => db.Set<RiderSwapEvent>().Where(e => e.DeclarationFormId == f.FormId).ToListAsync()));
+    }
+
+    [Fact]
+    public async Task Promoting_AReserveWithAnImpossiblePonyHeight_IsRefused()
+    {
+        var f = await BuildAsync(locked: false);
+        await SetReserveAsync(f, r => r.PonyHeightHands = 25m);
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(SwapUrl(f),
+            new SwapRiderRequest(f.RiderId, f.ReserveId, null, false, "tall-pony"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("pony's height", await response.Content.ReadAsStringAsync());
+        Assert.True((await RidersAsync(f.FormId)).Single(r => r.Id == f.ReserveId).IsReserve);
+    }
+
+    [Fact]
+    public async Task Promoting_AnEligibleReserve_StillWorks()
+    {
+        var f = await BuildAsync(locked: false);
+        await SetReserveAsync(f, r => { r.DateOfBirth = DateTime.UtcNow.Date.AddYears(-10); r.PonyHeightHands = 13.2m; });
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(SwapUrl(f),
+            new SwapRiderRequest(f.RiderId, f.ReserveId, null, false, "eligible"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False((await RidersAsync(f.FormId)).Single(r => r.Id == f.ReserveId).IsReserve);
+    }
 }

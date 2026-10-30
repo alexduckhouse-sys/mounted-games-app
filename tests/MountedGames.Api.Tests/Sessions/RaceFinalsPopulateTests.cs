@@ -172,6 +172,45 @@ public class RaceFinalsPopulateTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task ACorrectedQualifier_DoesNotRefillAFinalWhoseClockHasStarted()
+    {
+        var a = await _f.CreateArenaAsync(4, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a);
+        await SetQualifiersAsync(admin, a, 1);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false));
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false));
+        var field = () => _f.WithDbAsync(db => db.HeatEntries.Where(e => e.HeatId == fin.Id).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToListAsync());
+        var finalists = await field();
+        var finalRace = await _f.WithDbAsync(db => db.Races.Where(r => r.HeatId == fin.Id).Select(r => r.Id).SingleAsync());
+        (await admin.PostAsync($"/api/races/{finalRace}/start", null)).EnsureSuccessStatusCode();
+
+        // The scorer fixes Q1 while the final is under way: the field it is racing is left alone.
+        (await admin.PostAsJsonAsync($"/api/races/{q1.Races[0].Id}/results", new SubmitRaceResultsRequest(
+            [new FinishingPlaceDto(q1t[1], 1, false), new FinishingPlaceDto(q1t[0], 2, false)], null, "wrong order"))).EnsureSuccessStatusCode();
+
+        Assert.Equal(finalists, await field());
+    }
+
+    [Fact]
+    public async Task ACorrectedQualifier_RefillsAFinalThatHasNotStarted()
+    {
+        var a = await _f.CreateArenaAsync(4, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a);
+        await SetQualifiersAsync(admin, a, 1);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false));
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false));
+
+        (await admin.PostAsJsonAsync($"/api/races/{q1.Races[0].Id}/results", new SubmitRaceResultsRequest(
+            [new FinishingPlaceDto(q1t[1], 1, false), new FinishingPlaceDto(q1t[0], 2, false)], null, "wrong order"))).EnsureSuccessStatusCode();
+
+        var finalists = await _f.WithDbAsync(db => db.HeatEntries.Where(e => e.HeatId == fin.Id).Select(e => e.TeamId).ToListAsync());
+        Assert.Contains(q1t[1], finalists);
+        Assert.DoesNotContain(q1t[0], finalists);
+    }
+
+    [Fact]
     public async Task FinalistsAreScoredOnTheFinalsOwnField_NotTheQualifiersBiggerOne()
     {
         var a = await _f.CreateArenaAsync(8, raceFinals: true);

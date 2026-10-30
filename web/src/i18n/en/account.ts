@@ -136,6 +136,7 @@ export const account = {
   'account.signups.lookingGuests': 'Looking for guest riders',
   'account.signups.stabling': { one: 'Stabling: {count} stable', other: 'Stabling: {count} stables' },
   'account.signups.pairSent': 'Pair request sent to {name}, waiting for an answer',
+  'account.signups.pairAwaitingPayment': 'Paired with {name}. The team is made once both entries are paid',
   'account.signups.aRider': 'a rider',
   'account.signups.ponyClub': 'Pony Club: {name}',
   'account.signups.howToPayAria': 'How to pay for {competition}',

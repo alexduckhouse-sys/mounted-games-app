@@ -764,6 +764,11 @@ public class SignupTests : IClassFixture<ApiFactory>
         var reqResp = await rider1.PostAsJsonAsync($"/api/my/signups/{dto1.Id}/pair-request", new { targetSignupId = dto2.Id });
         reqResp.EnsureSuccessStatusCode();
 
+        // A pair only becomes a team once both halves are paid.
+        var admin = await _f.AdminAsync();
+        foreach (var id in new[] { dto1.Id, dto2.Id })
+            (await admin.PostAsJsonAsync($"/api/competitions/{pairsSection.CompetitionId}/signups/{id}/mark-paid", new { })).EnsureSuccessStatusCode();
+
         var acceptResp = await rider2.PostAsJsonAsync($"/api/my/signups/{dto2.Id}/pair-respond", new { accept = true });
         acceptResp.EnsureSuccessStatusCode();
         var accepted = await acceptResp.ReadAsync<MySignupDto>();
@@ -815,6 +820,9 @@ public class SignupTests : IClassFixture<ApiFactory>
         var publicListing = await _f.CreateClient().GetStringAsync($"/api/competitions/{section.CompetitionId}/matchmaking");
         Assert.DoesNotContain("Test Alpha", publicListing);
         Assert.Contains("Test A.", publicListing);
+        var admin = await _f.AdminAsync();
+        foreach (var entrant in new[] { first, second })
+            (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{entrant.Signup.Id}/mark-paid", new { })).EnsureSuccessStatusCode();
         var accepted = await (await second.Client.PostAsJsonAsync($"/api/my/signups/{second.Signup.Id}/pair-respond", new { accept = true })).ReadAsync<MySignupDto>();
         Assert.Equal("Test A. & Test B.", accepted.TeamName);
         Assert.Equal(HttpStatusCode.BadRequest, (await second.Client.PostAsJsonAsync($"/api/my/signups/{second.Signup.Id}/pair-respond", new { accept = true })).StatusCode);

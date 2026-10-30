@@ -132,6 +132,7 @@ export const account: AreaCatalogue<typeof en> = {
   'account.signups.lookingGuests': 'Cherche des cavaliers invités',
   'account.signups.stabling': { one: 'Boxes : {count} box', other: 'Boxes : {count} boxes' },
   'account.signups.pairSent': 'Demande de paire envoyée à {name}, en attente de réponse',
+  'account.signups.pairAwaitingPayment': 'En paire avec {name}. L’équipe sera créée une fois les deux inscriptions payées',
   'account.signups.aRider': 'un cavalier',
   'account.signups.ponyClub': 'Poney-club : {name}',
   'account.signups.howToPayAria': 'Comment payer pour {competition}',

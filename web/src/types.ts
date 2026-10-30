@@ -842,6 +842,8 @@ export interface CreateEventOrderLine {
   detail?: string | null;
   /** Required when the item has options, refused when it has none. */
   optionId?: number | null;
+  /** The unit price in pence the buyer was shown; the server answers 409 with the new price if it has changed since. */
+  expectedUnitPriceMinor?: number | null;
 }
 
 export interface ShopPost {

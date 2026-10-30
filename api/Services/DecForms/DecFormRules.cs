@@ -14,6 +14,9 @@ public static class DecFormRules
 {
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Pony heights in hands, as a decimal (13.2 is 13 hands 2 inches). Shetlands to big horses fit inside.</summary>
+    public const decimal MinPonyHands = 5m, MaxPonyHands = 20m;
+
     /// <summary>
     /// Why the rider can't be accepted, or null. On success the rider's entry has been filled in.
     /// <paramref name="lenient"/> is the standard form of a competition that never set one up: nothing is newly refused there.
@@ -168,6 +171,19 @@ public static class DecFormRules
                 return $"{who}: aged {minAgeOnJan1} on 1 January {competitionStartDate.Year}, over the {effectiveAgeGroup!.Trim()} limit.";
         }
         return null;
+    }
+
+    /// <summary>
+    /// Why a rider can't ride as they stand, or null: the pony's height outside the range the form accepts
+    /// (<see cref="MinPonyHands"/> to <see cref="MaxPonyHands"/>), or over the section's age limit on 1 January of the competition year.
+    /// Used when a reserve is brought in, who was never checked as a riding member of the team.
+    /// </summary>
+    public static string? CheckRidingEligibility(RiderEntry rider, int competitionYear, string? sectionAgeGroup)
+    {
+        var who = string.IsNullOrWhiteSpace(rider.FullName) ? "The reserve" : rider.FullName.Trim();
+        if (rider.PonyHeightHands is { } hh && (hh < MinPonyHands || hh > MaxPonyHands))
+            return $"{who}: a pony's height must be between {Show(MinPonyHands)} and {Show(MaxPonyHands)} hands.";
+        return CheckAgeEligibility(rider, new DateTime(competitionYear, 1, 1), sectionAgeGroup);
     }
 
     /// <summary>
