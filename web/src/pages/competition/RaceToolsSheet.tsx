@@ -39,6 +39,8 @@ interface RaceToolsSheetProps {
   onHc: (teamId: number) => void;
   onYellow: (teamId: number) => void;
   onRed: (teamId: number) => void;
+  /** Take a yellow card off (a yellow given by mistake). The item shows only while the team has a yellow. */
+  onClearCard: (teamId: number) => void;
   /** Move the team's points for this race up or down by one. */
   onStepPoints: (teamId: number, by: 1 | -1) => void;
   /** Eliminate the team, or bring it back: the same as pressing and holding its lane card. Without it there is no menu item. */
@@ -59,7 +61,7 @@ interface RaceToolsSheetProps {
 
 /** The ⋯ sheet on the scoring screen: every team with its own menu (HC, cards, points), then the other tools. */
 export function RaceToolsSheet({
-  teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onStepPoints, onEliminate, onDeadHeat, onClearDeadHeat, factsOn, onToggleFacts, fullColour, onToggleFullColour, links, onClose,
+  teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onClearCard, onStepPoints, onEliminate, onDeadHeat, onClearDeadHeat, factsOn, onToggleFacts, fullColour, onToggleFullColour, links, onClose,
 }: RaceToolsSheetProps) {
   const [menuFor, setMenuFor] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -158,6 +160,9 @@ export function RaceToolsSheet({
                           <button type="button" role="menuitem" onClick={() => pick(() => onYellow(t.teamId))}>
                             <span className="rt-sw rt-sw-yellow" aria-hidden="true" />{yellowLabel(t.card)}
                           </button>
+                          {t.card === 'yellow' && (
+                            <button type="button" role="menuitem" onClick={() => pick(() => onClearCard(t.teamId))}>Remove yellow card</button>
+                          )}
                           <button type="button" role="menuitem" onClick={() => pick(() => onRed(t.teamId))}>
                             <span className="rt-sw rt-sw-red" aria-hidden="true" />{redLabel(t.card)}
                           </button>

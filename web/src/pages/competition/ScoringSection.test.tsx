@@ -345,6 +345,19 @@ describe('cards', () => {
     expect(onSetCard).toHaveBeenLastCalledWith(2, 'red');
   });
 
+  it('takes a yellow given by mistake off without going through red', async () => {
+    const user = userEvent.setup();
+    const onSetCard = vi.fn();
+    render(<Harness onSetCard={onSetCard} cards={{ 2: 'yellow' }} />);
+    const sheet = await openTools(user);
+    let menu = await openTeamMenu(user, sheet, 'Bravo');
+    await user.click(within(menu).getByRole('menuitem', { name: 'Remove yellow card' }));
+    expect(onSetCard).toHaveBeenLastCalledWith(2, null);
+    // A team without a yellow has nothing to remove.
+    menu = await openTeamMenu(user, sheet, 'Alpha');
+    expect(within(menu).queryByRole('menuitem', { name: 'Remove yellow card' })).toBeNull();
+  });
+
   it('gives and removes a red card, and reads the card from the lane', async () => {
     const user = userEvent.setup();
     const onSetCard = vi.fn();
