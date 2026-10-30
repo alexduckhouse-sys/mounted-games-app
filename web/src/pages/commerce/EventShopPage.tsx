@@ -127,12 +127,14 @@ function EventShopContent() {
     if (orderAttempt.current?.basketSignature !== basketSignature) {
       orderAttempt.current = { basketSignature, idempotencyKey: newIdempotencyKey('event-order') };
     }
+    const priceOf = new Map(basketLines.map(({ listing }) => [listing.id, listing.priceMinor]));
     setBusy(true);
     setOrderError(null);
     try {
       const { data } = await api.post<EventOrder>(`/commerce/competitions/${competition.id}/orders`, {
         idempotencyKey: orderAttempt.current.idempotencyKey,
-        items: lines,
+        // The price on screen goes with the order, so a price changed since the page loaded is refused, not charged.
+        items: lines.map((line) => ({ ...line, expectedUnitPriceMinor: priceOf.get(line.listingId) })),
       });
       setOrder(data);
       if (data.isTestOrder) {
@@ -145,6 +147,8 @@ function EventShopContent() {
       }
     } catch (requestError) {
       setOrderError(errorMessage(requestError, t('site.shop.orderFailed')));
+      // A 409 means the shop moved on (a new price, stock gone): show it as it is now.
+      if ((requestError as { response?: { status?: number } })?.response?.status === 409) void load();
     } finally {
       setBusy(false);
     }

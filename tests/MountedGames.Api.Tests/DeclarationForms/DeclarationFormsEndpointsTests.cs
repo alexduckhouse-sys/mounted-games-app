@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
@@ -1033,5 +1034,38 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
 
         var joined = await _f.WithDbAsync(db => db.TeamSupporters.AnyAsync(s => s.TeamId == a.TeamIds[0] && s.UserId == parentAuth.User.Id));
         Assert.True(joined);
+    }
+
+    [Fact]
+    public async Task Resubmitting_DeclinesPendingSubstitutionRequests_ThatPointedAtTheOldRiders()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var admin = await _f.AdminAsync();
+        var first = await (await admin.PostAsJsonAsync(Url, Form(a.TeamIds[0],
+            [Rider("Old Rider", 0), Rider("Old Reserve", 1, reserve: true)]))).ReadAsync<DeclarationFormDto>();
+        var oldRiders = first.Riders.OrderBy(r => r.OrderIndex).Select(r => r.Id).ToArray();
+        var (pending, approved) = await _f.WithDbAsync(async db =>
+        {
+            SubstitutionRequest Row(string status) => new()
+            {
+                CompetitionId = a.CompetitionId, DeclarationFormId = first.Id, RequestedByUserId = "someone",
+                OutRiderEntryId = oldRiders[0], InRiderEntryId = oldRiders[1], Reason = "Pony lame",
+                DeclarationFingerprint = "x", Status = status,
+            };
+            var p = Row("pending"); var ap = Row("approved");
+            db.AddRange(p, ap);
+            await db.SaveChangesAsync();
+            return (p.Id, ap.Id);
+        });
+
+        (await admin.PostAsJsonAsync(Url, Form(a.TeamIds[0], [Rider("New Rider", 0), Rider("New Reserve", 1, reserve: true)]))).EnsureSuccessStatusCode();
+
+        await _f.WithDbAsync(async db =>
+        {
+            var declined = await db.Set<SubstitutionRequest>().SingleAsync(x => x.Id == pending);
+            Assert.Equal("declined", declined.Status);
+            Assert.NotNull(declined.DecidedAt);
+            Assert.Equal("approved", (await db.Set<SubstitutionRequest>().SingleAsync(x => x.Id == approved)).Status);
+        });
     }
 }

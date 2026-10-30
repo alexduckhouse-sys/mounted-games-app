@@ -99,7 +99,8 @@ public record UpdateEventCommerceSettingsRequest(bool IsDemo);
 
 /// <param name="Detail">What the buyer typed for the item's <c>DetailPrompt</c>, at most 80 characters.</param>
 /// <param name="OptionId">The chosen option (size) when the item has options; required then, and refused otherwise.</param>
-public record CreateEventOrderLineRequest(int ListingId, int Quantity, string? Detail = null, int? OptionId = null);
+/// <param name="ExpectedUnitPriceMinor">The unit price in pence the buyer was shown. When sent and the price has changed since, the order is refused (409) with the new price. Optional, so older clients still work.</param>
+public record CreateEventOrderLineRequest(int ListingId, int Quantity, string? Detail = null, int? OptionId = null, int? ExpectedUnitPriceMinor = null);
 
 public record CreateEventOrderRequest(string? IdempotencyKey, IReadOnlyList<CreateEventOrderLineRequest>? Items);
 

@@ -105,7 +105,7 @@ describe('EventShopPage', () => {
     expect(await screen.findByRole('heading', { name: 'Order #33' })).toBeInTheDocument();
     expect(screen.getAllByText('£25.00').length).toBeGreaterThan(0);
     expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders', expect.objectContaining({
-      items: [{ listingId: 10, quantity: 1 }],
+      items: [{ listingId: 10, quantity: 1, expectedUnitPriceMinor: 2500 }],
     }));
     expect(screen.getByText(/Pay the organiser using their usual payment details/)).toBeInTheDocument();
     expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
@@ -270,7 +270,7 @@ describe('EventShopPage', () => {
     await userEvent.type(screen.getByLabelText('Stable number'), 'B12');
     await userEvent.click(screen.getByRole('button', { name: 'Order: £50' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders', expect.objectContaining({
-      items: [{ listingId: 10, quantity: 1, detail: 'B12' }, { listingId: 11, quantity: 1 }],
+      items: [{ listingId: 10, quantity: 1, detail: 'B12', expectedUnitPriceMinor: 2500 }, { listingId: 11, quantity: 1, expectedUnitPriceMinor: 2500 }],
     })));
   });
 
@@ -296,6 +296,20 @@ describe('EventShopPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect((post.mock.calls[1][1] as { idempotencyKey: string }).idempotencyKey).not.toBe((post.mock.calls[0][1] as { idempotencyKey: string }).idempotencyKey);
+  });
+
+  it('shows the new price and reloads the shop when the price changed since the page loaded', async () => {
+    shopGet(manualSettings);
+    post.mockRejectedValueOnce({ response: { status: 409, data: { message: 'The price of Weekend camping has changed to £30.00. Check the new price and order again.' } } });
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    await addCamping();
+    const loadsBefore = get.mock.calls.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
+
+    expect(await screen.findByText(/has changed to £30\.00/)).toBeInTheDocument();
+    expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders',
+      expect.objectContaining({ items: [{ listingId: 10, quantity: 1, expectedUnitPriceMinor: 2500 }] }));
+    await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(loadsBefore));
   });
 
   it('has tabs for the event shop and the tack and kit classifieds, and no small print about collecting or paying', async () => {
@@ -335,6 +349,6 @@ describe('EventShopPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add one New event camping' }));
     await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/6/orders',
-      expect.objectContaining({ items: [{ listingId: 60, quantity: 1 }] })));
+      expect.objectContaining({ items: [{ listingId: 60, quantity: 1, expectedUnitPriceMinor: 2500 }] })));
   });
 });

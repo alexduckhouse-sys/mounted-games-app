@@ -16,6 +16,7 @@ public enum CreateOrderError
     ListingUnavailable,
     OutOfStock,
     IdempotencyConflict,
+    PriceChanged,
 }
 
 public sealed record CreateOrderResult(EventOrder? Order, CreateOrderError Error, string? Message, bool Replayed = false);
@@ -42,6 +43,8 @@ public sealed class CommerceOrderService(AppDbContext db)
             return Invalid("Each item needs a valid listing and a quantity from 1 to 99.");
         if (request.Items.Any(x => x.OptionId is <= 0))
             return Invalid("Each item needs a valid option.");
+        if (request.Items.Any(x => x.ExpectedUnitPriceMinor is < 0))
+            return Invalid("Each item needs a valid price.");
 
         if (request.Items.Any(x => x.Detail?.Trim().Length > MaxDetailLength))
             return Invalid($"Details can be at most {MaxDetailLength} characters.");
@@ -54,14 +57,18 @@ public sealed class CommerceOrderService(AppDbContext db)
                 g.Key.OptionId,
                 Quantity = g.Sum(x => x.Quantity),
                 Details = g.Select(x => x.Detail?.Trim()).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList(),
+                ExpectedPrices = g.Where(x => x.ExpectedUnitPriceMinor.HasValue).Select(x => x.ExpectedUnitPriceMinor!.Value).Distinct().ToList(),
             })
             .OrderBy(x => x.ListingId)
             .ThenBy(x => x.OptionId ?? 0)
             .ToList();
         if (byLine.Any(x => x.Details.Count > 1))
             return Invalid("Send each item once, with a single detail.");
+        if (byLine.Any(x => x.ExpectedPrices.Count > 1))
+            return Invalid("Send each item once, with a single price.");
         var grouped = byLine
-            .Select(x => new CreateEventOrderLineRequest(x.ListingId, x.Quantity, x.Details.SingleOrDefault(), x.OptionId))
+            .Select(x => new CreateEventOrderLineRequest(x.ListingId, x.Quantity, x.Details.SingleOrDefault(), x.OptionId,
+                x.ExpectedPrices.Count == 1 ? x.ExpectedPrices[0] : null))
             .ToList();
         if (grouped.GroupBy(x => x.ListingId).Any(g => g.Sum(x => x.Quantity) > 99))
             return Invalid("The total quantity for one listing cannot exceed 99.");
@@ -105,6 +112,15 @@ public sealed class CommerceOrderService(AppDbContext db)
                 {
                     await transaction.RollbackAsync(cancellationToken);
                     return new CreateOrderResult(null, CreateOrderError.ListingUnavailable, "One or more listings are no longer available.");
+                }
+                // The price the buyer saw must still be the price they'd pay; if not, nothing is created.
+                foreach (var requested in grouped.Where(x => x.ExpectedUnitPriceMinor.HasValue))
+                {
+                    var current = listings[requested.ListingId].CatalogueItem!;
+                    if (current.PriceMinor == requested.ExpectedUnitPriceMinor) continue;
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new CreateOrderResult(null, CreateOrderError.PriceChanged,
+                        $"The price of {current.Title} has changed to £{(current.PriceMinor / 100m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}. Check the new price and order again.");
                 }
                 // An item that asks the buyer for something (a stable number, a number plate) needs an answer.
                 foreach (var requested in grouped)

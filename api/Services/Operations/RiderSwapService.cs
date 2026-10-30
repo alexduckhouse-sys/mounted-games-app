@@ -5,6 +5,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
+using MountedGames.Api.Services.DecForms;
 
 namespace MountedGames.Api.Services.Operations;
 
@@ -66,7 +67,8 @@ public class RiderSwapService(AppDbContext db)
             db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
-            var form = await db.DeclarationForms.Include(f => f.Riders).Include(f => f.Team)
+            var form = await db.DeclarationForms.Include(f => f.Riders).Include(f => f.Team).ThenInclude(t => t!.Section)
+                .Include(f => f.Team).ThenInclude(t => t!.Competition)
                 .FirstOrDefaultAsync(f => f.Id == formId && f.Team!.CompetitionId == competitionId, ct)
                 ?? throw new KeyNotFoundException("Declaration not found.");
 
@@ -181,6 +183,10 @@ public class RiderSwapService(AppDbContext db)
                 inRider = form.Riders.FirstOrDefault(r => r.Id == request.InRiderEntryId)
                     ?? throw new EntryValidationException("The reserve to bring in isn't on this declaration.");
                 if (!inRider.IsReserve) throw new EntryValidationException("The rider to bring in isn't a reserve.");
+
+                // A reserve never went through the riding checks on the form, so run them now they are about to ride.
+                var ineligible = DecFormRules.CheckRidingEligibility(inRider, form.Team?.Competition?.StartDate.Year ?? DateTime.UtcNow.Year, form.Team?.Section?.AgeGroup);
+                if (ineligible is not null) throw new EntryValidationException(ineligible);
 
                 (outRider.IsReserve, inRider.IsReserve) = (true, false);
                 if (outRider.IsCaptain)

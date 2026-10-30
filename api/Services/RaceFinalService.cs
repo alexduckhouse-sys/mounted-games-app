@@ -97,7 +97,7 @@ public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
 
     /// <summary>
     /// After a qualifier race is scored: once both qualifiers of the round are complete, fill the round's
-    /// final from them (using the session's qualifier count). Leaves a final that already has results
+    /// final from them (using the session's qualifier count). Leaves a final that has started or already has results
     /// alone. Returns the final heat id when the final was filled, otherwise null.
     /// </summary>
     public async Task<int?> TryAutoPopulateAsync(int raceId, CancellationToken ct = default)
@@ -113,7 +113,8 @@ public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
         var final = round.FirstOrDefault(h => h.RaceRoundStage == RaceRoundStage.Final);
         if (final is null || qualifiers.Count < 2) return null;
         if (qualifiers.Any(q => q.Races.Count == 0 || q.Races.Any(r => !r.IsComplete))) return null;
-        if (final.Races.Any(r => r.IsComplete)) return null;
+        // A final that has started (its clock is running or it is scored) keeps the field it is racing, whatever is corrected later.
+        if (final.StartedAt.HasValue || final.Races.Any(r => r.IsComplete || r.StartedAt.HasValue || r.FinishedAt.HasValue)) return null;
 
         var error = await PopulateAsync(final, heat.Session?.QualifiersPerHeat ?? DefaultQualifiers, ct);
         return error is null ? final.Id : null;

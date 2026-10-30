@@ -248,4 +248,58 @@ public class WeatherPauseTests : IClassFixture<ApiFactory>
         var response = await otherTrainer.Client.PostAsJsonAsync(Url(a, "/pause"), new { reason = "thunder", announcement = "x" });
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    // ---- The hold and steward-call announcements get the same checks as a typed one ----
+
+    [Fact]
+    public async Task Hold_RefusesAResumeTimeTooLongToBeATime_AndPostsNothing()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+
+        var response = await admin.PostAsJsonAsync(Url(a, "/hold"), new HoldCompetitionRequest(ResumeTime: new string('x', 101)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.DoesNotContain(await ChatAsync(a), m => m.Tag == "hold");
+    }
+
+    [Fact]
+    public async Task Hold_MasksSwearWordsInTheAnnouncement_WhenTheResumeTimeIsFreeText()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+
+        var response = await admin.PostAsJsonAsync(Url(a, "/hold"), new HoldCompetitionRequest(ResumeTime: "when the bloody rain stops"));
+
+        response.EnsureSuccessStatusCode();
+        var hold = Assert.Single(await ChatAsync(a), m => m.Tag == "hold");
+        Assert.Contains("b***** rain", hold.Body);
+        Assert.DoesNotContain("bloody", hold.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StewardCall_MasksSwearWordsInTheCustomMessage_AndKeepsTheLengthLimit()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var shiftId = await _f.WithDbAsync(async db =>
+        {
+            var shift = new MountedGames.Api.Entities.Operations.VolunteerShift
+            {
+                CompetitionId = a.CompetitionId, Role = "Start line steward", AssignedTeamId = a.TeamIds[0],
+            };
+            db.Add(shift);
+            await db.SaveChangesAsync();
+            return shift.Id;
+        });
+        var url = $"/api/competitions/{a.CompetitionId}/volunteer-shifts/{shiftId}/call-missing";
+
+        var tooLong = await admin.PostAsJsonAsync(url, new CallMissingStewardRequest(new string('x', 401)));
+        var response = await admin.PostAsJsonAsync(url, new CallMissingStewardRequest("Where is the bloody steward?"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+        response.EnsureSuccessStatusCode();
+        var call = await response.ReadAsync<CallMissingStewardResultDto>();
+        Assert.Equal("Where is the b***** steward?", call.Announcement.Body);
+    }
 }
