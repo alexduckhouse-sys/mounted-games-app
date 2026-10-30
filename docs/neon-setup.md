@@ -4,8 +4,10 @@ The React frontend stays on Vercel. The .NET API connects to Neon using Entity F
 
 ## Current setup
 
-- Neon project: `wild-leaf-19597390`, organisation `org-hidden-silence-42555372`.
-- The `production` branch has the PostgreSQL schema, including competition icons, and the real West Mids Pairs event (competition 44). The eight fictional demo events were cleared from production on 28 October; `npm run db:seed-review` recreates them on a non-production branch.
+- Since 30 October 2026 production runs on the Vercel-billed Neon database `mounted-games-db` (Neon project `dawn-rain-89550103`, AWS us-east-2 / Vercel `cle1`, Postgres 18, Launch plan billed through the Vercel Pro team). It is connected to the `mounted-games-api` project for **Production only**, with no preview branching and prefix `DATABASE`, so Vercel manages `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct) and the `DATABASE_PG*` / `DATABASE_POSTGRES_*` extras as sensitive variables. Rotating the password in the store updates them; redeploy the API afterwards.
+- Read-only SQL for the new database: Vercel → Storage → `mounted-games-db` → Query (keep **Read-only** on). Opening it in the Neon console asks to link your Vercel login to your Neon account by email first.
+- The old project `wild-leaf-19597390` (organisation `org-hidden-silence-42555372`, free plan) still holds the copy taken at the switch and is no longer used. Keep it untouched until 6 November 2026 as the way back, then delete it. Neon can't move a project into a Vercel-managed organisation, which is why this was a copy, not a transfer.
+- The production database has the PostgreSQL schema, including competition icons, and the real West Mids Pairs event (competition 44). The eight fictional demo events were cleared from production on 28 October; `npm run db:seed-review` recreates them on a non-production branch.
 - The Neon CLI is authenticated. Codex's global Neon MCP configuration uses OAuth and is restricted to this project. Start a new Codex session if its tools are not available in an existing session.
 - `neon.ts` requests PostgreSQL only. The app keeps ASP.NET Identity for sign-in.
 - The CLI writes connection variables into ignored local environment files. Do not commit or print their contents.
@@ -111,5 +113,21 @@ After the data is ready, configure these variables on the **API host**:
 - Keep the existing `Jwt__Key` and `Admin__Key` values.
 
 Deploy the updated API after its migration has been applied. In the Docker image, the migration command is `dotnet MountedGames.Api.dll --migrate-database`. The existing SQLite connection setting can then be removed. Recheck the public site's sign-in, competition picker, timetable and scoring before considering the switch complete.
+
+### The 30 October 2026 move to Vercel billing
+
+1. Created `mounted-games-db` from the API project's Storage tab (Neon, Cleveland `cle1`, Auth and Realtime off), without connecting it.
+2. Copied with `pg_dump --no-owner --no-acl -Fc` and `pg_restore --no-owner --no-acl --exit-on-error` from a `postgres:18` container, using the direct (non `-pooler`) URLs of both, typed at hidden prompts so they never reached a log or chat. The script first refused a target that already had tables.
+3. Compared both sides with one read-only query, run in each SQL editor; the switch is good when tables, total rows and fingerprint match (they did: 116 tables, 935 rows):
+
+   ```sql
+   select count(*) as tables, sum(n) as total_rows, md5(string_agg(t || ':' || n, ',' order by t)) as fingerprint
+   from (select table_name t, (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from public.%I', table_name), false, true, '')))[1]::text::bigint n
+         from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE') s;
+   ```
+
+4. Deleted the API's hand-set `DATABASE_URL`, connected the store for Production with prefix `DATABASE`, redeployed production, checked `/api/competitions`, re-ran the fingerprint on both, and confirmed in `pg_stat_activity` on the new database that `mounted-games-api` was connected.
+
+To go back: in the old Neon project copy the pooled connection string, disconnect the store from `mounted-games-api`, add it as `DATABASE_URL` (Production, sensitive) and redeploy. Anything written to the new database since the switch would need copying back.
 
 For driver and connection guidance, see [Npgsql's EF Core documentation](https://www.npgsql.org/efcore/) and the [Neon PostgreSQL skill](https://github.com/neondatabase/agent-skills/tree/main/skills/neon-postgres).
