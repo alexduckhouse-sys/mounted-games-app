@@ -28,7 +28,7 @@ public record SponsorRequest(
 public record SponsorOrderRequest([Required] IReadOnlyList<int> Ids);
 
 /// <summary>How often sponsors were on screen since the last batch. Counters only; nothing identifies the viewer.</summary>
-public record SponsorExposureBatch([Required, MaxLength(40)] IReadOnlyList<SponsorExposureItem> Items);
+public record SponsorExposureBatch([Required, MaxLength(25)] IReadOnlyList<SponsorExposureItem> Items);
 
 /// <summary>One sponsor in one place: the number of times it appeared and the seconds it stayed (video only).</summary>
 public record SponsorExposureItem(

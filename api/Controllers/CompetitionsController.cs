@@ -26,8 +26,10 @@ public class CompetitionsController : ControllerBase
     [CompetitionAccess("id")]
     public async Task<IActionResult> SetStreamUrl(int id, StreamUrlRequest request, CancellationToken ct)
     {
+        if (!TryNormaliseStreamUrl(request.StreamUrl, out var streamUrl))
+            return BadRequest(new { message = StreamUrlProblem });
         var competition = await _db.Competitions.SingleAsync(c => c.Id == id, ct);
-        competition.StreamUrl = request.StreamUrl;
+        competition.StreamUrl = streamUrl;
         await _db.SaveChangesAsync(ct);
         return NoContent();
     }
@@ -247,6 +249,23 @@ public class CompetitionsController : ControllerBase
 
     private const string ContactEmailProblem = "That contact email doesn't look right. Check it, or leave it blank.";
     private const string PaymentLinkProblem = "That payment link doesn't look right. Use a full https:// link, or leave it blank.";
+    private const string StreamUrlProblem = "That stream link doesn't look right. Use a full http:// or https:// link, or leave it blank.";
+
+    // A blank stream URL clears it; anything set must be an absolute http/https URL with a host,
+    // so an odd-scheme value (javascript:, data:, …) can never reach the iOS app or share cards.
+    private static bool TryNormaliseStreamUrl(string? raw, out string? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(raw)) return true;
+        var trimmed = raw.Trim();
+        if (trimmed.Length > 2000
+            || !Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || string.IsNullOrEmpty(uri.Host))
+            return false;
+        value = trimmed;
+        return true;
+    }
 
     [HttpPost]
     [Authorize(Roles = Roles.Organiser)]
@@ -263,6 +282,8 @@ public class CompetitionsController : ControllerBase
             || appleUri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(appleUri.Host)
             || !string.IsNullOrEmpty(appleUri.UserInfo)))
             return BadRequest(new { message = "Use a full https:// map link with no sign-in details, up to 500 characters." });
+        if (!TryNormaliseStreamUrl(req.StreamUrl, out var streamUrl))
+            return BadRequest(new { message = StreamUrlProblem });
         var lat = req.Latitude;
         var lon = req.Longitude;
         if (lat is null || lon is null)
@@ -305,7 +326,7 @@ public class CompetitionsController : ControllerBase
             LorryLatitude = lorryLat,
             LorryLongitude = lorryLon,
             LorryDirectionsNote = CompetitionFields.Trimmed(req.LorryDirectionsNote),
-            StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
+            StreamUrl = streamUrl,
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             PaymentLinkUrl = paymentLinkUrl,
@@ -361,6 +382,8 @@ public class CompetitionsController : ControllerBase
             || appleUri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(appleUri.Host)
             || !string.IsNullOrEmpty(appleUri.UserInfo)))
             return BadRequest(new { message = "Use a full https:// map link with no sign-in details, up to 500 characters." });
+        if (!TryNormaliseStreamUrl(req.StreamUrl, out var streamUrl))
+            return BadRequest(new { message = StreamUrlProblem });
         var newLat = req.Latitude;
         var newLon = req.Longitude;
         if (newLat is null || newLon is null)
@@ -377,7 +400,7 @@ public class CompetitionsController : ControllerBase
         }
         c.Latitude = newLat;
         c.Longitude = newLon;
-        c.StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim();
+        c.StreamUrl = streamUrl;
         c.What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim();
         c.AppleMapsUrl = appleUrl;
         // Null leaves these fields as they are (older clients don't send them); a blank value clears them.

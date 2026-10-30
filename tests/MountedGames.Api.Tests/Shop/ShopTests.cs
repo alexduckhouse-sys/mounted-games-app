@@ -71,6 +71,20 @@ public class ShopTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task AuthorUserId_HiddenFromAnonymous_ShownToSignedIn()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var post = await CreateAsync(client, Post());
+
+        // The author (signed in) sees the id, used to show their own edit controls.
+        var mine = await (await client.GetAsync($"/api/shop/posts/{post.Id}")).ReadAsync<ShopPostDto>();
+        Assert.Equal(auth.User.Id, mine.AuthorUserId);
+        // An anonymous reader never gets account ids.
+        var anon = await (await _f.CreateClient().GetAsync($"/api/shop/posts/{post.Id}")).ReadAsync<ShopPostDto>();
+        Assert.Null(anon.AuthorUserId);
+    }
+
+    [Fact]
     public async Task Create_StoresTrimmedPostAgainstUser()
     {
         var (me, auth) = await _f.SignupAsync();

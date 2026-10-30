@@ -334,7 +334,10 @@ public class HistorySeedEndpointsTests : IClassFixture<ApiFactory>
     {
         await SeedOnceAsync();
         var anon = _f.CreateClient();
-        var posts = await (await anon.GetAsync("/api/shop/posts?take=200")).ReadAsync<List<ShopPostDto>>();
+        // Author ids are only returned to signed-in callers, so use an admin client to
+        // pick out the seeded posts; image stripping is the same on every read path.
+        var admin = await _f.AdminAsync();
+        var posts = await (await admin.GetAsync("/api/shop/posts?take=200")).ReadAsync<List<ShopPostDto>>();
         var ours = posts.Where(p => p.AuthorUserId is not null && p.AuthorUserId.StartsWith("history-seed-")).ToList();
         Assert.Equal(15, ours.Count);
         Assert.All(ours, p => Assert.True(string.IsNullOrEmpty(p.ImageBase64) && p.PriceMinor > 0));

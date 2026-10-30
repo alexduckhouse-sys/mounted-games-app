@@ -53,6 +53,18 @@ public class TeamsSupportersTests : IClassFixture<ApiFactory>
         Assert.Equal(TeamSupporterStatus.Pending, joined.Status);
     }
 
+    [Fact]
+    public async Task Join_Returns400_WhenCodeMatchesMoreThanOneTeam()
+    {
+        // The same short code can exist in two events; joining must not silently pick one.
+        var key = "DUPE" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        await TeamOfTrainerAsync(joinKey: key);
+        await TeamOfTrainerAsync(joinKey: key);
+        var (member, _) = await _f.SignupAsync("Member");
+        var r = await member.PostAsJsonAsync("/api/teams/join", new JoinTeamRequest(key));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
     // ---- my teams ----
 
     [Fact]
@@ -177,6 +189,7 @@ public class TeamsSupportersTests : IClassFixture<ApiFactory>
 
     [Theory]
     [InlineData("AB")]
+    [InlineData("ABCD")]
     [InlineData("  a ")]
     [InlineData("ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFG")]
     [InlineData("AB CD")]

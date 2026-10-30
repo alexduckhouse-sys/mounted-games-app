@@ -188,6 +188,25 @@ public class CompetitionsReadTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Get_HidesAccountIdsFromAnonymous_ButShowsThemToSignedIn()
+    {
+        var trainerId = await _f.TrainerIdAsync();
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: trainerId);
+        var section = await _f.SeedSectionAsync(comp);
+        var club = await _f.SeedClubAsync();
+        await _f.SeedTeamAsync(comp, section, club, "Zeta A", trainerUserId: trainerId);
+
+        var anon = await (await _f.CreateClient().GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Null(anon.CreatedByUserId);
+        Assert.All(anon.Teams, t => Assert.Null(t.TrainerUserId));
+
+        var trainer = await _f.TrainerAsync();
+        var signedIn = await (await trainer.GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal(trainerId, signedIn.CreatedByUserId);
+        Assert.Contains(signedIn.Teams, t => t.TrainerUserId == trainerId);
+    }
+
+    [Fact]
     public async Task Get_IncludesRaceResultsOrderedByPlacing_WithEliminatedLast()
     {
         var comp = await _f.SeedCompetitionAsync();

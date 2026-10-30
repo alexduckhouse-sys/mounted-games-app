@@ -48,7 +48,7 @@ public class ChatController : ControllerBase
             .Take(take)
             .ToListAsync();
         messages.Reverse();
-        return messages.Select(m => m.ToDto());
+        return messages.Select(m => string.IsNullOrEmpty(userId) ? m.ToDto() with { UserId = null } : m.ToDto());
     }
 
     /// <summary>

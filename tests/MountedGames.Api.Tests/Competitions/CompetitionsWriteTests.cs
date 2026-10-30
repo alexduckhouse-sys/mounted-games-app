@@ -112,6 +112,29 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("data:text/html,<script>1</script>")]
+    [InlineData("not a url")]
+    public async Task Create_Returns400_WhenStreamUrlNotHttp(string stream)
+    {
+        var admin = await _f.AdminAsync();
+        var r = await admin.PostAsJsonAsync("/api/competitions", CreateBody(stream: stream));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetStreamUrl_Returns400_WhenNotHttp()
+    {
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
+        var trainer = await _f.TrainerAsync();
+        var bad = await trainer.PutAsJsonAsync($"/api/competitions/{comp}/stream-url", new { streamUrl = "javascript:alert(1)" });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+        var ok = await trainer.PutAsJsonAsync($"/api/competitions/{comp}/stream-url", new { streamUrl = "https://stream.example/live" });
+        Assert.Equal(HttpStatusCode.NoContent, ok.StatusCode);
+        Assert.Equal("https://stream.example/live", (await LoadAsync(comp)).StreamUrl);
+    }
+
     [Fact]
     public async Task Create_PersistsTrimmedFieldsAndCreator_ForTrainer()
     {
@@ -257,7 +280,7 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         var trainer = await _f.TrainerAsync();
 
         var r = await trainer.PutAsJsonAsync($"/api/competitions/{comp}", UpdateBody(
-            lat: 1.5, lon: 2.5, stream: " s ", organiser: " o ", payment: " p ", w3w: " w ",
+            lat: 1.5, lon: 2.5, stream: " https://s.example/ ", organiser: " o ", payment: " p ", w3w: " w ",
             apple: " https://maps.apple.com/ ", isActive: false, isArchived: true));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
@@ -270,7 +293,7 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         Assert.Equal("Elsewhere", c2.Location);
         Assert.Equal(1.5, c2.Latitude);
         Assert.Equal(2.5, c2.Longitude);
-        Assert.Equal("s", c2.StreamUrl);
+        Assert.Equal("https://s.example/", c2.StreamUrl);
         Assert.Equal("o", c2.OrganiserName);
         Assert.Equal("p", c2.PaymentDestination);
         Assert.Equal("w", c2.What3Words);

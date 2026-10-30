@@ -434,6 +434,11 @@ public class SponsorsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 1, views = 501, seconds = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 1, views = 1, seconds = 3601 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(Enumerable.Range(0, 41).Select(_ => (object)new { sponsorId = sponsor.Id, placement = 1, views = 1, seconds = 0 }).ToArray())).StatusCode);
+        // Each item is within range, but the batch total blows the per-call impressions cap.
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(
+            new { sponsorId = sponsor.Id, placement = 1, views = 500, seconds = 0 },
+            new { sponsorId = sponsor.Id, placement = 16, views = 500, seconds = 0 },
+            new { sponsorId = sponsor.Id, placement = 32, views = 500, seconds = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await anon.PostAsJsonAsync(Url(comp, "/exposures"), new { })).StatusCode);
 
         var shown = (await (await owner.GetAsync(Url(comp, "/manage"))).ReadAsync<List<SponsorAdminDto>>()).Single();
