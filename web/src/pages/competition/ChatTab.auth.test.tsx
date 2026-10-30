@@ -135,23 +135,9 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
     expect(screen.queryByText('Someone else')).not.toBeInTheDocument();
   });
 
-  it('lets an admin reply privately to a message on ContactOrganisersPage instead of announcing to everyone', async () => {
-    state.get.mockResolvedValue({ data: [chat(1, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'asker-1', authorName: 'Sam Rider' })] });
-    state.post.mockResolvedValue({ data: chat(2, { body: 'By the lorries', type: 0, adminOnly: true, userId: 'fake-user', recipientUserId: 'asker-1' }) });
-    mountContact({ staffChatEnabled: true });
-
-    await userEvent.click(await screen.findByRole('button', { name: /Sam Rider/ }));
-    expect(screen.getByText('Only you and Sam Rider see this')).toBeInTheDocument();
-    await userEvent.type(screen.getByPlaceholderText('Reply'), 'By the lorries');
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
-
-    expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'By the lorries', replyToUserId: 'asker-1' });
-    expect(state.post).not.toHaveBeenCalledWith('/competitions/1/chat/announcement', expect.anything());
-    expect(await screen.findByText('By the lorries', { selector: '.ev-bub' })).toBeInTheDocument();
-  });
-
   it('clears private messages and ignores the previous session response after sign-out', async () => {
-    const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true, userId: 'trainer-1', authorName: 'Pat Trainer' });
+    state.roles = ['Member'];
+    const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true, userId: 'fake-user', authorName: 'Pat Trainer' });
     state.get.mockResolvedValueOnce({ data: [privateMessage] });
     const view = mountContact();
     expect(await screen.findByText('Private trainer message')).toBeInTheDocument();
@@ -197,7 +183,7 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
 
     expect(await screen.findByText('Official heat 1 update')).toBeVisible();
     expect(screen.queryByText('Private question from rider')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^Messages \(1\)$/ })).toHaveAttribute('href', '/competitions/1/contact');
+    expect(screen.getByRole('link', { name: /^Messages \(1\)$/ })).toHaveAttribute('href', '/competitions/1/announcements');
   });
 });
 

@@ -1,13 +1,13 @@
 import { WhatsAppComposer } from '../operations/WhatsAppComposer';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
 import { api, pinChatMessage } from '../../api';
 import { Notice } from '../../components/Notice';
-import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
+import { RefineFoot, RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import {
   clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel,
 } from '../../lib/announcements';
@@ -22,8 +22,11 @@ const writeDraft = (competitionId: number, text: string) => {
 
 /** Organiser page: what is pinned, a box to send a new announcement, what has been sent, and private messages. */
 export function AnnouncementsPage() {
-  const { user } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
+  const { competition } = useCompetition();
   const session = user ? `${user.id}:${[...user.roles].sort().join(',')}` : 'signed-out';
+  // Only organisers run announcements and read the inbox; everyone else messages them from the contact page.
+  if (!(hasRole('Admin') || canOrganise(competition))) return <Navigate to={`/competitions/${competition.id}/contact`} replace />;
   return <AnnouncementsSession key={session} />;
 }
 
@@ -39,6 +42,14 @@ function AnnouncementsSession() {
   const busy = useRef(false);
 
   useEffect(() => { writeDraft(competition.id, body); }, [competition.id, body]);
+  // The box grows with what is typed, up to about five lines, then scrolls.
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    box.style.height = 'auto';
+    box.style.height = `${Math.min(box.scrollHeight, 140)}px`;
+  }, [body]);
 
   const pinned = pinnedAnnouncement(feed.messages);
   const sent = useMemo(() => sentAnnouncements(feed.messages), [feed.messages]);
@@ -108,22 +119,6 @@ function AnnouncementsSession() {
           </section>
         )}
 
-        {isAdmin && <section aria-labelledby="ann-new">
-          <h2 id="ann-new" className="ann-h">New announcement</h2>
-          <div className="ann-compose">
-            <textarea
-              aria-label="New announcement"
-              placeholder="Write an announcement"
-              value={body}
-              maxLength={2000}
-              onChange={(event) => setBody(event.target.value)}
-            />
-            <button type="button" className="ann-send" aria-label="Send" disabled={!body.trim() || sending} onClick={() => void send()}>
-              <ArrowRight className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-        </section>}
-
         {sent.length > 0 && (
           <section aria-labelledby="ann-sent">
             <h2 id="ann-sent" className="ann-h">Sent</h2>
@@ -169,6 +164,25 @@ function AnnouncementsSession() {
           </section>
         )}
       </div>
+      {/* The box to write a new announcement sits at the foot of the page, like a chat box, so the page reads top down. */}
+      {isAdmin && (
+        <RefineFoot aboveTabs label="New announcement">
+          <form className="ann-compose" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+            <textarea
+              ref={boxRef}
+              aria-label="New announcement"
+              placeholder="Write an announcement"
+              rows={1}
+              value={body}
+              maxLength={2000}
+              onChange={(event) => setBody(event.target.value)}
+            />
+            <button type="submit" className="ann-send" aria-label="Send" disabled={!body.trim() || sending}>
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </form>
+        </RefineFoot>
+      )}
     </RefinePage>
   );
 }
