@@ -36,6 +36,16 @@ public sealed record RealIncome(int EntriesMinor, int ShopMinor)
             })
             .ToListAsync(cancellationToken);
         entries += retained.Sum(r => Math.Max(0, r.AmountMinor - Math.Min(r.AmountMinor, r.Refunded ?? r.AmountMinor)));
+        // Withdrawn entries whose fee disposition is Retained or CreditRollover also stay in the organiser's income.
+        var cancelledRetained = await (
+            from s in db.SectionSignups.AsNoTracking()
+            join e in db.Set<SignupExtras>().AsNoTracking() on s.Id equals e.SignupId
+            where s.Section!.CompetitionId == competitionId
+                && s.Status == SignupPaymentStatus.Cancelled
+                && (e.FeeDisposition == "Retained" || e.FeeDisposition == "CreditRollover")
+            select new { s.AmountMinor, e.RefundedAmountMinor }
+        ).ToListAsync(cancellationToken);
+        entries += cancelledRetained.Sum(r => Math.Max(0, r.AmountMinor - Math.Min(r.AmountMinor, r.RefundedAmountMinor ?? 0)));
         var shop = await db.Set<EventOrder>()
             .Where(x => x.CompetitionId == competitionId && !x.IsTestOrder && x.Status == CommerceOrderStatus.Paid)
             .SumAsync(x => (int?)x.TotalMinor, cancellationToken) ?? 0;

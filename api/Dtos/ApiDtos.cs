@@ -11,7 +11,7 @@ public record CreateClubRequest(string Name, string? Region = null, string? BibC
 public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount,
-    int HeatedSessionCount = 0);
+    int HeatedSessionCount = 0, bool IsIndoor = false);
 
 public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
 public record CompetitionPickerItem(
@@ -133,7 +133,8 @@ public record CompetitionDetail(
     int? MaxStables = null,
     int? MaxHookups = null,
     int? StablesRemaining = null,
-    int? HookupsRemaining = null);
+    int? HookupsRemaining = null,
+    bool IsIndoor = false);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -156,7 +157,8 @@ public record CreateCompetitionRequest(
     [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
     [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
     [Range(0, 2000)] int? MaxStables = null,
-    [Range(0, 2000)] int? MaxHookups = null);
+    [Range(0, 2000)] int? MaxHookups = null,
+    bool IsIndoor = false);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -182,7 +184,8 @@ public record UpdateCompetitionRequest(
     [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
     [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
     [Range(0, 2000)] int? MaxStables = null,
-    [Range(0, 2000)] int? MaxHookups = null);
+    [Range(0, 2000)] int? MaxHookups = null,
+    bool? IsIndoor = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

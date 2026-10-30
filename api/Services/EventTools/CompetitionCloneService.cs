@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 
@@ -16,7 +17,11 @@ public sealed class CompetitionCloneService(AppDbContext db)
         CompetitionSetupService.Validate(request.Name, request.StartDate, request.EndDate);
         var service = new CompetitionSetupService(db);
         var setup = await service.ReadAsync(sourceCompetitionId, ct);
-        var (clone, sections, sessions) = await service.CreateAsync(setup, request.Name, request.StartDate, request.EndDate, creatorUserId, ct);
+        var sourceOwnerUserId = await db.Competitions.AsNoTracking()
+            .Where(c => c.Id == sourceCompetitionId)
+            .Select(c => c.CreatedByUserId)
+            .FirstOrDefaultAsync(ct);
+        var (clone, sections, sessions) = await service.CreateAsync(setup, request.Name, request.StartDate, request.EndDate, creatorUserId, ct, sourceOwnerUserId);
         return new CloneCompetitionResultDto(clone.Id, clone.Name, sections, 0, sessions, 0, 0);
     }
 }

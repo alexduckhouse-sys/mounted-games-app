@@ -14,6 +14,37 @@ export const REGIONS: { value: PayoutRegion; currency: string }[] = [
   { value: 0, currency: 'GBP' },
   { value: 1, currency: 'EUR' },
 ];
+export const EU_COUNTRIES: { code: string; name: string }[] = [
+  { code: 'IE', name: 'Ireland' },
+  { code: 'FR', name: 'France' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'NL', name: 'Netherlands' },
+  { code: 'BE', name: 'Belgium' },
+  { code: 'ES', name: 'Spain' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'PT', name: 'Portugal' },
+  { code: 'DK', name: 'Denmark' },
+  { code: 'SE', name: 'Sweden' },
+  { code: 'NO', name: 'Norway' },
+  { code: 'FI', name: 'Finland' },
+  { code: 'AT', name: 'Austria' },
+  { code: 'LU', name: 'Luxembourg' },
+  { code: 'PL', name: 'Poland' },
+  { code: 'CZ', name: 'Czechia' },
+  { code: 'SK', name: 'Slovakia' },
+  { code: 'HU', name: 'Hungary' },
+  { code: 'RO', name: 'Romania' },
+  { code: 'BG', name: 'Bulgaria' },
+  { code: 'HR', name: 'Croatia' },
+  { code: 'SI', name: 'Slovenia' },
+  { code: 'EE', name: 'Estonia' },
+  { code: 'LV', name: 'Latvia' },
+  { code: 'LT', name: 'Lithuania' },
+  { code: 'CY', name: 'Cyprus' },
+  { code: 'MT', name: 'Malta' },
+  { code: 'GR', name: 'Greece' },
+  { code: 'LI', name: 'Liechtenstein' },
+];
 export const SCHEDULES: PayoutSchedule[] = [0, 1, 2];
 
 export const businessTypeLabel = (type: PayoutBusinessType) => tr(`acct.pay.type.${type}` as MessageKey);
@@ -228,4 +259,53 @@ export function payoutsLine(p: { clubName: string; maskedAccount: string | null;
   return p.ready && p.maskedAccount
     ? tr('admin.creator.payoutsReady', { club: p.clubName, account: p.maskedAccount })
     : tr('admin.creator.payoutsNotReady', { club: p.clubName });
+}
+
+export type StripeState = 'ready' | 'incomplete' | 'not_connected';
+
+/** Plain-English status badge, description and button label for the Stripe Connect card on PayoutsPage. */
+export function stripeStatusInfo(
+  p: Pick<ClubPayouts, 'stripeConnected' | 'stripeChargesEnabled' | 'stripePayoutsEnabled' | 'stripeDetailsSubmitted' | 'bank'>,
+): {
+  state: StripeState;
+  badge: string;
+  description: string;
+  buttonLabel: string;
+} {
+  if (p.stripeChargesEnabled && p.stripePayoutsEnabled) {
+    const bankText = p.bank?.maskedAccount ? ` (${bankLine(p.bank)})` : '';
+    return {
+      state: 'ready',
+      badge: 'Connected & ready to take payments',
+      description: `Online card, Apple Pay and Google Pay payments go straight to your connected Stripe account${bankText}.`,
+      buttonLabel: 'Update Stripe account',
+    };
+  }
+  if (p.stripeConnected || p.stripeDetailsSubmitted) {
+    return {
+      state: 'incomplete',
+      badge: 'Finish setup on Stripe',
+      description: 'Your Stripe account is linked, but Stripe still needs a few details before card payments and payouts can go live.',
+      buttonLabel: 'Continue Stripe setup',
+    };
+  }
+  return {
+    state: 'not_connected',
+    badge: 'Not connected',
+    description: 'Connect a bank account with Stripe so riders and buyers can pay by card, Apple Pay or Google Pay and payouts land directly in your bank.',
+    buttonLabel: 'Connect bank with Stripe',
+  };
+}
+
+/** Ensures a redirect URL is HTTPS and hosted on Stripe (`connect.stripe.com` or `*.stripe.com`). */
+export function isSafeStripeUrl(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    const host = u.hostname.toLowerCase();
+    return host === 'connect.stripe.com' || host === 'stripe.com' || host.endsWith('.stripe.com');
+  } catch {
+    return false;
+  }
 }

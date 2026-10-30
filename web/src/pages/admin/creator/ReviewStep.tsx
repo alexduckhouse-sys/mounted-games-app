@@ -56,6 +56,7 @@ export function ReviewStep({ draft, change, problems, teamCounts, real, onEdit, 
       <div className="cw-card"><div className="cw-rv"><span className="cw-grow">
         <span className="cw-t1">{draft.startDate ? [when, draft.startTime && t('admin.creator.review.fromTime', { time: draft.startTime })].filter(Boolean).join(' · ') : t('admin.creator.review.datesToSet')}</span>
         <span className="cw-t2">{[draft.location.trim(), draft.postcode.trim(), draft.what3Words.trim() && `///${draft.what3Words.trim().replace(/^\/+/, '')}`].filter(Boolean).join(', ') || t('admin.creator.review.noVenue')}</span>
+        <span className="cw-t2">{t(draft.isIndoor ? 'admin.creator.when.indoor' : 'admin.creator.when.outdoor')}</span>
       </span></div></div>
 
       <SmallHead aside={<EditButton label={t('admin.creator.step.arenas')} onClick={() => onEdit('arenas')} />}>{t('admin.creator.step.arenas')}</SmallHead>

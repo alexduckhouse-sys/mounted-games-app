@@ -316,6 +316,7 @@ public class CompetitionsController : ControllerBase
                 UseRefereeCards = req.UseRefereeCards,
             }).ToJson(),
             LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
+            IsIndoor = req.IsIndoor,
             StartDate = req.StartDate,
             EndDate = req.EndDate,
             CreatedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -405,6 +406,7 @@ public class CompetitionsController : ControllerBase
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
         if (req.LaneHatbands is not null) c.LaneHatbands = PlannedRaceList.Write(req.LaneHatbands);
+        if (req.IsIndoor.HasValue) c.IsIndoor = req.IsIndoor.Value;
         if (req.UseRefereeCards.HasValue)
         {
             c.DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.For(c) with
@@ -489,10 +491,15 @@ public class CompetitionsController : ControllerBase
         // Money and season records are never deleted with an event, so say what is in the way rather than crash on the foreign key.
         var hasOrders = await _db.Set<EventOrder>().AnyAsync(o => o.CompetitionId == id);
         var hasRounds = await _db.Set<MountedGames.Api.Entities.Seasons.SeasonRound>().AnyAsync(r => r.CompetitionId == id);
-        if (hasOrders || hasRounds)
+        var hasPaidEntries = await _db.SectionSignups.AnyAsync(s => s.Section!.CompetitionId == id
+                && s.AmountMinor > 0
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Refunded))
+            || await _db.Set<TestPaymentRecord>().AnyAsync(t => t.CompetitionId == id && t.Target == TestPaymentTarget.SectionSignup);
+        if (hasOrders || hasRounds || hasPaidEntries)
         {
             var blockers = new List<string>();
             if (hasOrders) blockers.Add("shop orders");
+            if (hasPaidEntries) blockers.Add("paid entries");
             if (hasRounds) blockers.Add("a season round");
             return Conflict(new
             {
@@ -524,6 +531,15 @@ public class CompetitionsController : ControllerBase
             .ToListAsync();
         foreach (var d in decForms) _db.RiderEntries.RemoveRange(d.Riders);
         _db.DeclarationForms.RemoveRange(decForms);
+
+        var sectionIds = c.Sections.Select(s => s.Id).ToList();
+        var signups = await _db.SectionSignups.Where(s => sectionIds.Contains(s.CompetitionSectionId)).ToListAsync();
+        if (signups.Count > 0)
+        {
+            var signupIds = signups.Select(s => s.Id).ToList();
+            _db.Set<SignupTeamLink>().RemoveRange(await _db.Set<SignupTeamLink>().Where(l => signupIds.Contains(l.SignupId)).ToListAsync());
+            _db.SectionSignups.RemoveRange(signups);
+        }
 
         _db.Teams.RemoveRange(c.Teams);
         _db.ChatMessages.RemoveRange(c.ChatMessages);
@@ -670,6 +686,15 @@ public class CompetitionsController : ControllerBase
         if (await _db.Set<MountedGames.Api.Entities.Seasons.SeasonRound>().AnyAsync(r => r.CompetitionSectionId == sectionId))
             return Conflict(new { message = "This section can't be deleted because it is a round in a season. Remove it from the season first." });
 
+        var hasPaymentHistory = await _db.SectionSignups.AnyAsync(
+                s => s.CompetitionSectionId == sectionId
+                    && s.AmountMinor > 0
+                    && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Refunded))
+            || await _db.Set<TestPaymentRecord>().AnyAsync(t => t.CompetitionId == id && t.Target == TestPaymentTarget.SectionSignup
+                && _db.SectionSignups.Any(s => s.Id == t.TargetId && s.CompetitionSectionId == sectionId));
+        if (hasPaymentHistory)
+            return Conflict(new { message = "This section can't be deleted because it has paid or refunded entry records." });
+
         var hasPaidSignups = await _db.SectionSignups.AnyAsync(
             s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid);
         // The section's teams can also sit in another section's combined heat; their entries and results there block the delete too.
@@ -710,7 +735,12 @@ public class CompetitionsController : ControllerBase
         _db.DeclarationForms.RemoveRange(decForms);
 
         var signups = await _db.SectionSignups.Where(s => s.CompetitionSectionId == sectionId).ToListAsync();
-        _db.SectionSignups.RemoveRange(signups);
+        if (signups.Count > 0)
+        {
+            var signupIds = signups.Select(s => s.Id).ToList();
+            _db.Set<SignupTeamLink>().RemoveRange(await _db.Set<SignupTeamLink>().Where(l => signupIds.Contains(l.SignupId)).ToListAsync());
+            _db.SectionSignups.RemoveRange(signups);
+        }
 
         _db.Teams.RemoveRange(section.Teams);
         _db.CompetitionSections.Remove(section);
@@ -834,7 +864,7 @@ public class CompetitionsController : ControllerBase
     private async Task<(TieBreaker Ties, List<TieFacts> Ranked, Dictionary<int, string> Names)> RankForFinalsAsync(int competitionId, int? sectionId, bool forFinal = false)
     {
         var teamsQ = _db.Teams.AsNoTracking()
-            .Include(t => t.Results)
+            .Include(t => t.Results).ThenInclude(r => r.Race).ThenInclude(rc => rc!.Heat)
             .Where(t => t.CompetitionId == competitionId && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
         // Making finals for every age group at once leaves out the ones set up with no final.
@@ -845,7 +875,8 @@ public class CompetitionsController : ControllerBase
         var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, competitionId, HttpContext.RequestAborted);
         var facts = teams.Select(t =>
         {
-            var effective = ties.EffectiveResults(t.Results);
+            var qualifyingResults = t.Results.Where(r => !(r.Race?.Heat is { RaceRoundStage: RaceRoundStage.None } h && FinalsTiers.ParseLabel(h.Label) is not null));
+            var effective = ties.EffectiveResults(qualifyingResults);
             return ties.Facts(t.Id, t.CompetitionSectionId, effective, effective.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id));
         });
         return (ties, ties.Rank(facts), teams.ToDictionary(t => t.Id, t => t.DisplayName));
@@ -950,12 +981,37 @@ public class CompetitionsController : ControllerBase
         }
         if (session is null)
         {
-            session = new Session
+            var existingFinalsCandidates = await _db.Sessions
+                .Include(s => s.Heats).ThenInclude(h => h.Entries)
+                .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+                .Where(s => s.CompetitionId == id && s.CompetitionSectionId == req.CompetitionSectionId && s.Kind == SessionKind.Race && s.Heats.Count > 0)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
+            var existingFinalsSession = existingFinalsCandidates.FirstOrDefault(s =>
+                s.Heats.All(h => h.RaceRoundStage == RaceRoundStage.None && FinalsTiers.ParseLabel(h.Label) is not null));
+            if (existingFinalsSession is not null)
             {
-                CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
-                Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
-            };
-            _db.Sessions.Add(session);
+                if (existingFinalsSession.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+                    return Conflict(new { message = "Final races have already been scored, so the finals draw can't be replaced." });
+                foreach (var oldHeat in existingFinalsSession.Heats)
+                {
+                    _db.Races.RemoveRange(oldHeat.Races);
+                    _db.HeatEntries.RemoveRange(oldHeat.Entries);
+                }
+                _db.Heats.RemoveRange(existingFinalsSession.Heats);
+                session = existingFinalsSession;
+                if (!string.IsNullOrWhiteSpace(req.Name))
+                    session.Name = name;
+            }
+            else
+            {
+                session = new Session
+                {
+                    CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
+                    Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
+                };
+                _db.Sessions.Add(session);
+            }
         }
         session.LanesPerHeat = maxHeatSize;
         await _db.SaveChangesAsync();
@@ -1082,12 +1138,37 @@ public class CompetitionsController : ControllerBase
         }
         if (session is null)
         {
-            session = new Session
+            var existingFinalsCandidates = await _db.Sessions
+                .Include(s => s.Heats).ThenInclude(h => h.Entries)
+                .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+                .Where(s => s.CompetitionId == id && s.CompetitionSectionId == req.CompetitionSectionId && s.Kind == SessionKind.Race && s.Heats.Count > 0)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
+            var existingFinalsSession = existingFinalsCandidates.FirstOrDefault(s =>
+                s.Heats.All(h => h.RaceRoundStage == RaceRoundStage.None && FinalsTiers.ParseLabel(h.Label) is not null));
+            if (existingFinalsSession is not null)
             {
-                CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
-                Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
-            };
-            _db.Sessions.Add(session);
+                if (existingFinalsSession.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+                    return Conflict(new { message = "Final races have already been scored, so the finals draw can't be replaced." });
+                foreach (var oldHeat in existingFinalsSession.Heats)
+                {
+                    _db.Races.RemoveRange(oldHeat.Races);
+                    _db.HeatEntries.RemoveRange(oldHeat.Entries);
+                }
+                _db.Heats.RemoveRange(existingFinalsSession.Heats);
+                session = existingFinalsSession;
+                if (!string.IsNullOrWhiteSpace(req.Name))
+                    session.Name = name;
+            }
+            else
+            {
+                session = new Session
+                {
+                    CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
+                    Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
+                };
+                _db.Sessions.Add(session);
+            }
         }
         session.LanesPerHeat = req.LanesPerHeat;
         session.MinutesPerHeat = req.MinutesPerHeat ?? session.MinutesPerHeat;

@@ -82,6 +82,11 @@ public class Competition
     /// </summary>
     public bool EnablePassportCheck { get; set; }
 
+    /// <summary>
+    /// When true, the competition runs in an indoor arena, so outdoor weather warnings are suppressed.
+    /// </summary>
+    public bool IsIndoor { get; set; }
+
     public string? CreatedByUserId { get; set; }
     public AppUser? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

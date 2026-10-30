@@ -97,19 +97,7 @@ public class PushNotifier
             await SendToUsersAsync(users, payload);
     }
 
-    public static string Ordinal(int n)
-    {
-        if (n <= 0) return n.ToString();
-        var rem100 = n % 100;
-        if (rem100 is 11 or 12 or 13) return $"{n}th";
-        return (n % 10) switch
-        {
-            1 => $"{n}st",
-            2 => $"{n}nd",
-            3 => $"{n}rd",
-            _ => $"{n}th",
-        };
-    }
+    public static string Ordinal(int n) => TieBreaker.Ordinal(n);
 
     /// <summary>One durable delivery attempt; acceptance is not evidence that anyone saw it.</summary>
     internal async Task<PushSendOutcome> SendDestinationAsync(Entities.PushSubscription subscription,

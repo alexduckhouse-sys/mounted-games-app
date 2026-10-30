@@ -34,20 +34,11 @@ public class NotificationScheduler : BackgroundService
         _interval = interval ?? TimeSpan.FromMinutes(1);
     }
 
-    private static readonly TimeZoneInfo UkZone = FindUkZone();
-
-    private static TimeZoneInfo FindUkZone()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
-        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Utc; }
-    }
-
     /// <summary>
     /// Events run in the UK, but the API runs in UTC (Vercel cle1), so <c>ToLocalTime</c> would show
     /// 08:00 for a 09:00 start in summer. Times in notifications are UK time.
     /// </summary>
-    internal static DateTime UkTime(DateTime utc) =>
-        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), UkZone);
+    public static DateTime UkTime(DateTime utc) => Services.UkTime.ToUk(utc);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

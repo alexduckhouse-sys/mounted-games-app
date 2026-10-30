@@ -226,6 +226,310 @@ public class WeatherCacheTests : IClassFixture<ApiFactory>
         foreach (var r in responses)
             Assert.Equal(21.5, (await r.ReadAsync<JsonElement>()).GetProperty("current").GetProperty("temperature_2m").GetDouble());
     }
+
+    // ---- dual-provider cadence (06:00-18:00 UK 30m / 18:00-06:00 UK 3h) & 30-120m grace window ----
+
+    private static string BuildMetOfficeSeriesJson(double tempC) => $$"""
+        {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "properties": {
+                "timeSeries": [
+                  {
+                    "time": "2030-06-01T12:00Z",
+                    "screenTemperature": {{tempC.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
+                    "windSpeed10m": 4.0,
+                    "screenRelativeHumidity": 65.0,
+                    "probOfPrecipitation": 10,
+                    "totalPrecipAmount": 0.0,
+                    "significantWeatherCode": 1
+                  },
+                  {
+                    "time": "2030-06-01T21:00Z",
+                    "screenTemperature": {{tempC.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
+                    "windSpeed10m": 3.0,
+                    "screenRelativeHumidity": 75.0,
+                    "probOfPrecipitation": 5,
+                    "totalPrecipAmount": 0.0,
+                    "significantWeatherCode": 0
+                  },
+                  {
+                    "time": "2030-06-02T00:00Z",
+                    "screenTemperature": {{tempC.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
+                    "windSpeed10m": 3.0,
+                    "screenRelativeHumidity": 80.0,
+                    "probOfPrecipitation": 5,
+                    "totalPrecipAmount": 0.0,
+                    "significantWeatherCode": 0
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        """;
+
+    private const string MetNorwayFallbackJson = """
+        {
+          "type": "Feature",
+          "properties": {
+            "timeseries": [
+              {
+                "time": "2030-06-01T12:00:00Z",
+                "data": {
+                  "instant": {
+                    "details": {
+                      "air_temperature": 14.0,
+                      "wind_speed": 6.0,
+                      "relative_humidity": 80.0
+                    }
+                  },
+                  "next_1_hours": {
+                    "summary": { "symbol_code": "cloudy" },
+                    "details": { "precipitation_amount": 0.2, "probability_of_precipitation": 30.0 }
+                  }
+                }
+              },
+              {
+                "time": "2030-06-01T14:00:00Z",
+                "data": {
+                  "instant": {
+                    "details": {
+                      "air_temperature": 14.0,
+                      "wind_speed": 6.0,
+                      "relative_humidity": 80.0
+                    }
+                  },
+                  "next_1_hours": {
+                    "summary": { "symbol_code": "cloudy" },
+                    "details": { "precipitation_amount": 0.2, "probability_of_precipitation": 30.0 }
+                  }
+                }
+              }
+            ]
+          }
+        }
+        """;
+
+    [Fact]
+    public async Task DualProvider_DaytimeRefreshesEvery30Minutes_AndOvernightRefreshesEvery3Hours()
+    {
+        Reset();
+        var clock = new ManualTimeProvider(); // Starts at 2030-06-01T12:00:00Z (13:00 BST -> daytime)
+        var cache = _f.Services.GetRequiredService<WeatherCache>();
+        cache.ConfigureProviders("test-metoffice-key", clock, useDualProviders: true);
+
+        var metOfficeCalls = 0;
+        _f.Http.Respond("data.hub.api.metoffice.gov.uk", _ =>
+        {
+            var n = Interlocked.Increment(ref metOfficeCalls);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(BuildMetOfficeSeriesJson(18.0 + n), Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = _f.CreateClient();
+
+        // 1. Daytime (13:00 BST): cached for 30 minutes
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(1, metOfficeCalls);
+
+        clock.Advance(TimeSpan.FromMinutes(29));
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(1, metOfficeCalls); // still fresh at +29m
+
+        clock.Advance(TimeSpan.FromMinutes(2)); // +31m total
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(2, metOfficeCalls); // refreshed after 30m daytime TTL
+
+        // 2. Advance to overnight window: 2030-06-01T20:00:00Z = 21:00 BST (inside 18:00-06:00 UK local time)
+        clock.Advance(TimeSpan.FromHours(8));
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(3, metOfficeCalls); // first overnight fetch caches for 3 hours (180m)
+
+        clock.Advance(TimeSpan.FromMinutes(45));
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(3, metOfficeCalls); // still cached at +45m overnight
+
+        clock.Advance(TimeSpan.FromMinutes(130)); // +175m total overnight
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(3, metOfficeCalls); // still cached at +175m overnight
+
+        clock.Advance(TimeSpan.FromMinutes(6)); // +181m total overnight (> 3h)
+        await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25");
+        Assert.Equal(4, metOfficeCalls); // refreshed after 3h overnight TTL
+    }
+
+    [Fact]
+    public async Task DualProvider_GraceWindow_Preserves45MinuteOld15kmMetOfficeWhenRefreshFails_AndFallsBackToMetNorwayAfter120Minutes()
+    {
+        Reset();
+        var clock = new ManualTimeProvider(); // 2030-06-01T12:00:00Z (13:00 BST daytime)
+        var cache = _f.Services.GetRequiredService<WeatherCache>();
+        cache.ConfigureProviders("test-metoffice-key", clock, useDualProviders: true);
+
+        var metOfficeShouldFail = false;
+        var metNorwayCalls = 0;
+
+        _f.Http.Respond("data.hub.api.metoffice.gov.uk", _ =>
+        {
+            if (metOfficeShouldFail)
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(BuildMetOfficeSeriesJson(19.5), Encoding.UTF8, "application/json")
+            };
+        });
+
+        _f.Http.Respond("api.met.no", _ =>
+        {
+            Interlocked.Increment(ref metNorwayCalls);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(MetNorwayFallbackJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = _f.CreateClient();
+
+        // t = 0: Initial UK Met Office 1.5 km fetch succeeds (19.5°C).
+        var t0 = await (await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25")).ReadAsync<JsonElement>();
+        Assert.Equal("met-office", t0.GetProperty("provider").GetString());
+        Assert.Equal(19.5, t0.GetProperty("current").GetProperty("temperature_2m").GetDouble());
+        Assert.Equal(0, metNorwayCalls);
+
+        // t = +45m: Daytime 30m TTL expired, Met Office now fails (503).
+        // Because 45m <= 120m grace window, controller MUST serve the 45m-old 1.5 km Met Office data and NOT call 9 km MET Norway!
+        clock.Advance(TimeSpan.FromMinutes(45));
+        metOfficeShouldFail = true;
+
+        var t45 = await (await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25")).ReadAsync<JsonElement>();
+        Assert.Equal("met-office", t45.GetProperty("provider").GetString());
+        Assert.Equal(19.5, t45.GetProperty("current").GetProperty("temperature_2m").GetDouble());
+        Assert.Equal(0, metNorwayCalls);
+
+        // t = +130m (+85m later): > 120m grace window has expired and Met Office is still down -> falls back to MET Norway (14.0°C).
+        clock.Advance(TimeSpan.FromMinutes(85));
+        var t130 = await (await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25")).ReadAsync<JsonElement>();
+        Assert.Equal("met-norway", t130.GetProperty("provider").GetString());
+        Assert.Equal(14.0, t130.GetProperty("current").GetProperty("temperature_2m").GetDouble());
+        Assert.Equal(1, metNorwayCalls);
+    }
+
+    [Fact]
+    public async Task DualProvider_GraceWindow_Serves45MinuteOld15kmMetOfficeWhenDailyQuota350IsReached()
+    {
+        Reset();
+        var clock = new ManualTimeProvider();
+        var cache = _f.Services.GetRequiredService<WeatherCache>();
+        cache.ConfigureProviders("test-metoffice-key", clock, useDualProviders: true);
+
+        var metOfficeCalls = 0;
+        var metNorwayCalls = 0;
+
+        _f.Http.Respond("data.hub.api.metoffice.gov.uk", _ =>
+        {
+            Interlocked.Increment(ref metOfficeCalls);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(BuildMetOfficeSeriesJson(20.2), Encoding.UTF8, "application/json")
+            };
+        });
+
+        _f.Http.Respond("api.met.no", _ =>
+        {
+            Interlocked.Increment(ref metNorwayCalls);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(MetNorwayFallbackJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = _f.CreateClient();
+
+        // t = 0: Warm venue (52.5, -1.25) from UK Met Office.
+        var initial = await (await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25")).ReadAsync<JsonElement>();
+        Assert.Equal("met-office", initial.GetProperty("provider").GetString());
+        Assert.Equal(1, metOfficeCalls);
+
+        // Exhaust the 350/day soft ceiling and advance to t = +45m.
+        cache.SetMetOfficeCallCount(clock.GetUtcNow(), WeatherCache.MaxDailyMetOfficeCalls);
+        clock.Advance(TimeSpan.FromMinutes(45));
+
+        // Warm venue at t = +45m serves 1.5 km Met Office grace data without calling Met Office or MET Norway.
+        var graceResp = await (await client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25")).ReadAsync<JsonElement>();
+        Assert.Equal("met-office", graceResp.GetProperty("provider").GetString());
+        Assert.Equal(20.2, graceResp.GetProperty("current").GetProperty("temperature_2m").GetDouble());
+        Assert.Equal(1, metOfficeCalls);
+        Assert.Equal(0, metNorwayCalls);
+
+        // Cold UK venue (53.8, -1.5) with no grace entry falls back to MET Norway without exceeding the 350 Met Office quota.
+        var coldResp = await (await client.GetAsync("/api/weather/current?lat=53.8&lon=-1.5")).ReadAsync<JsonElement>();
+        Assert.Equal("met-norway", coldResp.GetProperty("provider").GetString());
+        Assert.Equal(1, metOfficeCalls);
+        Assert.Equal(1, metNorwayCalls);
+    }
+
+    [Fact]
+    public async Task DualProvider_SimultaneousCurrentAndForecastForColdVenue_ShareSingleMetOfficeRequestAndSingleQuotaSlot()
+    {
+        Reset();
+        var clock = new ManualTimeProvider();
+        var cache = _f.Services.GetRequiredService<WeatherCache>();
+        cache.ConfigureProviders("test-metoffice-key", clock, useDualProviders: true);
+
+        using var release = new ManualResetEventSlim();
+        var metOfficeCalls = 0;
+        _f.Http.Respond("data.hub.api.metoffice.gov.uk", _ =>
+        {
+            Interlocked.Increment(ref metOfficeCalls);
+            release.Wait(TimeSpan.FromSeconds(10));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(BuildMetOfficeSeriesJson(19.0), Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = _f.CreateClient();
+        var currentTask = Task.Run(() => client.GetAsync("/api/weather/current?lat=52.5&lon=-1.25"));
+        var forecastTask = Task.Run(() => client.GetAsync("/api/weather/forecast?lat=52.5&lon=-1.25&date=2030-06-01"));
+        var atTask = Task.Run(() => client.GetAsync("/api/weather/at?lat=52.5&lon=-1.25&when=2030-06-01T12:00:00Z"));
+
+        for (var i = 0; i < 200 && Volatile.Read(ref metOfficeCalls) == 0; i++)
+            await Task.Delay(20);
+        await Task.Delay(150);
+        release.Set();
+
+        var responses = await Task.WhenAll(currentTask, forecastTask, atTask);
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(1, metOfficeCalls);
+        Assert.Equal(1, cache.GetMetOfficeCallCount(clock.GetUtcNow()));
+    }
+
+    [Fact]
+    public void CoordinateSweepGuard_LimitsNewMetOfficeVenuesPerMinute_WhileAllowingKnownVenueRefresh()
+    {
+        using var cache = new WeatherCache("key", useDualProviders: true);
+        var now = new DateTimeOffset(2030, 6, 1, 12, 0, 0, TimeSpan.Zero);
+
+        // 20 distinct new UK grid cells in the same minute are allowed.
+        for (var i = 0; i < WeatherCache.MaxNewMetOfficeVenuesPerMinute; i++)
+        {
+            Assert.True(cache.TryConsumeMetOfficeQuota(51.0 + i * 0.05, -1.0, now));
+        }
+        Assert.Equal(20, cache.GetMetOfficeCallCount(now));
+
+        // 21st distinct unknown UK grid cell in the same minute is blocked from burning Met Office quota.
+        Assert.False(cache.TryConsumeMetOfficeQuota(55.0, -2.0, now));
+        Assert.Equal(20, cache.GetMetOfficeCallCount(now));
+
+        // Advancing to the next minute allows new venues again.
+        Assert.True(cache.TryConsumeMetOfficeQuota(55.0, -2.0, now.AddMinutes(1)));
+        Assert.Equal(21, cache.GetMetOfficeCallCount(now));
+    }
 }
 
 /// <summary>The cache itself, without HTTP: keys, lifetimes and the single-flight guarantee.</summary>
@@ -371,4 +675,49 @@ public class WeatherCacheUnitTests
 
     [Fact]
     public void DefaultCache_HoldsUpToTheLimit() => Assert.Equal(5_000, WeatherCache.MaxEntries);
+
+    [Theory]
+    [InlineData(5, 0, false, 180)]  // 05:00 UTC in Jan (05:00 GMT) -> overnight 3h
+    [InlineData(6, 0, true, 30)]    // 06:00 UTC in Jan (06:00 GMT) -> daytime 30m
+    [InlineData(17, 59, true, 30)]  // 17:59 UTC in Jan (17:59 GMT) -> daytime 30m
+    [InlineData(18, 0, false, 180)] // 18:00 UTC in Jan (18:00 GMT) -> overnight 3h
+    public void UkCadenceTtl_FollowsUkDaytimeWindowInWinterGmt(int utcHour, int utcMin, bool expectedDaytime, int expectedMinutes)
+    {
+        var winterInstant = new DateTimeOffset(2030, 1, 15, utcHour, utcMin, 0, TimeSpan.Zero);
+        Assert.Equal(expectedDaytime, WeatherCache.IsUkDaytime(winterInstant));
+        Assert.Equal(TimeSpan.FromMinutes(expectedMinutes), WeatherCache.UkCadenceTtl(winterInstant));
+    }
+
+    [Theory]
+    [InlineData(4, 59, false, 180)] // 04:59 UTC in June (05:59 BST) -> overnight 3h
+    [InlineData(5, 0, true, 30)]    // 05:00 UTC in June (06:00 BST) -> daytime 30m
+    [InlineData(16, 59, true, 30)]  // 16:59 UTC in June (17:59 BST) -> daytime 30m
+    [InlineData(17, 0, false, 180)] // 17:00 UTC in June (18:00 BST) -> overnight 3h
+    public void UkCadenceTtl_FollowsUkDaytimeWindowInSummerBst(int utcHour, int utcMin, bool expectedDaytime, int expectedMinutes)
+    {
+        var summerInstant = new DateTimeOffset(2030, 6, 15, utcHour, utcMin, 0, TimeSpan.Zero);
+        Assert.Equal(expectedDaytime, WeatherCache.IsUkDaytime(summerInstant));
+        Assert.Equal(TimeSpan.FromMinutes(expectedMinutes), WeatherCache.UkCadenceTtl(summerInstant));
+    }
+
+    [Fact]
+    public void DailyMetOfficeQuota_CapsAt350PerUtcDay_AndResetsOnNextUtcDay()
+    {
+        using var cache = new WeatherCache("key", useDualProviders: true);
+        var day1 = new DateTimeOffset(2030, 6, 1, 12, 0, 0, TimeSpan.Zero);
+        var day2 = day1.AddDays(1);
+
+        cache.SetMetOfficeCallCount(day1, 349);
+        Assert.True(cache.TryConsumeMetOfficeQuota(day1));
+        Assert.Equal(350, cache.GetMetOfficeCallCount(day1));
+
+        // 351st attempt is refused and keeps counter at 350.
+        Assert.False(cache.TryConsumeMetOfficeQuota(day1));
+        Assert.Equal(350, cache.GetMetOfficeCallCount(day1));
+
+        // Next UTC day starts fresh at 0.
+        Assert.Equal(0, cache.GetMetOfficeCallCount(day2));
+        Assert.True(cache.TryConsumeMetOfficeQuota(day2));
+        Assert.Equal(1, cache.GetMetOfficeCallCount(day2));
+    }
 }

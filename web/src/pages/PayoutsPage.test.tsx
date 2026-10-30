@@ -32,16 +32,16 @@ const complete = (extra: Partial<ClubPayouts> = {}): ClubPayouts => blank({
 /** Details all in and the account finished. */
 const ready = (extra: Partial<ClubPayouts> = {}) => complete({ status: 2, ...extra });
 
-function mount(options: { roles?: string[]; clubId?: number | null } = {}) {
+function mount(options: { roles?: string[]; clubId?: number | null; initialEntry?: string; onStripeRedirect?: (url: string) => void } = {}) {
   const auth: StoredAuth = {
     token: 't', expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    user: { id: 'me', email: 'a@example.com', fullName: 'Alex Morgan', clubId: options.clubId === undefined ? 7 : options.clubId, clubName: 'Stockport PC', roles: options.roles ?? ['Manager'] },
+    user: { id: 'me', email: 'a@example.com', fullName: 'Alex Morgan', clubId: options.clubId === undefined ? 7 : options.clubId, clubName: options.clubId === null ? null : 'Stockport PC', roles: options.roles ?? ['Manager'] },
   };
   localStorage.setItem('mg.auth', JSON.stringify(auth));
   return render(
-    <MemoryRouter initialEntries={['/me/payouts']}>
+    <MemoryRouter initialEntries={[options.initialEntry ?? '/me/payouts']}>
       <AuthProvider><Routes>
-        <Route path="/me/payouts" element={<PayoutsPage />} />
+        <Route path="/me/payouts" element={<PayoutsPage onStripeRedirect={options.onStripeRedirect} />} />
         <Route path="/me" element={<p>Profile page</p>} />
       </Routes></AuthProvider>
     </MemoryRouter>,
@@ -67,6 +67,7 @@ beforeEach(() => {
     if (url === '/clubs') return { data: [{ id: 7, name: 'Stockport PC' }, { id: 9, name: 'Other PC' }] };
     if (url === '/clubs/9/payouts') return { data: blank({ clubId: 9, clubName: 'Other PC' }) };
     if (url === '/clubs/7/payouts') return { data: loaded };
+    if (url === '/me/payouts') return { data: blank({ clubId: 0, clubName: 'Alex Morgan' }) };
     throw new Error(`unexpected GET ${url}`);
   });
   vi.mocked(api.put).mockImplementation(async (_url, body) => ({ data: { ...loaded, ...(body as object), status: 1 } }));
@@ -398,9 +399,90 @@ describe('PayoutsPage: access and loading', () => {
     expect(api.get).toHaveBeenCalledWith('/clubs/9/payouts');
   });
 
-  it('tells someone with no club to join one', async () => {
-    mount({ clubId: null });
-    expect(await screen.findByText('Payouts belong to a club. Join a club first.')).toBeInTheDocument();
+  it('loads personal /me/payouts for an independent user or a club Member who is not club staff', async () => {
+    mount({ roles: ['Member'], clubId: 7 });
+    expect(await status()).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/me/payouts');
+  });
+
+  it('honours ?clubId= on return from Stripe for cross-club collaborators and admins', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: ready({
+        clubId: 9,
+        clubName: 'Other PC',
+        stripeConnected: true,
+        stripeChargesEnabled: true,
+        stripePayoutsEnabled: true,
+        stripeDetailsSubmitted: true,
+      }),
+    });
+    mount({ roles: ['Member'], clubId: 7, initialEntry: '/me/payouts?stripe=return&clubId=9' });
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/clubs/9/payouts'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/clubs/9/payouts/stripe/sync'));
+    expect(await screen.findByTestId('stripe-status-badge')).toHaveTextContent('Connected & ready to take payments');
+  });
+
+  it('starts Stripe onboarding and redirects to the hosted Stripe link', async () => {
+    loaded = blank({ stripeConfigured: true });
+    let redirectedTo = '';
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { url: 'https://connect.stripe.com/setup/s/acct_test', stripeAccountId: 'acct_test' },
+    });
+    mount({ onStripeRedirect: (url) => { redirectedTo = url; } });
+    expect(await screen.findByTestId('stripe-status-badge')).toHaveTextContent('Not connected');
+    const btn = screen.getByRole('button', { name: 'Connect bank with Stripe' });
+    await userEvent.click(btn);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/clubs/7/payouts/stripe/onboard'));
+    expect(redirectedTo).toBe('https://connect.stripe.com/setup/s/acct_test');
+  });
+
+  it('refuses to redirect when the onboarding URL is not an HTTPS Stripe domain', async () => {
+    loaded = blank({ stripeConfigured: true });
+    let redirectedTo = '';
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { url: 'https://evil.example.org/phish', stripeAccountId: 'acct_test' },
+    });
+    mount({ onStripeRedirect: (url) => { redirectedTo = url; } });
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect bank with Stripe' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Stripe returned an invalid onboarding address.');
+    expect(redirectedTo).toBe('');
+  });
+
+  it('automatically syncs Stripe status when returning with ?stripe=return without re-fetching stale GET data', async () => {
+    loaded = blank({ stripeConnected: true, stripeChargesEnabled: false, stripePayoutsEnabled: false });
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: ready({
+        stripeConnected: true,
+        stripeChargesEnabled: true,
+        stripePayoutsEnabled: true,
+        stripeDetailsSubmitted: true,
+      }),
+    });
+    mount({ initialEntry: '/me/payouts?stripe=return' });
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/clubs/7/payouts/stripe/sync'));
+    expect(await screen.findByTestId('stripe-status-badge')).toHaveTextContent('Connected & ready to take payments');
+    expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/clubs/7/payouts')).toHaveLength(1);
+  });
+
+  it('lets a Manager or Trainer open their personal Tack Shop payout account with ?scope=personal', async () => {
+    mount({ roles: ['Manager'], clubId: 7, initialEntry: '/me/payouts?scope=personal' });
+    expect(await status()).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/me/payouts');
+    expect(api.get).not.toHaveBeenCalledWith('/clubs/7/payouts');
+  });
+
+  it('lets an Ireland & EU account pick its Stripe country before onboarding and sends the 2-letter code', async () => {
+    loaded = blank({ region: 1, currency: 'EUR', stripeConfigured: true });
+    let redirectedTo = '';
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { url: 'https://connect.stripe.com/setup/s/acct_eu', stripeAccountId: 'acct_eu' },
+    });
+    mount({ onStripeRedirect: (url) => { redirectedTo = url; } });
+    expect(await screen.findByTestId('stripe-status-badge')).toHaveTextContent('Not connected');
+    await choose('Stripe country', 'France');
+    await userEvent.click(screen.getByRole('button', { name: 'Connect bank with Stripe' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/clubs/7/payouts/stripe/onboard', { country: 'FR' }));
+    expect(redirectedTo).toBe('https://connect.stripe.com/setup/s/acct_eu');
   });
 
   it('renders nothing when nobody is signed in', () => {

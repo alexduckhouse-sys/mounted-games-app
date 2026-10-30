@@ -10,6 +10,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<Club> Clubs => Set<Club>();
     public DbSet<ClubPayoutAccount> ClubPayoutAccounts => Set<ClubPayoutAccount>();
+    public DbSet<UserPayoutAccount> UserPayoutAccounts => Set<UserPayoutAccount>();
+    public DbSet<StripeWebhookEvent> StripeWebhookEvents => Set<StripeWebhookEvent>();
     public DbSet<SavedRider> SavedRiders => Set<SavedRider>();
     public DbSet<Competition> Competitions => Set<Competition>();
     public DbSet<CompetitionSection> CompetitionSections => Set<CompetitionSection>();
@@ -239,6 +241,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
         b.Entity<ClubPayoutAccount>(e =>
         {
             e.HasIndex(a => a.ClubId).IsUnique();
+            e.HasIndex(a => a.StripeAccountId).IsUnique();
             e.Property(a => a.Currency).HasMaxLength(3).IsRequired();
             e.Property(a => a.LegalName).HasMaxLength(150);
             e.Property(a => a.TradingName).HasMaxLength(150);
@@ -258,7 +261,44 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(a => a.AccountLast4).HasMaxLength(4);
             e.Property(a => a.IbanCountry).HasMaxLength(2);
             e.Property(a => a.IbanLast4).HasMaxLength(4);
+            e.Property(a => a.StripeAccountId).HasMaxLength(64);
             e.HasOne(a => a.Club).WithMany().HasForeignKey(a => a.ClubId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<UserPayoutAccount>(e =>
+        {
+            e.HasIndex(a => a.UserId).IsUnique();
+            e.HasIndex(a => a.StripeAccountId).IsUnique();
+            e.Property(a => a.UserId).IsRequired();
+            e.Property(a => a.Currency).HasMaxLength(3).IsRequired();
+            e.Property(a => a.LegalName).HasMaxLength(150);
+            e.Property(a => a.TradingName).HasMaxLength(150);
+            e.Property(a => a.AddressLine1).HasMaxLength(150);
+            e.Property(a => a.AddressLine2).HasMaxLength(150);
+            e.Property(a => a.City).HasMaxLength(100);
+            e.Property(a => a.Postcode).HasMaxLength(12);
+            e.Property(a => a.ContactEmail).HasMaxLength(200);
+            e.Property(a => a.ContactPhone).HasMaxLength(30);
+            e.Property(a => a.RegistrationNumber).HasMaxLength(20);
+            e.Property(a => a.VatNumber).HasMaxLength(20);
+            e.Property(a => a.PersonFullName).HasMaxLength(150);
+            e.Property(a => a.StatementDescriptor).HasMaxLength(22);
+            e.Property(a => a.BankAccountHolder).HasMaxLength(150);
+            e.Property(a => a.BankName).HasMaxLength(100);
+            e.Property(a => a.SortCode).HasMaxLength(8);
+            e.Property(a => a.AccountLast4).HasMaxLength(4);
+            e.Property(a => a.IbanCountry).HasMaxLength(2);
+            e.Property(a => a.IbanLast4).HasMaxLength(4);
+            e.Property(a => a.StripeAccountId).HasMaxLength(64);
+            e.HasOne(a => a.User).WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<StripeWebhookEvent>(e =>
+        {
+            e.HasKey(w => w.EventId);
+            e.Property(w => w.EventId).HasMaxLength(100);
+            e.Property(w => w.AccountId).HasMaxLength(64);
+            e.Property(w => w.EventType).HasMaxLength(100).IsRequired();
         });
 
         b.Entity<SavedRider>(e =>

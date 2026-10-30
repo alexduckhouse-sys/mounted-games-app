@@ -23,7 +23,8 @@ public sealed record CompetitionImportFile(
     string? OrganiserName = null,
     string? ClubName = null,
     string? ArenaName = null,
-    IReadOnlyList<string>? LaneHatbands = null);
+    IReadOnlyList<string>? LaneHatbands = null,
+    bool IsIndoor = false);
 
 /// <summary>An age group. <see cref="Format"/> is "Pairs" (default) or "Individual".</summary>
 public sealed record CompetitionImportSection(
@@ -126,6 +127,7 @@ public static class CompetitionFileImport
             OrganiserName = Optional(file.OrganiserName),
             LaneHatbands = hatbands is null ? null : PlannedRaceList.Write(hatbands),
             CreatedByUserId = ownerId,
+            IsIndoor = file.IsIndoor,
             // The entries are already known, so the public sign-up stays shut.
             SignupsLocked = true,
             IsActive = true,

@@ -226,7 +226,7 @@ export default function App() {
               <Route path="shop" element={<ShopPage />} />
               <Route path="me" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="me/members" element={<ProtectedRoute roles={['Manager', 'Admin']}><MembersPage /></ProtectedRoute>} />
-              <Route path="me/payouts" element={<ProtectedRoute roles={['Manager', 'Admin']}><PayoutsPage /></ProtectedRoute>} />
+              <Route path="me/payouts" element={<ProtectedRoute><PayoutsPage /></ProtectedRoute>} />
               <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
               <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={

@@ -19,7 +19,8 @@ public sealed record CompetitionSetup(
     string? LaneHatbands, bool EnablePassportCheck, string? PaymentDestination,
     IReadOnlyList<CompetitionSetup.SectionSetup> Sections,
     IReadOnlyList<CompetitionSetup.SessionSetup> Sessions,
-    string? PaymentLinkUrl = null)
+    string? PaymentLinkUrl = null,
+    bool IsIndoor = false)
 {
     public sealed record SectionSetup(
         SectionFormat Format, string AgeGroup, string DisplayName, string? RunoffRaceName, TieBreakRule TieBreakRule,
@@ -58,39 +59,27 @@ public sealed record CompetitionSetup(
         catch (JsonException) { return null; }
     }
 
-    internal static readonly TimeZoneInfo UkTimeZone = ResolveUkTimeZone();
+    internal static TimeZoneInfo UkTimeZone => UkTime.Zone;
 
-    static TimeZoneInfo ResolveUkTimeZone()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
-        catch { return TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time"); }
-    }
-
-    internal static DateTime ToLondonWallClock(DateTime value)
-    {
-        var utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        return TimeZoneInfo.ConvertTimeFromUtc(utc, UkTimeZone);
-    }
+    internal static DateTime ToLondonWallClock(DateTime value) => UkTime.ToUk(value);
 
     internal static DateTime AnchorWallClock(DateTime eventStart)
     {
         var utc = eventStart.Kind == DateTimeKind.Local ? eventStart.ToUniversalTime() : DateTime.SpecifyKind(eventStart, DateTimeKind.Utc);
         return utc.TimeOfDay == TimeSpan.Zero
             ? DateTime.SpecifyKind(utc.Date, DateTimeKind.Unspecified)
-            : TimeZoneInfo.ConvertTimeFromUtc(utc, UkTimeZone);
+            : UkTime.ToUk(utc);
     }
 
-    internal static DateTime FromLondonWallClock(DateTime wallClock)
+    internal static DateTime FromLondonWallClock(DateTime wallClock) => UkTime.FromUk(wallClock);
+
+    internal static double OffsetMinutesFromStart(DateTime scheduledStart, DateTime eventStart)
     {
-        var unspecified = DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified);
-        if (UkTimeZone.IsInvalidTime(unspecified))
-            unspecified = unspecified.AddHours(1);
-        var offset = UkTimeZone.GetUtcOffset(unspecified);
-        return DateTime.SpecifyKind(unspecified - offset, DateTimeKind.Utc);
+        var schedWall = scheduledStart.TimeOfDay == TimeSpan.Zero && eventStart.TimeOfDay == TimeSpan.Zero
+            ? AnchorWallClock(scheduledStart)
+            : ToLondonWallClock(scheduledStart);
+        return (schedWall - AnchorWallClock(eventStart)).TotalMinutes;
     }
-
-    internal static double OffsetMinutesFromStart(DateTime scheduledStart, DateTime eventStart) =>
-        (ToLondonWallClock(scheduledStart) - AnchorWallClock(eventStart)).TotalMinutes;
 
     internal static DateTime ApplyOffsetMinutes(DateTime eventStart, double offsetMinutes) =>
         FromLondonWallClock(AnchorWallClock(eventStart).AddMinutes(offsetMinutes));
@@ -117,7 +106,8 @@ public sealed record CompetitionSetup(
                 s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants,
                 s.HasFinal, s.CarryPointsIntoFinal, s.DoublePointsInFinal)).ToList(),
             sessions,
-            source.PaymentLinkUrl);
+            source.PaymentLinkUrl,
+            source.IsIndoor);
     }
 
     static List<FinalHeatSetup>? FinalHeatsOf(Session session, DateTime eventStart)
@@ -174,7 +164,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
 
     /// <summary>Creates a new competition, owned by <paramref name="creatorUserId"/>, from a set-up. Returns the competition and its counts.</summary>
     public async Task<(Competition Competition, int Sections, int Sessions)> CreateAsync(
-        CompetitionSetup setup, string name, DateTime startDate, DateTime? endDate, string creatorUserId, CancellationToken ct)
+        CompetitionSetup setup, string name, DateTime startDate, DateTime? endDate, string creatorUserId, CancellationToken ct, string? sourceOwnerUserId = null)
     {
         Validate(name, startDate, endDate);
         var strategy = db.Database.CreateExecutionStrategy();
@@ -183,6 +173,13 @@ public sealed class CompetitionSetupService(AppDbContext db)
             db.ChangeTracker.Clear();
             var creatorClubId = await db.Users.AsNoTracking().Where(u => u.Id == creatorUserId)
                 .Select(u => u.ClubId).FirstOrDefaultAsync(ct);
+            var keepPaymentDetails = sourceOwnerUserId is null || sourceOwnerUserId == creatorUserId;
+            if (!keepPaymentDetails && creatorClubId.HasValue)
+            {
+                var sourceOwnerClubId = await db.Users.AsNoTracking().Where(u => u.Id == sourceOwnerUserId)
+                    .Select(u => u.ClubId).FirstOrDefaultAsync(ct);
+                keepPaymentDetails = sourceOwnerClubId == creatorClubId;
+            }
             await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
             var clone = new Competition
             {
@@ -202,8 +199,9 @@ public sealed class CompetitionSetupService(AppDbContext db)
                 DecFormConfigJson = PinPayoutClub(setup.DecFormConfigJson, creatorClubId),
                 LaneHatbands = setup.LaneHatbands,
                 EnablePassportCheck = setup.EnablePassportCheck,
-                PaymentDestination = setup.PaymentDestination,
-                PaymentLinkUrl = setup.PaymentLinkUrl,
+                IsIndoor = setup.IsIndoor,
+                PaymentDestination = keepPaymentDetails ? setup.PaymentDestination : null,
+                PaymentLinkUrl = keepPaymentDetails ? setup.PaymentLinkUrl : null,
                 CreatedByUserId = creatorUserId,
             };
             db.Competitions.Add(clone);

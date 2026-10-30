@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ClubPayouts } from '../types';
 import {
   bankLine, bankProblems, digitsOnly, emptyBank, formFrom, formatIban, formatSortCode,
-  isValidBic, maskedAccount, needsRegistrationNumber, normaliseAccountNumber, normaliseIban, normaliseSortCode, payoutStatusLine, payoutsLine,
-  registrationLabel, stepProblems, validateDateOfBirth, validateDescriptor, validateEmail, validatePhone,
+  isSafeStripeUrl, isValidBic, maskedAccount, needsRegistrationNumber, normaliseAccountNumber, normaliseIban, normaliseSortCode, payoutStatusLine, payoutsLine,
+  registrationLabel, stepProblems, stripeStatusInfo, validateDateOfBirth, validateDescriptor, validateEmail, validatePhone,
   validatePostcode, validateRegistrationNumber, validateVat, BULLETS,
 } from './payouts';
 
@@ -120,6 +120,38 @@ describe('labels and the status line', () => {
   it('formats the editor line', () => {
     expect(payoutsLine({ clubName: 'Ashdown PC', maskedAccount: `${BULLETS}1234`, ready: true })).toBe(`Entry fees are paid out to Ashdown PC — ${BULLETS}1234 · Ready`);
     expect(payoutsLine({ clubName: 'Ashdown PC', maskedAccount: null, ready: false })).toBe("Ashdown PC hasn't finished setting up payouts yet.");
+  });
+  it('describes Stripe Connect status across not_connected, incomplete and ready', () => {
+    expect(stripeStatusInfo({ bank: null })).toMatchObject({
+      state: 'not_connected',
+      badge: 'Not connected',
+      buttonLabel: 'Connect bank with Stripe',
+    });
+    expect(stripeStatusInfo({ stripeConnected: true, stripeChargesEnabled: false, stripePayoutsEnabled: false, bank: null })).toMatchObject({
+      state: 'incomplete',
+      badge: 'Finish setup on Stripe',
+      buttonLabel: 'Continue Stripe setup',
+    });
+    expect(stripeStatusInfo({
+      stripeConnected: true,
+      stripeChargesEnabled: true,
+      stripePayoutsEnabled: true,
+      bank: { accountHolder: 'Ashdown PC', bankName: 'Barclays', sortCode: '20-12-34', maskedAccount: `${BULLETS}9911`, ibanCountry: null },
+    })).toMatchObject({
+      state: 'ready',
+      badge: 'Connected & ready to take payments',
+      buttonLabel: 'Update Stripe account',
+    });
+  });
+  it('only allows HTTPS Stripe URLs for onboarding redirects', () => {
+    expect(isSafeStripeUrl('https://connect.stripe.com/setup/s/acct_123')).toBe(true);
+    expect(isSafeStripeUrl('https://dashboard.stripe.com/connect/accounts')).toBe(true);
+    expect(isSafeStripeUrl('http://connect.stripe.com/setup/s/acct_123')).toBe(false);
+    expect(isSafeStripeUrl('https://evil-stripe.com/setup')).toBe(false);
+    expect(isSafeStripeUrl('https://connect.stripe.com.evil.example/phish')).toBe(false);
+    expect(isSafeStripeUrl('javascript:alert(1)')).toBe(false);
+    expect(isSafeStripeUrl('')).toBe(false);
+    expect(isSafeStripeUrl(null)).toBe(false);
   });
 });
 

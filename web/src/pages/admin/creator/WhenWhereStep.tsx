@@ -4,7 +4,7 @@ import { useT } from '../../../i18n/LanguageContext';
 import { api } from '../../../api';
 import type { CreatorDraft } from '../../../lib/creatorDraft';
 import { Field } from '../../auth/Field';
-import { RefineDateTimeRow } from '../../refine/Refine';
+import { RefineChoiceRow, RefineDateTimeRow } from '../../refine/Refine';
 import { StepHeading } from './controls';
 import { fieldClass, TextBox, type StepProps } from './parts';
 
@@ -101,6 +101,15 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
               error={problems.contactEmail} onChange={(contactEmail) => { change({ contactEmail }); clear('contactEmail'); }} hint={t('admin.creator.when.emailHint')} />
           </div>
         </div>
+        <RefineChoiceRow
+          label={t('admin.creator.when.setting')}
+          value={draft.isIndoor ? 'indoor' : 'outdoor'}
+          options={[
+            { value: 'outdoor', label: t('admin.creator.when.outdoor') },
+            { value: 'indoor', label: t('admin.creator.when.indoor') },
+          ]}
+          onChange={(v) => change({ isIndoor: v === 'indoor' })}
+        />
       </div>
     </section>
   );

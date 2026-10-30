@@ -388,6 +388,7 @@ public sealed partial class EventArchiveService(
                 competition.Location,
                 competition.StartDate,
                 competition.EndDate,
+                competition.IsIndoor,
                 competition.SignupsLocked,
             },
             Sections = sections.Select(s => new

@@ -346,6 +346,51 @@ public class TieBreakTests : IClassFixture<ApiFactory>
         var orderedStandings = await Json(await admin.GetAsync($"/api/competitions/{comp}/standings?sectionId={section}"));
         Assert.Equal("Settled by run-off / referee order", orderedStandings[0].GetProperty("tieBreakReason").GetString());
     }
+
+    [Fact]
+    public async Task Standings_UseLastRaceInAFinal_WhenTwoAFinalistsAreTiedWithCarriedPoints()
+    {
+        var (comp, section, t) = await CompAsync(3, TieBreakRule.LastRace);
+        await _f.WithDbAsync(db => db.CompetitionSections.Where(s => s.Id == section)
+            .ExecuteUpdateAsync(set => set.SetProperty(s => s.HasFinal, true).SetProperty(s => s.CarryPointsIntoFinal, true)));
+
+        // Qualifier: T0 gets 4 pts (1st), T1 gets 3 pts (2nd), T2 gets 1 pt (3rd).
+        await RaceAsync(comp, section, 1, (t[0], 1, 4), (t[1], 2, 3), (t[2], 3, 1));
+
+        // A Final session with two races:
+        // Final Race 1: T0 gets 2 pts (1st), T1 gets 1 pt (2nd) -> running totals: T0=6, T1=4.
+        // Final Race 2 (most recent): T1 gets 2 pts (1st), T0 gets 0 pts (eliminated) -> totals: T0=6, T1=6.
+        await _f.WithDbAsync(async db =>
+        {
+            var finalSession = new Session { CompetitionId = comp, CompetitionSectionId = section, Name = "Finals", OrderIndex = 2 };
+            var aFinal = new Heat
+            {
+                Session = finalSession,
+                Label = "A Final",
+                OrderIndex = 1,
+                Entries =
+                [
+                    new HeatEntry { TeamId = t[0], LaneIndex = 1 },
+                    new HeatEntry { TeamId = t[1], LaneIndex = 2 },
+                ],
+            };
+            var fRace1 = new Race { Heat = aFinal, Name = "Bending", OrderIndex = 1, IsComplete = true };
+            var fRace2 = new Race { Heat = aFinal, Name = "Sword", OrderIndex = 2, IsComplete = true };
+            db.Races.AddRange(fRace1, fRace2);
+            db.Results.AddRange(
+                new Result { Race = fRace1, TeamId = t[0], Placing = 1, Points = 2 },
+                new Result { Race = fRace1, TeamId = t[1], Placing = 2, Points = 1 },
+                new Result { Race = fRace2, TeamId = t[0], Placing = null, Eliminated = true, Points = 0 },
+                new Result { Race = fRace2, TeamId = t[1], Placing = 1, Points = 2 });
+            await db.SaveChangesAsync();
+        });
+
+        var admin = await _f.AdminAsync();
+        var standings = await Json(await admin.GetAsync($"/api/competitions/{comp}/standings?sectionId={section}"));
+
+        Assert.Equal(new[] { t[1], t[0], t[2] }, standings.EnumerateArray().Select(r => r.GetProperty("teamId").GetInt32()));
+        Assert.Equal("Ahead on Last Race (1st in Sword vs elim.)", standings[0].GetProperty("tieBreakReason").GetString());
+    }
 }
 
 /// <summary>The tie-break rules on their own, without a database.</summary>
@@ -463,6 +508,137 @@ public class TieBreakerUnitTests
     }
 
     [Fact]
+    public void LastRace_ScopesToFinalRecentPointsFirst_BeforeFallingBackToQualifiers()
+    {
+        var breaker = Breaker(TieBreakRule.LastRace);
+
+        // Team 1 has higher RecentPoints[0] in overall array, but Team 2 beat Team 1 in FinalRecentPoints[0].
+        var team1 = new TieFacts(
+            TeamId: 1, SectionId: 1, Total: 14,
+            PlacingCounts: [2, 1],
+            RecentPoints: [5, 4, 5],
+            FinalPlacingCounts: [0, 1],
+            FinalRecentPoints: [2]);
+        var team2 = new TieFacts(
+            TeamId: 2, SectionId: 1, Total: 14,
+            PlacingCounts: [1, 2],
+            RecentPoints: [4, 5, 5],
+            FinalPlacingCounts: [1],
+            FinalRecentPoints: [4]);
+
+        var ranked = breaker.Rank([team1, team2]);
+        Assert.Equal(new[] { 2, 1 }, ranked.Select(f => f.TeamId));
+        Assert.Equal(TieSettlement.Rule, breaker.Settle(ranked, ranked[0], ranked[1]));
+        Assert.Equal("Ahead on Last Race (4 pts vs 2 pts)", breaker.Explain(ranked, ranked[0], ranked[1]));
+
+        // When FinalRecentPoints are identical, it falls back to RecentPoints.
+        var tiedFinal1 = team1 with { FinalRecentPoints = [3] };
+        var tiedFinal2 = team2 with { FinalRecentPoints = [3] };
+        var fallbackRanked = breaker.Rank([tiedFinal1, tiedFinal2]);
+        Assert.Equal(new[] { 1, 2 }, fallbackRanked.Select(f => f.TeamId));
+        Assert.Equal("Ahead on Last Race (5 pts vs 4 pts)", breaker.Explain(fallbackRanked, fallbackRanked[0], fallbackRanked[1]));
+
+        // Even if a non-final race (id 30, session 3) has a higher session order index than the final race (id 20, session 2),
+        // Facts populates FinalRecentRaces from the final heat and Explain names the final race ("Flag") rather than the non-final race.
+        var outOfOrderBreaker = new TieBreaker(
+            new Dictionary<int, TieBreakRule> { [1] = TieBreakRule.LastRace },
+            new Dictionary<int, FinalsTieOrder>(),
+            new Dictionary<int, (int, int, int)> { [10] = (1, 1, 1), [20] = (2, 1, 1), [30] = (3, 1, 1) },
+            new HashSet<int> { 20 },
+            raceNames: new Dictionary<int, string> { [10] = "Mug", [20] = "Flag", [30] = "Bending" });
+        var f1 = outOfOrderBreaker.Facts(1, 1, [R(10, 1, 4), R(20, 2, 2), R(30, 1, 4)], total: 10);
+        var f2 = outOfOrderBreaker.Facts(2, 1, [R(10, 2, 2), R(20, 1, 4), R(30, 2, 4)], total: 10);
+        var outOfOrderRanked = outOfOrderBreaker.Rank([f1, f2]);
+        Assert.Equal(new[] { 2, 1 }, outOfOrderRanked.Select(f => f.TeamId));
+        Assert.Equal("Ahead on Last Race (1st in Flag vs 2nd)", outOfOrderBreaker.Explain(outOfOrderRanked, outOfOrderRanked[0], outOfOrderRanked[1]));
+    }
+
+    [Fact]
+    public void LastRace_AlignsRacesByRaceOrder_WhenATeamSitsOutAFinalRace()
+    {
+        var breaker = new TieBreaker(
+            new Dictionary<int, TieBreakRule> { [1] = TieBreakRule.LastRace },
+            new Dictionary<int, FinalsTieOrder>(),
+            new Dictionary<int, (int, int, int)>
+            {
+                [21] = (2, 1, 1),
+                [22] = (2, 2, 1),
+                [23] = (2, 3, 1),
+            },
+            new HashSet<int> { 21, 22, 23 },
+            raceNames: new Dictionary<int, string>
+            {
+                [21] = "Bending",
+                [22] = "Mug",
+                [23] = "Sword",
+            });
+
+        // Both teams total 7 points in the A Final:
+        // Race 21 (Bending, shared): Team 1 = 2nd (3 pts), Team 2 = 1st (4 pts).
+        // Race 22 (Mug): Team 1 = 1st (4 pts), Team 2 sat out (0 pts).
+        // Race 23 (Sword): Team 1 sat out (0 pts), Team 2 = 2nd (3 pts).
+        // Without RaceOrder alignment, Team 1's Mug (4 pts) would be falsely compared against Team 2's Sword (3 pts).
+        // With RaceOrder alignment, only the shared race (Bending) is compared, putting Team 2 ahead on Bending!
+        var team1 = breaker.Facts(1, 1, [
+            R(21, 2, 3),
+            R(22, 1, 4),
+            new Result { RaceId = 23, IsSitOut = true, Points = 0 },
+        ], total: 7);
+        var team2 = breaker.Facts(2, 1, [
+            R(21, 1, 4),
+            new Result { RaceId = 22, IsSitOut = true, Points = 0 },
+            R(23, 2, 3),
+        ], total: 7);
+
+        var ranked = breaker.Rank([team1, team2]);
+        Assert.Equal(new[] { 2, 1 }, ranked.Select(f => f.TeamId));
+        Assert.Equal("Ahead on Last Race (1st in Bending vs 2nd)", breaker.Explain(ranked, ranked[0], ranked[1]));
+    }
+
+    [Theory]
+    [InlineData("Final A", 0)]
+    [InlineData("Final B", 1)]
+    [InlineData("Final C", 2)]
+    [InlineData("Finale A", 0)]
+    [InlineData("Finale B", 1)]
+    [InlineData("Finale C", 2)]
+    [InlineData("A Finale", 0)]
+    [InlineData("Final A - Part 1", 0)]
+    [InlineData("Finale B Part 2", 1)]
+    [InlineData("Final C - 1", 2)]
+    [InlineData("Grand Final", 0)]
+    [InlineData("Grande Finale", 0)]
+    [InlineData("Grand Finale", 0)]
+    [InlineData("Grande Final", 0)]
+    [InlineData("Grand Final - Part 1", 0)]
+    [InlineData("A Final - Open", 0)]
+    [InlineData("A Final - Under 12", 0)]
+    [InlineData("B Final (Pairs)", 1)]
+    [InlineData("B Final (Under 12)", 1)]
+    [InlineData("Grand Final - Seniors", 0)]
+    [InlineData("Championship Final", 0)]
+    [InlineData("Consolation Final", 1)]
+    [InlineData("Plate Final", 1)]
+    [InlineData("Bowl Final", 2)]
+    [InlineData("Shield Final", 3)]
+    public void FinalsTiers_ParseLabel_RecognisesFinalAFinaleAAndGrandFinal(string label, int expectedTier)
+        => Assert.Equal(expectedTier, FinalsTiers.ParseLabel(label));
+
+    [Theory]
+    [InlineData("Quarter Final")]
+    [InlineData("Semi Final")]
+    [InlineData("Final Session")]
+    [InlineData("Final Destination")]
+    [InlineData("Final Countdown")]
+    [InlineData("Finals")]
+    [InlineData("Grand Finals")]
+    [InlineData("Final Stage - 1")]
+    [InlineData("Final 1")]
+    [InlineData("A Finals")]
+    public void FinalsTiers_ParseLabel_RejectsFalsePositives(string label)
+        => Assert.Null(FinalsTiers.ParseLabel(label));
+
+    [Fact]
     public void Explain_CoversCountbackLastRaceRunOffAndUnscoredCases()
     {
         var breaker = Breaker(TieBreakRule.Countback);
@@ -496,7 +672,12 @@ public class TieBreakerUnitTests
         var lrNoNamesB = new TieFacts(2, 1, 64, [], [3]);
         Assert.Equal("Ahead on Last Race (5 pts vs 3 pts)", lastRaceBreaker.Explain([lrNoNamesA, lrNoNamesB], lrNoNamesA, lrNoNamesB));
 
+        Assert.Equal("0", TieBreaker.Ordinal(0));
+        Assert.Equal("-1", TieBreaker.Ordinal(-1));
+        Assert.Equal("0", PushNotifier.Ordinal(0));
+        Assert.Equal("-5", PushNotifier.Ordinal(-5));
         Assert.Equal("1st", TieBreaker.Ordinal(1));
+        Assert.Equal("1st", PushNotifier.Ordinal(1));
         Assert.Equal("2nd", TieBreaker.Ordinal(2));
         Assert.Equal("3rd", TieBreaker.Ordinal(3));
         Assert.Equal("4th", TieBreaker.Ordinal(4));

@@ -100,7 +100,7 @@ public sealed class StartingPointsController(AppDbContext db) : ControllerBase
         try
         {
             var (competition, sections, sessions) = await new CompetitionSetupService(db)
-                .CreateAsync(setup, request.Name, request.StartDate, request.EndDate, UserId, ct);
+                .CreateAsync(setup, request.Name, request.StartDate, request.EndDate, UserId, ct, point.OwnerUserId);
             return Created($"/api/competitions/{competition.Id}",
                 new CloneCompetitionResultDto(competition.Id, competition.Name, sections, 0, sessions, 0, 0));
         }

@@ -33,7 +33,7 @@ export function WeatherAlert({ competition, reload }: { competition: Competition
   const nowMs = now.getTime();
   const sessions = competition.sessions;
   const windPaused = sessions.some(s => s.status !== 2 && s.notes?.includes('[pausefor:wind]') && s.notes.includes('[paused:'));
-  const allowed = canOrganise(competition) && (windPaused || isEventDay(competition, sessions, now)) && racingToCome(sessions);
+  const allowed = !competition.isIndoor && canOrganise(competition) && (windPaused || isEventDay(competition, sessions, now)) && racingToCome(sessions);
   const hours = useDayForecast(competition.latitude, competition.longitude, allowed);
   const [snoozes, setSnoozes] = useState<Snoozes>(() => readSnoozes(competition.id));
   const [open, setOpen] = useState<Open | null>(null);
