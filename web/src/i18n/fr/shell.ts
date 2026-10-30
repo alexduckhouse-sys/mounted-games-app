@@ -17,6 +17,12 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.header.onNow': 'En cours',
   'shell.header.next': 'Suivant',
   'shell.header.openingPage': 'Ouverture de la page…',
+  // What the header's refresh button says while it works and once it has an answer
+  'shell.refresh.loading': 'Actualisation…',
+  'shell.refresh.updated': 'Mis à jour',
+  'shell.refresh.same': 'À jour',
+  'shell.refresh.offline': 'Pas de réseau',
+  'shell.refresh.failed': 'Échec de l’actualisation',
 
   // Tabs
   'shell.tabs.competition': 'Compétition',

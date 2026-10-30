@@ -17,6 +17,12 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.header.onNow': 'Nawr',
   'shell.header.next': 'Nesaf',
   'shell.header.openingPage': 'Yn agor y dudalen…',
+  // What the header's refresh button says while it works and once it has an answer
+  'shell.refresh.loading': 'Yn adnewyddu…',
+  'shell.refresh.updated': 'Wedi diweddaru',
+  'shell.refresh.same': 'Yn gyfredol',
+  'shell.refresh.offline': 'Dim signal',
+  'shell.refresh.failed': 'Methu adnewyddu',
 
   // Tabs
   'shell.tabs.competition': 'Cystadleuaeth',

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { RefreshHandler } from '../lib/refreshOutcome';
 
 export type CompactPageBarBadge = 'live' | 'finished' | 'next';
 
@@ -18,7 +19,8 @@ export interface PageHeaderConfig {
   subtitle?: string;
   /** A short end to the subtitle (the time it was updated) that stays in view when a long subtitle is cut short. */
   subtitleTail?: string;
-  onRefresh?: () => void;
+  /** Return how it went (see `RefreshOutcome`) so the button can show it. */
+  onRefresh?: RefreshHandler;
   refreshLabel?: string;
   /** Adds a pencil button that toggles the page's organiser tools; `editing` shows it pressed. */
   onEdit?: () => void;
@@ -31,7 +33,7 @@ export interface PageHeaderConfig {
   backLabel?: string;
 }
 
-type PageHeaderEntry = { title: string; subtitle?: string; subtitleTail?: string; refreshLabel?: string; refresh?: () => void; editLabel?: string; edit?: () => void; editing?: boolean; plain?: boolean; backTo?: string; backLabel?: string };
+type PageHeaderEntry = { title: string; subtitle?: string; subtitleTail?: string; refreshLabel?: string; refresh?: RefreshHandler; editLabel?: string; edit?: () => void; editing?: boolean; plain?: boolean; backTo?: string; backLabel?: string };
 
 interface CompactPageBarState {
   config: CompactPageBarConfig | null;

@@ -158,8 +158,8 @@ export function WeatherPage() {
   const { canOrganise, hasRole } = useAuth();
   const [refreshVersion, setRefreshVersion] = useState(0);
   const refresh = useCallback(() => {
-    reload();
     setRefreshVersion(version => version + 1);
+    return reload();
   }, [reload]);
   usePageHeader({
     title: t('teams.weather.title'),

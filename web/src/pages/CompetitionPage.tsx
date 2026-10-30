@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useLocation, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import { pendingCompetitionPrefetch } from '../lib/competitionPrefetch';
+import { failedRefreshOutcome, refreshOutcomeFor } from '../lib/refreshOutcome';
+import { useRefreshWaiters } from '../hooks/useRefreshWaiters';
 import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
 import { useCompetitionStreams } from '../hooks/useCompetitionStreams';
 import { useStreamOverlay } from '../hooks/useStreamOverlay';
@@ -72,6 +74,11 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const [slowAttempt, setSlowAttempt] = useState(-1);
   /** How current `data` is, so a staler service-worker fallback never replaces it. */
   const dataAt = useRef(initial ? Date.parse(initial.savedAt) : 0);
+  // Score cards (and the refresh button's "Up to date") are worked out from what this phone held before each results update. A layout effect keeps the
+  // ref in step during the commit: a plain effect runs a moment later, and a results update landing in that gap
+  // read the old (or no) competition and queued no card.
+  const latestData = useRef(data);
+  useLayoutEffect(() => { latestData.current = data; }, [data]);
   // Keep events received during each snapshot request and replay them over its response.
   // A busy event must not need an event-free network round trip before it can open.
   const snapshotPatches = useRef(new Set<Array<(detail: CompetitionDetail) => CompetitionDetail>>());
@@ -84,6 +91,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const { pathname } = useLocation();
 
   const load = useCallback(() => setAttempt((n) => n + 1), []);
+  // A tap on the header's refresh waits for the next load to finish and hears how it went.
+  const refreshWaiters = useRefreshWaiters();
+  const reload = useCallback(() => { const answer = refreshWaiters.wait(); load(); return answer; }, [load, refreshWaiters]);
   const structuralRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const detailLoading = useRef(false);
   const structureDirty = useRef(false);
@@ -119,6 +129,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         const detail = patches.reduce((current, patch) => patch(current), r.data);
         const fallback = serviceWorkerSavedAt(r.headers);
         if (fallback === null) {
+          if (refreshWaiters.pending()) refreshWaiters.settle(refreshOutcomeFor(latestData.current, detail));
           fetchFailed.current = false;
           setFailures(0);
           dataAt.current = Date.now();
@@ -130,6 +141,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
           return;
         }
         fetchFailed.current = true;
+        refreshWaiters.settle('offline');
         setFailures((n) => n + 1);
         const fallbackAt = fallback === 'unknown' ? 0 : fallback.getTime();
         if (dataAt.current > 0 && dataAt.current >= fallbackAt) return; // ours is newer: keep showing it
@@ -142,6 +154,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       .catch(() => {
         if (cancelled) return;
         fetchFailed.current = true;
+        refreshWaiters.settle(failedRefreshOutcome());
         setFailedAttempt(attempt);
         setFailures((n) => n + 1);
       })
@@ -155,7 +168,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         }
       });
     return () => { cancelled = true; journals.delete(patches); clearTimeout(slowTimer); controller.abort(); };
-  }, [competitionId, attempt, load]);
+  }, [competitionId, attempt, load, refreshWaiters]);
 
   // With nothing saved on this phone, ask for the small first view too: on one bar it arrives well before the
   // full timetable, and the full one replaces it. A saved copy already opens straight away, so skip it then.
@@ -218,11 +231,6 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const streamState = useCompetitionStreams(competitionId, ready);
   const overlayState = useStreamOverlay(competitionId, ready);
   const sponsorFeed = useSponsorFeed(competitionId, ready);
-  // Score cards are worked out from what this phone held before each results update. A layout effect keeps the
-  // ref in step during the commit: a plain effect runs a moment later, and a results update landing in that gap
-  // read the old (or no) competition and queued no card.
-  const latestData = useRef(data);
-  useLayoutEffect(() => { latestData.current = data; }, [data]);
   const [scoreCards, setScoreCards] = useState<QueuedScoreCard[]>([]);
   const [prizeGiving, setPrizeGiving] = useState<PrizeGiving | null>(null);
   const [streamTelemetry, setStreamTelemetry] = useState<Record<number, import('../types').StreamTelemetry>>({});
@@ -374,8 +382,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   }, [connected, online, failures, downSince, intervalMs, retrying, retry, setStatus]);
   useEffect(() => () => setStatus(null), [setStatus]);
 
-  const contextValue = useMemo(() => data ? { competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, connected, standingsVersion, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip, prizeGiving } : null,
-    [data, load, updatedAt, savedAt, error, connected, streamState.streams, streamTelemetry, lastStreamCommand,
+  const contextValue = useMemo(() => data ? { competition: data, reload, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, connected, standingsVersion, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip, prizeGiving } : null,
+    [data, reload, updatedAt, savedAt, error, connected, streamState.streams, streamTelemetry, lastStreamCommand,
       streamState.streamingEnabled, streamState.streamingChecked, invoke, ready, standingsVersion, streamMessages,
       overlayState.overlay, overlayState.save, scoreCards, sponsorFeed.sponsors, sponsorFeed.reloadSponsors,
       sponsorFeed.sponsorSkip, prizeGiving]);

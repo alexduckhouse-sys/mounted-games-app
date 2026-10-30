@@ -1,7 +1,7 @@
 import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '../../components/Sheet';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
@@ -33,6 +33,8 @@ import { useProvisionalState } from '../../hooks/useProvisionalState';
 import { useHeldFor } from '../../hooks/useHeldFor';
 import { getSectionProvisionalState } from '../../lib/provisionalResults';
 import { useT } from '../../i18n/LanguageContext';
+import { failedRefreshOutcome, refreshOutcomeFor, type RefreshHandler } from '../../lib/refreshOutcome';
+import { useRefreshWaiters } from '../../hooks/useRefreshWaiters';
 
 /** The three tabs of the age group page: the draw (Heats), the heat tables (Scores) and the Toplist. */
 export type SectionSubTab = 'draw' | 'scores' | 'toplist';
@@ -96,7 +98,7 @@ function defaultSectionId(competition: CompetitionDetail): number | null {
 }
 
 /** Puts the page's title and refresh button in the app header while the Scores or Toplist tab is showing. (The Heats tab's timetable sets its own.) */
-function TabHeader({ title, subtitle, refreshLabel, onRefresh }: { title: string; subtitle: string; refreshLabel: string; onRefresh: () => void }) {
+function TabHeader({ title, subtitle, refreshLabel, onRefresh }: { title: string; subtitle: string; refreshLabel: string; onRefresh: RefreshHandler }) {
   usePageHeader({ title, subtitle, onRefresh, refreshLabel });
   return null;
 }
@@ -189,6 +191,16 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const standings = !standingsError && currentResult ? currentResult.rows : savedStandings?.data ?? NO_ROWS;
   const standingsStale = currentResult ? currentResult.savedCopy || currentResult.source !== refreshSource : savedStandings != null;
   const standingsLoading = sectionId != null && !currentResult && !savedStandings && standings.length === 0;
+  // The toplist's refresh button hears how the next standings request went, and whether anything changed.
+  const toplistRefresh = useRefreshWaiters();
+  const shownStandings = useRef(standings);
+  useLayoutEffect(() => { shownStandings.current = standings; }, [standings]);
+  const refreshToplist = () => {
+    if (sectionId == null) return;
+    const answer = toplistRefresh.wait();
+    setRetry((n) => n + 1);
+    return answer;
+  };
   // Old standings are on screen for a moment on every refresh; only say so if it lasts half a minute.
   const showSavedNotice = useHeldFor(standingsStale, SAVED_STANDINGS_NOTICE_MS);
   // Whether this age group's finished results are still open to queries, held for a review, or official.
@@ -206,6 +218,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
         const local = fallback === null ? null : readSavedCopy<StandingRow[]>(key);
         const preferLocal = local != null && (fallback === 'unknown' || Date.parse(local.savedAt) >= (fallback as Date).getTime());
         const rows = preferLocal ? local.data : r.data;
+        if (toplistRefresh.pending()) toplistRefresh.settle(fallback !== null ? 'offline' : refreshOutcomeFor(shownStandings.current, r.data));
         setStandingsBySection((prev) => ({
           ...prev,
           [sectionId]: { source: refreshSource, rows, error: false, savedCopy: fallback !== null },
@@ -213,6 +226,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
       })
       .catch(() => {
         if (cancelled) return;
+        toplistRefresh.settle(failedRefreshOutcome());
         setStandingsBySection((prev) => {
           const existing = prev[sectionId];
           // A failed refresh keeps the list on screen rather than blanking it.
@@ -227,7 +241,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
         });
       });
     return () => { cancelled = true; };
-  }, [competition.id, sectionId, refreshSource, retry]);
+  }, [competition.id, sectionId, refreshSource, retry, toplistRefresh]);
 
   const section = competition.sections.find((s) => s.id === sectionId) ?? null;
   const sectionName = displaySectionName(section?.displayName);
@@ -356,7 +370,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   ) : (
     <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
       {subTab === 'toplist'
-        ? <TabHeader title={t('competition.scoring.toplist')} subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel={t('competition.scoring.refreshToplist')} onRefresh={() => setRetry((n) => n + 1)} />
+        ? <TabHeader title={t('competition.scoring.toplist')} subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel={t('competition.scoring.refreshToplist')} onRefresh={refreshToplist} />
         : <TabHeader title={sectionName || t('competition.timetable.ageGroup')} subtitle={competition.name} refreshLabel={t('competition.scoring.refreshScores')} onRefresh={reload} />}
       {band}
       {subTab === 'toplist' ? (

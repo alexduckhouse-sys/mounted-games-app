@@ -17,6 +17,12 @@ export const shell = {
   'shell.header.onNow': 'On now',
   'shell.header.next': 'Next',
   'shell.header.openingPage': 'Opening page…',
+  // What the header's refresh button says while it works and once it has an answer
+  'shell.refresh.loading': 'Refreshing…',
+  'shell.refresh.updated': 'Updated',
+  'shell.refresh.same': 'Up to date',
+  'shell.refresh.offline': 'No signal',
+  'shell.refresh.failed': 'Couldn’t refresh',
 
   // Tabs
   'shell.tabs.competition': 'Competition',

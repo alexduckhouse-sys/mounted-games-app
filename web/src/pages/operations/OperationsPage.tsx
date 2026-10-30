@@ -28,6 +28,7 @@ import { DuplicateEventPanel, PrintSheetsPanel, TeamImportPanel } from '../event
 import { TackCheckTab } from '../eventTools/TackCheckTab';
 import { PassportCheckTab } from '../eventTools/PassportCheckTab';
 import { ResultsBookTab } from '../eventTools/ResultsBookTab';
+import { failedRefreshOutcome, type RefreshOutcome } from '../../lib/refreshOutcome';
 import './operations.css';
 
 const DESK_QUERY = '(min-width: 1024px)';
@@ -85,7 +86,7 @@ function OperationsPageContent() {
   const [applying, setApplying] = useState(false);
   const [undoVersion, setUndoVersion] = useState(0);
 
-  const loadReadiness = useCallback(async () => {
+  const loadReadiness = useCallback(async (): Promise<RefreshOutcome> => {
     setLoadingReadiness(true);
     setLoadError(null);
     try {
@@ -94,8 +95,10 @@ function OperationsPageContent() {
       );
       setReadiness(data);
       setCheckedAt(new Date());
+      return 'updated';
     } catch (error) {
       setLoadError(apiMessage(error, t('ops.page.refreshError')));
+      return failedRefreshOutcome();
     } finally {
       setLoadingReadiness(false);
     }
@@ -204,7 +207,7 @@ function OperationsPageContent() {
     <RefinePage className={wide ? 'ops-wide' : ''}>
       {toast.node}
       <RefineHeader back={tool ? hubPath : `/competitions/${competition.id}`} backLabel={tool ? t('ops.hub.back') : t('ops.page.backToEvent')} context={context} actions={actions}
-        onRefresh={tool ? undefined : () => void loadReadiness()} refreshLabel={t('ops.page.recheck')} title={title} subtitle={subtitle} />
+        onRefresh={tool ? undefined : loadReadiness} refreshLabel={t('ops.page.recheck')} title={title} subtitle={subtitle} />
 
       <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={() => { reloadCompetition(); void loadReadiness(); }} />
 
