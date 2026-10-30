@@ -97,7 +97,7 @@ public static class CompetitionDetailReader
         var demo = await db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == id && x.IsDemo, ct);
         var payout = await db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson, ct);
         return new(c.ToDto(sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(counts.GetValueOrDefault(s.Id))).ToList(),
-            teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
+            teams.OrderBy(t => t.DisplayName).Select(t => includePaymentDetails ? t.ToDto() : t.ToDto() with { TrainerUserId = null }).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(), isDemo: demo, payoutsTo: payout,
             includePaymentDetails: includePaymentDetails, maxStables: capacity.MaxStables, maxHookups: capacity.MaxHookups,
             stablesRemaining: capacity.StablesRemaining, hookupsRemaining: capacity.HookupsRemaining), expiry);

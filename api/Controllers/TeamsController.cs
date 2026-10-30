@@ -326,8 +326,8 @@ public class TeamsController : ControllerBase
         var (team, err) = await LoadTeamForTrainerAsync(competitionId, teamId);
         if (err != null) return err;
         var code = (req.Code ?? string.Empty).Trim().ToUpperInvariant();
-        if (code.Length < 3 || code.Length > 32)
-            return BadRequest(new { message = "Team code must be 3-32 characters." });
+        if (code.Length < 5 || code.Length > 32)
+            return BadRequest(new { message = "Team code must be 5-32 characters." });
         if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^[A-Z0-9_-]+$"))
             return BadRequest(new { message = "Letters, digits, dash and underscore only." });
         var clash = await _db.Teams
@@ -379,10 +379,17 @@ public class TeamsController : ControllerBase
         if (string.IsNullOrEmpty(key)) return BadRequest(new { message = "Join key required." });
 
         var keyUpper = key.ToUpperInvariant();
-        var team = await _db.Teams
+        var matches = await _db.Teams
             .Include(t => t.Competition).Include(t => t.Trainer)
-            .FirstOrDefaultAsync(t => t.SupporterJoinKey != null && t.SupporterJoinKey.ToUpper() == keyUpper);
-        if (team is null) return NotFound(new { message = "No team matches that code. Check it with your trainer." });
+            .Where(t => t.SupporterJoinKey != null && t.SupporterJoinKey.ToUpper() == keyUpper)
+            .ToListAsync();
+        if (matches.Count == 0) return NotFound(new { message = "No team matches that code. Check it with your trainer." });
+        // Codes are only unique within one event, so the same short code can exist in two.
+        // Rather than silently attach to whichever team we happened to find first, ask for a
+        // code that only points at one team.
+        if (matches.Count > 1)
+            return BadRequest(new { message = "That code matches more than one team. Ask your trainer for their team's current code." });
+        var team = matches[0];
 
         // Don't let the team's own trainer request to "support" their own team.
         if (team.TrainerUserId == userId)

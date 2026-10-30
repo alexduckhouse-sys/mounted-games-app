@@ -48,7 +48,7 @@ public class ShopController : ControllerBase
         var isAdmin = User.IsInRole(Roles.Admin);
         var q = _db.ShopPosts.AsNoTracking();
         if (!includeDeleted || !isAdmin) q = q.Where(p => !p.IsDeleted);
-        return await Summaries(q.OrderByDescending(p => p.CreatedAt).Take(take), imageMode == "urls").ToListAsync(HttpContext.RequestAborted);
+        return await Summaries(q.OrderByDescending(p => p.CreatedAt).Take(take), imageMode == "urls", User.Identity?.IsAuthenticated == true).ToListAsync(HttpContext.RequestAborted);
     }
 
     [HttpGet("posts/{id:int}")]
@@ -57,15 +57,15 @@ public class ShopController : ControllerBase
     [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ShopPostDto>> Get(int id, [FromQuery] string? imageMode = null)
     {
-        var p = await Summaries(_db.ShopPosts.AsNoTracking().Where(x => x.Id == id), imageMode == "urls")
+        var p = await Summaries(_db.ShopPosts.AsNoTracking().Where(x => x.Id == id), imageMode == "urls", User.Identity?.IsAuthenticated == true)
             .FirstOrDefaultAsync(HttpContext.RequestAborted);
         if (p is null) return NotFound();
         if (p.IsDeleted && !User.IsInRole(Roles.Admin)) return NotFound();
         return p;
     }
 
-    private static IQueryable<ShopPostDto> Summaries(IQueryable<ShopPost> posts, bool imageUrls)
-        => posts.Select(p => new ShopPostDto(p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
+    private static IQueryable<ShopPostDto> Summaries(IQueryable<ShopPost> posts, bool imageUrls, bool includeAuthorId)
+        => posts.Select(p => new ShopPostDto(p.Id, p.AuthorName, p.PonyClubName, includeAuthorId ? p.AuthorUserId : null,
             p.Title, p.Body, p.PriceMinor, p.ContactInfo,
             imageUrls ? (p.ImageBase64 != null ? "/api/shop/posts/" + p.Id + "/images/0" : null) : p.ImageBase64,
             p.CreatedAt, p.IsDeleted, p.Comments.Count(c => !c.IsDeleted && !c.IsPrivate), p.Reports.Count));
@@ -204,7 +204,7 @@ public class ShopController : ControllerBase
                 || (!string.IsNullOrEmpty(userId) && (c.AuthorUserId == userId
                 || c.ToUserId == userId
                 || post.AuthorUserId == userId)))
-            .Select(c => c.ToDto());
+            .Select(c => string.IsNullOrEmpty(userId) ? c.ToDto() with { AuthorUserId = null, ToUserId = null } : c.ToDto());
     }
 
     [HttpPost("posts/{id:int}/comments")]

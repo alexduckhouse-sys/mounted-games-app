@@ -79,6 +79,11 @@ public class DeclarationFormsController : ControllerBase
         var isAdmin = User.IsInRole(Roles.Admin);
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
+        // An anonymous caller must name an event or team: without a scope this would
+        // return every locked form across every event, a cheap way to scrape names.
+        if (!competitionId.HasValue && !teamId.HasValue && string.IsNullOrEmpty(uid))
+            return Array.Empty<DeclarationFormDto>();
+
         var mySignupTeamIds = await SignedUpTeamIdsAsync(uid);
         var myClubId = await _db.ClubIdOfAsync(User);
         var isClubManager = myClubId.HasValue && await _db.IsClubManagerAsync(User, myClubId.Value);
@@ -101,7 +106,8 @@ public class DeclarationFormsController : ControllerBase
             q = q.Where(d => d.TeamId == teamId);
 
         var helping = await HelpingAsync(uid);
-        var forms = await q.OrderByDescending(d => d.SubmittedAt).ToListAsync();
+        // A page cap so a single call can never pull an unbounded set.
+        var forms = await q.OrderByDescending(d => d.SubmittedAt).Take(500).ToListAsync();
         var entryNames = await EntryTeamNamesAsync(forms.Select(d => d.TeamId));
         return forms.Select(d => d.ToDto(CanReadPrivate(d, helping, mySignupTeamIds, managedClubId), entryNames.GetValueOrDefault(d.TeamId)));
     }

@@ -340,6 +340,11 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
     {
         if (batch.Items.Any(i => !SponsorPlacements.IsSingle(i.Placement)))
             return BadRequest(new { message = "Unknown placement." });
+        // A whole-batch sanity cap on top of the per-item ranges, so one anonymous call
+        // can't inflate a sponsor's impressions by an absurd amount. With the 25-item limit
+        // and the per-minute rate limit this bounds how fast counters can grow.
+        if (batch.Items.Sum(i => (long)i.Views) > 1000)
+            return BadRequest(new { message = "Too many impressions in one batch." });
         var wanted = batch.Items.Where(i => i.Views > 0 || i.Seconds > 0)
             .GroupBy(i => (i.SponsorId, i.Placement))
             .Select(g => (g.Key.SponsorId, g.Key.Placement, Views: g.Sum(i => (long)i.Views), Seconds: g.Sum(i => (long)i.Seconds)))

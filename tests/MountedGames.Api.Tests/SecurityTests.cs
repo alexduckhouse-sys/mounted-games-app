@@ -64,11 +64,16 @@ public class SecurityTests
         using var response = await server.Send(HttpMethod.Get, "/api/declaration-forms/1");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(JsonValueKind.Null, body.GetProperty("submittedByPhone").ValueKind);
+        // The submitter's name is personal data too: never on a public form.
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("submittedByName").ValueKind);
         Assert.Equal(JsonValueKind.Null, body.GetProperty("notes").ValueKind);
         Assert.Equal(JsonValueKind.Null, body.GetProperty("riders")[0].GetProperty("dateOfBirth").ValueKind);
         using var draft = await server.Send(HttpMethod.Get, "/api/declaration-forms/2");
         Assert.Equal(HttpStatusCode.NotFound, draft.StatusCode);
-        using var list = await server.Send(HttpMethod.Get, "/api/declaration-forms");
+        // An anonymous caller must name an event or team; an unfiltered call returns nothing.
+        using var unfiltered = await server.Send(HttpMethod.Get, "/api/declaration-forms");
+        Assert.Empty((await unfiltered.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
+        using var list = await server.Send(HttpMethod.Get, "/api/declaration-forms?competitionId=1");
         Assert.Single((await list.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
         using var owner = await server.Send(HttpMethod.Get, "/api/declaration-forms/2", "owner", Roles.Trainer);
         Assert.Equal(HttpStatusCode.OK, owner.StatusCode);

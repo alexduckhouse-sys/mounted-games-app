@@ -64,6 +64,21 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Recent_HidesAuthorUserIdFromAnonymous_ButShowsToSignedIn()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var uid = await UserIdAsync(TestClients.TrainerEmail);
+        await SeedMessageAsync(a, "hello", DateTime.UtcNow.AddMinutes(-1), userId: uid);
+
+        var anon = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.All(anon, m => Assert.Null(m.UserId));
+
+        var trainer = await _f.TrainerAsync();
+        var signedIn = await (await trainer.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Contains(signedIn, m => m.UserId == uid);
+    }
+
+    [Fact]
     public async Task Recent_Take_LimitsToNewestMessages_AndClampsToAtLeastOne()
     {
         var a = await _f.CreateArenaAsync(1);

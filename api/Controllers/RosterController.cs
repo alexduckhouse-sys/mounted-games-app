@@ -138,7 +138,7 @@ public class RosterController(AppDbContext db) : ControllerBase
             s => s.Id == id && (!clubId.HasValue || s.ClubId == clubId.Value), ct);
         if (saved is null) return NotFound();
 
-        if (!await IsClubMemberOrTrainerOrAdminAsync(saved.ClubId, ct) && saved.CreatedByUserId != userId)
+        if (!await IsClubMemberOrTrainerOrAdminAsync(saved.ClubId, ct))
             return Forbid();
 
         var fullName = (req.FullName ?? saved.FullName).Trim();
@@ -180,7 +180,7 @@ public class RosterController(AppDbContext db) : ControllerBase
             s => s.Id == id && (!clubId.HasValue || s.ClubId == clubId.Value), ct);
         if (saved is null) return NotFound();
 
-        if (!await IsClubMemberOrTrainerOrAdminAsync(saved.ClubId, ct) && saved.CreatedByUserId != userId)
+        if (!await IsClubMemberOrTrainerOrAdminAsync(saved.ClubId, ct))
             return Forbid();
 
         var linkedEntries = await db.RiderEntries
