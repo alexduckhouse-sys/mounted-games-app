@@ -93,6 +93,7 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.menu.general': 'Cyffredinol',
   'shell.menu.account': 'Cyfrif a rheoli',
   'shell.menu.weather': 'Tywydd',
+  'shell.menu.raceRecordings': 'Recordiadau’r rasys',
   'shell.menu.teams': 'Timau',
   'shell.menu.following': 'Dilyn',
   'shell.menu.eventShop': 'Siop y digwyddiad',

@@ -42,6 +42,7 @@ const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTe
 const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const PrizeGivingPage = lazy(() => import('./pages/competition/PrizeGivingPage').then((module) => ({ default: module.PrizeGivingPage })));
+const RaceRecordingsPage = lazy(() => import('./pages/competition/RaceRecordingsPage').then((module) => ({ default: module.RaceRecordingsPage })));
 const StreamControlsPage = lazy(() => import('./pages/competition/StreamControlsPage').then((module) => ({ default: module.StreamControlsPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
@@ -199,6 +200,7 @@ export default function App() {
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="stream-controls" element={<ProtectedRoute roles={['Admin', 'Trainer']}><StreamControlsPage /></ProtectedRoute>} />
+                <Route path="recordings" element={<ProtectedRoute roles={['Admin', 'Trainer']}><RaceRecordingsPage /></ProtectedRoute>} />
                 <Route path="prize-giving" element={<ProtectedRoute><PrizeGivingPage /></ProtectedRoute>} />
                 <Route path="produce" element={<ProtectedRoute><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />

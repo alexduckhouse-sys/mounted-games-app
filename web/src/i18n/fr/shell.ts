@@ -93,6 +93,7 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.menu.general': 'Général',
   'shell.menu.account': 'Compte et gestion',
   'shell.menu.weather': 'Météo',
+  'shell.menu.raceRecordings': 'Enregistrements des courses',
   'shell.menu.teams': 'Équipes',
   'shell.menu.following': 'Suivis',
   'shell.menu.eventShop': 'Boutique de l’événement',
