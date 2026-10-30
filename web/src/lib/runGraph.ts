@@ -48,14 +48,16 @@ const FOOT = 40;
  * Where everything goes in a bar graph of one value per run, in a drawing `LEFT + runs * SLOT + RIGHT` wide: a bar a
  * run, the scale up the left, and the dashed average line across. The top margin leaves room for the label over the
  * tallest bar and the foot for two short lines under each. With `fit`, a graph that would be wider than that many units
- * gets narrower slots and bars instead, so it always fits (a phone never has to scroll it sideways).
+ * gets narrower slots and bars instead, so it always fits (a phone never has to scroll it sideways). `size` makes the
+ * drawing shorter: the height of the plot and of the foot under it (both default to the usual graph's).
  */
-export function layoutRunGraph(values: readonly number[], average: number | null, fit?: number): GraphLayout {
+export function layoutRunGraph(values: readonly number[], average: number | null, fit?: number, size?: { plot?: number; foot?: number }): GraphLayout {
+  const plot = size?.plot ?? PLOT;
   const slot = fit != null && values.length > 0 ? Math.min(SLOT, (fit - LEFT - RIGHT) / values.length) : SLOT;
   const barWidth = slot >= SLOT ? BAR : Math.max(3, slot * (BAR / SLOT));
   const scale = graphScale(Math.max(0, ...values, average ?? 0));
-  const bottom = TOP + PLOT;
-  const yOf = (value: number) => bottom - (Math.max(0, value) / scale.max) * PLOT;
+  const bottom = TOP + plot;
+  const yOf = (value: number) => bottom - (Math.max(0, value) / scale.max) * plot;
   const bars = values.map((value, index) => {
     const x = LEFT + index * slot + (slot - barWidth) / 2;
     const y = yOf(value);
@@ -63,7 +65,7 @@ export function layoutRunGraph(values: readonly number[], average: number | null
   });
   return {
     width: LEFT + values.length * slot + RIGHT,
-    height: bottom + FOOT,
+    height: bottom + (size?.foot ?? FOOT),
     left: LEFT,
     top: TOP,
     bottom,

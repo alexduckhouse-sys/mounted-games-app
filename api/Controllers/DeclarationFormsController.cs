@@ -7,6 +7,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services.DecForms;
@@ -259,8 +260,7 @@ public class DeclarationFormsController : ControllerBase
                 || (form.Team is not null && helping.Contains(form.Team.CompetitionId))));
     }
 
-    /// <summary>Pony heights in hands, as a decimal (13.2 is 13 hands 2 inches). Shetlands to big horses fit inside.</summary>
-    private const decimal MinPonyHands = 5m, MaxPonyHands = 20m;
+    private const decimal MinPonyHands = DecFormRules.MinPonyHands, MaxPonyHands = DecFormRules.MaxPonyHands;
 
     [HttpPost]
     [Authorize]
@@ -364,6 +364,14 @@ public class DeclarationFormsController : ControllerBase
         {
             // Older duplicates (from before this rule) fold into the latest.
             foreach (var old in forms.Skip(1)) _db.DeclarationForms.Remove(old);
+            // Every rider is replaced below, so a pending substitution request would point at riders who no longer exist.
+            // Decline it now; the trainer sends a new one against the new declaration.
+            var orphaned = await _db.Set<SubstitutionRequest>().Where(x => x.DeclarationFormId == form.Id && x.Status == "pending").ToListAsync();
+            foreach (var request in orphaned)
+            {
+                request.Status = "declined";
+                request.DecidedAt = DateTime.UtcNow;
+            }
             _db.RiderEntries.RemoveRange(form.Riders);
             form.Riders.Clear();
         }

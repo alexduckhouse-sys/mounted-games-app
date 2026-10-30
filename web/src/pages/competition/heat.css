@@ -1,5 +1,5 @@
 /* Heat score grid (heat table v3, 29 October 2026): race names at 55° between faint dividers that fade towards the
-   top, shaded alternate rows instead of rules, a pale running-race column and a pale navy PTS column. The header grows
+   top, shaded alternate rows with a faint line between teams, a pale running-race column and a pale navy PTS column. The header grows
    with the longest race name (--heat-head-h, set by useHeatHeadHeight), so names aren't cut short. */
 .heat-grid { --heat-head-h: 82px; width: 100%; table-layout: fixed; border-collapse: collapse; color: rgb(var(--mg-ink)); }
 .heat-grid th, .heat-grid td { padding: 0; box-sizing: border-box; }
@@ -66,8 +66,9 @@
 .heat-grid thead th.heat-race:nth-last-child(2) .heat-name { max-width: 66px; }
 .heat-grid thead th.heat-race:nth-last-child(3) .heat-name { max-width: 111px; }
 
-.heat-grid tbody th, .heat-grid tbody td { height: 36px; }
-/* Alternate rows are shaded instead of ruled. */
+.heat-grid tbody th, .heat-grid tbody td { height: 42px; border-bottom: 1px solid rgb(var(--mg-rule)); }
+.heat-grid tbody tr:last-child > th, .heat-grid tbody tr:last-child > td { border-bottom: 0; }
+/* Alternate rows are shaded as well, so each team's row reads at a glance. */
 .heat-grid tbody tr:nth-child(even) { background: rgb(var(--mg-heading) / .028); }
 .heat-grid tbody tr.heat-row-fav { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
 .heat-grid tbody tr.heat-row-me { background: rgb(var(--mg-tint)); box-shadow: inset 4px 0 0 rgb(var(--mg-button)); }

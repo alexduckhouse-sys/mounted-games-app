@@ -449,9 +449,11 @@ public class SessionsController : ControllerBase
     {
         var s = await _db.Sessions
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
-            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (req.ReplaceExisting && s.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+            return Conflict(new { message = "This session already has race results, so its heats can't be replaced." });
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamIds = await WithoutOutTeamsAsync(competitionId, req.TeamIds.Distinct().ToList());
@@ -744,9 +746,11 @@ public class SessionsController : ControllerBase
     {
         var s = await _db.Sessions
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
-            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (req.ReplaceExisting && s.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+            return Conflict(new { message = "This session already has race results, so its heats can't be replaced." });
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamIds = await WithoutOutTeamsAsync(competitionId, req.TeamIds.Distinct().ToList());
@@ -1202,6 +1206,9 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<IEnumerable<SessionDto>>> HoldCompetition(
         int competitionId, HoldCompetitionRequest req)
     {
+        // A resume time that isn't a clock time is shown in the announcement as typed, so it is held to a limit too.
+        if (req.ResumeTime?.Trim().Length > MaxResumeTimeLength)
+            return BadRequest(new { message = $"The resume time must be {MaxResumeTimeLength} characters or fewer." });
         var comp = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
         if (comp is null) return NotFound();
 
@@ -1282,7 +1289,7 @@ public class SessionsController : ControllerBase
             {
                 CompetitionId = competitionId,
                 AuthorName = "Organiser",
-                Body = body,
+                Body = ProfanityFilter.Clean(body),
                 Type = ChatMessageType.Announcement,
                 Tag = "hold",
             };
@@ -1592,6 +1599,7 @@ public class SessionsController : ControllerBase
     }
 
     private const int MaxAnnouncementLength = 2000;
+    private const int MaxResumeTimeLength = 100;
     private static readonly string[] PauseReasons = ["thunder", "rain", "wind"];
 
     private static bool IsValidAnnouncement(string? body) => body is null || body.Length <= MaxAnnouncementLength;

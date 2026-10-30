@@ -17,6 +17,12 @@ export const shell = {
   'shell.header.onNow': 'On now',
   'shell.header.next': 'Next',
   'shell.header.openingPage': 'Opening page…',
+  // What the header's refresh button says while it works and once it has an answer
+  'shell.refresh.loading': 'Refreshing…',
+  'shell.refresh.updated': 'Updated',
+  'shell.refresh.same': 'Up to date',
+  'shell.refresh.offline': 'No signal',
+  'shell.refresh.failed': 'Couldn’t refresh',
 
   // Tabs
   'shell.tabs.competition': 'Competition',
@@ -164,10 +170,8 @@ export const shell = {
   'shell.events.comingUp': 'Coming up',
   'shell.events.earlier': 'Earlier',
   'shell.events.liveBadge': 'LIVE',
-  'shell.events.liveLine': '{heat} on now in {arena}',
-  'shell.events.theArena': 'the arena',
+  'shell.events.liveHeat': '{heat} on now',
   'shell.events.open': 'Open competition',
-  'shell.events.entriesOpen': 'Entries open',
   'shell.events.current': '(current competition)',
   'shell.events.loadFailed': 'Couldn’t load the competitions',
   'shell.events.checkSignal': 'Check your signal and try again.',

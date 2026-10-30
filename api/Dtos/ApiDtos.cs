@@ -11,7 +11,7 @@ public record CreateClubRequest(string Name, string? Region = null, string? BibC
 public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount,
-    int HeatedSessionCount = 0, string? ShortName = null);
+    int HeatedSessionCount = 0, bool IsIndoor = false, string? ShortName = null);
 
 public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
 public record CompetitionPickerItem(
@@ -135,6 +135,7 @@ public record CompetitionDetail(
     int? MaxHookups = null,
     int? StablesRemaining = null,
     int? HookupsRemaining = null,
+    bool IsIndoor = false,
     string? ShortName = null);
 
 public record CreateCompetitionRequest(
@@ -159,6 +160,7 @@ public record CreateCompetitionRequest(
     [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
     [Range(0, 2000)] int? MaxStables = null,
     [Range(0, 2000)] int? MaxHookups = null,
+    bool IsIndoor = false,
     [MaxLength(CompetitionFields.ShortNameMax)] string? ShortName = null);
 
 public record UpdateCompetitionRequest(
@@ -186,6 +188,7 @@ public record UpdateCompetitionRequest(
     [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
     [Range(0, 2000)] int? MaxStables = null,
     [Range(0, 2000)] int? MaxHookups = null,
+    bool? IsIndoor = null,
     /// <summary>Null leaves the short name as it is; a blank value clears it.</summary>
     [MaxLength(CompetitionFields.ShortNameMax)] string? ShortName = null);
 

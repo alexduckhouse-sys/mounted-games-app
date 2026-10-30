@@ -1,0 +1,46 @@
+/* The details page in the flat page language (theme/flat.css): the event's name leads, set like the events page's,
+   with the dates and place under it and the organiser's facts one row below. Everything after is rows on the page. */
+.dt-intro { display: flex; flex-direction: column; padding-top: 8px; }
+.dt-name { margin: 0; font: 700 28px/1.12 var(--mg-font); letter-spacing: -.015em; color: rgb(var(--mg-heading)); overflow-wrap: break-word; text-wrap: pretty; }
+@media (max-width: 359px) { .dt-name { font-size: 25px; } }
+.dt-meta { margin: 6px 0 0; font: 500 15px/1.4 var(--mg-font); color: rgb(var(--mg-muted)); }
+.dt-about { margin-top: 12px; }
+.dt-body { margin: 0; font: 500 15.5px/1.5 var(--mg-font); color: rgb(var(--mg-body)); overflow-wrap: break-word; }
+
+/* "Show full details" and the facts it opens: a hairline above, one between each fact and one closing the list. With
+   nothing more to show, one quiet line says so. */
+.dt-facts { margin-top: 12px; border-top: 1px solid var(--fl-line); }
+.dt-facts ul > li + li { border-top: 1px solid var(--fl-line); }
+.dt-fact-link { color: rgb(var(--mg-heading)); }
+.dt-nothing { margin: 0; padding: 14px 0 16px; font: 500 15px/1.45 var(--mg-font); color: rgb(var(--mg-muted)); }
+
+/* Inside Show full details: the venue, postcode and what3words lead the rows, each opening its map; the horsebox gate closes the panel. */
+.dt-gate .dt-sub-heading { margin: 18px 0 6px; }
+/* The horsebox directions read as a sentence, not a row title. */
+.dt .dt-note { margin: 0 0 10px; font: 500 15px/1.45 var(--mg-font); color: rgb(var(--mg-body)); overflow-wrap: break-word; }
+
+/* Share: the QR code opens under its row. */
+.dt-qr { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+
+/* Equipment, signed in: kinds in plain sentence-case groups, wrapping rather than cut off. */
+.dt-kit-heading { margin: 0 0 4px; font: 600 14px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); }
+.dt-kit-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 24px; margin: 0; padding: 0; list-style: none; font: 500 14.5px/1.35 var(--mg-font); color: rgb(var(--mg-ink)); }
+.dt-kit-list > li { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dt-kit-count { flex: none; font: 700 17px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+@media (min-width: 640px) { .dt-kit-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Pair partners and guest riders under the age groups. */
+.dt-match { margin-top: 4px; }
+.dt-sub-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 22px 0 2px; font: 600 17px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); }
+.dt-sub-heading small { flex: none; font: 500 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
+.dt-match-row { flex-wrap: wrap; row-gap: 8px; }
+.dt .sp-pill { font-weight: 600; }
+.dt-match-ask { white-space: normal; text-align: center; line-height: 1.2; }
+
+/* Sponsors: the heading in the page's heading style, the box around them gone. */
+.dt .mg-sponsors { margin-top: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.dt .mg-sponsors-title { display: block; margin: 24px 0 8px; font: 600 20px/1.2 var(--mg-font); letter-spacing: -.005em; text-transform: none; color: rgb(var(--mg-heading)); }
+.dt .mg-sponsors h3 { font: 600 14px/1.2 var(--mg-font); letter-spacing: 0; text-transform: none; color: rgb(var(--mg-muted)); }
+
+/* The Enter pill closes the page with a little room under the list. */
+.dt .fl-cta { margin-bottom: 8px; }

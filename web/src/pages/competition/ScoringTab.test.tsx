@@ -171,13 +171,13 @@ describe('the age group rail on a laptop', () => {
 });
 
 describe('the Show row inside Toplist', () => {
-  it('opens on Finals when the age group has finals with results', async () => {
+  it('opens on Final results when the age group has finals with results', async () => {
     const user = userEvent.setup();
     renderTab();
-    await screen.findByRole('region', { name: 'Finals' });
-    expect(await showRow()).toHaveTextContent('Finals');
+    await screen.findByRole('region', { name: 'Final results' });
+    expect(await showRow()).toHaveTextContent('Final results');
     await user.click(await showRow());
-    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Finals', 'Scores by heat']);
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Finals', 'Final results', 'Scores by heat', 'Times']);
     expect(screen.queryByRole('option', { name: 'By game' })).toBeNull();
   });
 
@@ -188,7 +188,7 @@ describe('the Show row inside Toplist', () => {
     await screen.findByRole('region', { name: 'Totals' });
     expect(await showRow()).toHaveTextContent('Totals');
     await user.click(await showRow());
-    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Scores by heat']);
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Scores by heat', 'Times']);
     await user.click(screen.getByRole('option', { name: 'Scores by heat' }));
     expect(await screen.findByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
   });
@@ -200,10 +200,53 @@ describe('the Show row inside Toplist', () => {
     expect(await showRow()).toHaveTextContent('Totals');
   });
 
+  it('shows who is in each final, names only, under Finals; Final results keeps the places and points', async () => {
+    const user = userEvent.setup();
+    setCompetition([qualifier, finalSession({ races: [race(2)] })]);
+    renderTab();
+    await screen.findByRole('region', { name: 'Totals' });
+    await pickView(user, 'Finals');
+    const lineup = screen.getByRole('region', { name: 'Finals' });
+    expect(within(lineup).getByRole('heading', { name: 'A Final' })).toBeVisible();
+    // Names only, in lane order: no places, points or champion label.
+    expect(rowNames(within(lineup).getByRole('list', { name: 'A Final' }))).toEqual(['Team 1', 'Team 2', 'Team 3']);
+    expect(lineup).not.toHaveTextContent(/points|Champions/);
+    expect(screen.queryByRole('option', { name: 'Final results' })).toBeNull();
+  });
+
+  it('lists a final that has been drawn but not run, with no standings yet at all', async () => {
+    const user = userEvent.setup();
+    state.get.mockImplementation(() => Promise.resolve({ data: [], headers: {} }));
+    setCompetition([finalSession({ races: [race(2)] })]);
+    renderTab();
+    // With no standings there is no Totals tab, so the drawn final is the first thing there is to show.
+    const lineup = await screen.findByRole('region', { name: 'Finals' });
+    expect(rowNames(within(lineup).getByRole('list', { name: 'A Final' }))).toEqual(['Team 1', 'Team 2', 'Team 3']);
+    expect(screen.queryByRole('region', { name: 'Totals' })).toBeNull();
+    await user.click(await showRow());
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Finals', 'Scores by heat', 'Times']);
+  });
+
+  it('shows the age group\'s planned heat times under Times, in time order, each under its session', async () => {
+    const user = userEvent.setup();
+    const early = session(1, { competitionSectionId: 9, name: 'Under 12 heats', orderIndex: 1, status: 2, scheduledStart: '2099-10-24T09:30:00', heats: [heat(1, { sessionId: 1, label: 'Heat 1', entries: entries([1, 2, 3]), races: [scored(1, [1, 1, 3], [2, 2, 2], [3, 3, 1])] })] });
+    const late = session(3, { competitionSectionId: 9, name: 'Under 12 second round', orderIndex: 2, scheduledStart: '2099-10-24T11:15:00', heats: [heat(3, { sessionId: 3, label: 'Heat 2', entries: entries([1, 2, 3]), races: [race(3)] })] });
+    setCompetition([late, early]);
+    renderTab();
+    await screen.findByRole('region', { name: 'Totals' });
+    await pickView(user, 'Times');
+    const times = screen.getByRole('region', { name: 'Times' });
+    expect(within(times).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Under 12 heats', 'Under 12 second round']);
+    expect(rowNames(within(times).getByRole('list', { name: 'Under 12 heats' }))).toEqual([expect.stringMatching(/^09:30\s?(AM)?Heat 1$/)]);
+    expect(rowNames(within(times).getByRole('list', { name: 'Under 12 second round' }))).toEqual([expect.stringMatching(/^11:15\s?(AM)?Heat 2$/)]);
+    // Each row opens its heat.
+    expect(within(times).getByRole('link', { name: /Heat 2/ })).toHaveAttribute('href', '/competitions/1/session/3?heat=3');
+  });
+
   it('switches between finals, totals and points by session', async () => {
     const user = userEvent.setup();
     renderTab();
-    await screen.findByRole('region', { name: 'Finals' });
+    await screen.findByRole('region', { name: 'Final results' });
     await pickView(user, 'Totals');
     const totals = screen.getByRole('region', { name: 'Totals' });
     expect(screen.getByText('Top 2 make the final')).toBeVisible();
@@ -213,8 +256,8 @@ describe('the Show row inside Toplist', () => {
     await pickView(user, 'By session');
     const table = screen.getByRole('region', { name: 'Points by session' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts']);
-    await pickView(user, 'Finals');
-    expect(screen.getByRole('region', { name: 'Finals' })).toBeVisible();
+    await pickView(user, 'Final results');
+    expect(screen.getByRole('region', { name: 'Final results' })).toBeVisible();
   });
 
   it('starts the next age group on its own default view when none was chosen, and keeps By session when chosen', async () => {
@@ -225,7 +268,7 @@ describe('the Show row inside Toplist', () => {
     ]);
     const user = userEvent.setup();
     renderTab();
-    await screen.findByRole('region', { name: 'Finals' });
+    await screen.findByRole('region', { name: 'Final results' });
     await pickView(user, 'By session');
     expect(screen.getByRole('region', { name: 'Points by session' })).toBeVisible();
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
@@ -250,15 +293,15 @@ describe('the Show sheet beside the ticker dock', () => {
   it('puts a "What to show" filters button by the dock instead of the Show row, and picks a view from a sheet', async () => {
     const user = userEvent.setup();
     renderWithDock();
-    await screen.findByRole('region', { name: 'Finals' });
+    await screen.findByRole('region', { name: 'Final results' });
     expect(screen.queryByRole('combobox', { name: 'Show' })).toBeNull();
     const button = await screen.findByRole('button', { name: 'What to show' });
     expect(button).toHaveAttribute('data-icon', 'filters');
     await user.click(button);
     const sheet = await screen.findByRole('dialog', { name: 'Show' });
     const choices = within(sheet).getAllByRole('radio');
-    expect(choices.map((c) => c.textContent)).toEqual(['Totals', 'By session', 'Finals', 'Scores by heat']);
-    expect(within(sheet).getByRole('radio', { name: 'Finals' })).toHaveAttribute('aria-checked', 'true');
+    expect(choices.map((c) => c.textContent)).toEqual(['Totals', 'By session', 'Finals', 'Final results', 'Scores by heat', 'Times']);
+    expect(within(sheet).getByRole('radio', { name: 'Final results' })).toHaveAttribute('aria-checked', 'true');
     expect(within(sheet).getByRole('radio', { name: 'Totals' })).toHaveAttribute('aria-checked', 'false');
     await user.click(within(sheet).getByRole('radio', { name: 'Scores by heat' }));
     expect(await screen.findByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
@@ -291,7 +334,9 @@ describe('the finals list', () => {
     await screen.findByRole('list', { name: 'A Final' });
     const labels = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(labels).toEqual(['A Final', 'B Final']);
-    expect(rowNames(screen.getByRole('list', { name: 'B Final' }))).toEqual(['1stTeam 4Champions5 points', '1stTeam 5Champions5 points', '3rdTeam 61 points']);
+    expect(rowNames(screen.getByRole('list', { name: 'B Final' }))).toEqual(['1st (joint)Team 4Champions5 points', '1st (joint)Team 5Champions5 points', '3rdTeam 61 points']);
+    // "(joint)" is read aloud only, never shown beside the place.
+    expect(within(screen.getByRole('list', { name: 'B Final' })).getAllByText('(joint)', { exact: false }).every((node) => node.classList.contains('sr-only'))).toBe(true);
     // No qualifying position for teams that did not take part in qualifying.
     expect(within(screen.getByRole('list', { name: 'B Final' })).queryByText(/Qualified/)).toBeNull();
   });
@@ -337,7 +382,7 @@ describe('the totals list', () => {
     // Tied teams share the number and a soft tint; no bar and no words.
     const tied = totals.querySelectorAll('li[data-tied="true"]');
     expect([...tied].map((li) => li.getAttribute('data-rank-id'))).toEqual(['2', '3']);
-    expect((tied[0] as HTMLElement).style.boxShadow).toBe('inset 6px 0 0 rgb(var(--mg-heading))');
+    expect(tied[0]).toHaveClass('tl-tied');
     expect(within(totals).queryByText(/Joint|run-off/)).toBeNull();
     expect(within(totals).getByText('6 pts needed for the A Final (normal finishes)')).toBeVisible();
     expect(within(totals).queryByText(/races? left/)).toBeNull();
@@ -361,11 +406,66 @@ describe('loading and failure states', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('says there are no results yet', async () => {
+  it('says there are no results yet when nothing has been drawn or scheduled either', async () => {
     state.get.mockResolvedValue({ data: [], headers: {} });
+    setCompetition([]);
     renderTab();
     await screen.findByText('No results yet.');
     expect(screen.queryByRole('group', { name: 'Toplist view' })).toBeNull();
+  });
+});
+
+describe('before any standings exist', () => {
+  const noStandings = () => state.get.mockImplementation(() => Promise.resolve({ data: [], headers: {} }));
+
+  it('shows a drawn final\'s teams by name, with no "No results" card and no Totals tab', async () => {
+    noStandings();
+    setCompetition([finalSession({ races: [race(2)] })]);
+    renderTab();
+    const lineup = await screen.findByRole('region', { name: 'Finals' });
+    expect(rowNames(within(lineup).getByRole('list', { name: 'A Final' }))).toEqual(['Team 1', 'Team 2', 'Team 3']);
+    expect(screen.queryByText('No results yet.')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Totals' })).toBeNull();
+    const user = userEvent.setup();
+    await user.click(await showRow());
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).queryByRole('option', { name: 'Totals' })).toBeNull();
+  });
+
+  it('shows the scheduled times when sessions exist but no final is drawn, with no "No results" card', async () => {
+    noStandings();
+    const plain = session(1, { competitionSectionId: 9, name: 'Under 12 heats', scheduledStart: '2099-10-24T09:30:00', heats: [heat(1, { sessionId: 1, label: 'Heat 1', entries: entries([1, 2, 3]), races: [race(1)] })] });
+    setCompetition([plain]);
+    renderTab();
+    // With no table to show, it opens on the heat scores; Times sits beside them.
+    await screen.findByRole('region', { name: 'Section heat scores' });
+    await pickView(userEvent.setup(), 'Times');
+    const times = screen.getByRole('region', { name: 'Times' });
+    expect(rowNames(within(times).getByRole('list', { name: 'Under 12 heats' }))).toEqual([expect.stringMatching(/^09:30\s?(AM)?Heat 1$/)]);
+    expect(screen.queryByText('No results yet.')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Finals' })).toBeNull();
+  });
+
+  it('keeps the "No results" card when there are no sessions and nothing is drawn', async () => {
+    noStandings();
+    setCompetition([]);
+    renderTab();
+    expect(await screen.findByText('No results yet.')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Finals' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Times' })).toBeNull();
+  });
+
+  it('still shows the load error with Try again beside the drawn finals, and no "No results" card', async () => {
+    const user = userEvent.setup();
+    state.get.mockRejectedValueOnce(new Error('offline')).mockImplementation(() => Promise.resolve({ data: [], headers: {} }));
+    setCompetition([finalSession({ races: [race(2)] })]);
+    renderTab();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Couldn’t load the results. Check your signal and try again.');
+    expect(screen.queryByText('No results yet.')).toBeNull();
+    expect(within(await screen.findByRole('region', { name: 'Finals' })).getByRole('list', { name: 'A Final' })).toBeVisible();
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(state.get).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 });
 
@@ -385,7 +485,7 @@ describe('the age group page', () => {
     await user.click(within(tabs).getByRole('button', { name: 'Scores' }));
     expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
     await user.click(within(screen.getByRole('group', { name: 'Age group view' })).getByRole('button', { name: 'Toplist' }));
-    await screen.findByRole('region', { name: 'Finals' });
+    await screen.findByRole('region', { name: 'Final results' });
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
     await user.click(screen.getByRole('option', { name: 'Under 14' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
@@ -508,7 +608,7 @@ describe('personalisation, instant optimistic standings and section score finger
   it('persists the chosen toplist view tab in localStorage and restores it on mount', async () => {
     const user = userEvent.setup();
     const { unmount } = renderTab();
-    await screen.findByRole('region', { name: 'Finals' });
+    await screen.findByRole('region', { name: 'Final results' });
     await pickView(user, 'By session');
     expect(localStorage.getItem('mg.prefs.toplistView')).toBe('sessions');
     unmount();

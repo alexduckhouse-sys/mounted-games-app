@@ -169,6 +169,8 @@ export interface CompetitionSummary {
   shortName?: string | null;
   /** Sessions that have heats: the timetable is exact for these. Older API responses leave it out. */
   heatedSessionCount?: number;
+  /** True when the competition runs indoors (suppresses outdoor weather warnings). */
+  isIndoor?: boolean;
 }
 
 export interface CompetitionPickerItem {
@@ -426,6 +428,8 @@ export interface CompetitionDetail {
   termsText?: string | null;
   /** The hatband colour in each lane, index 0 being lane 1; set when the competition is created. Null when not set. */
   laneHatbands?: string[] | null;
+  /** True when the competition runs indoors (suppresses outdoor weather warnings). */
+  isIndoor?: boolean;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
   /** Venue capacity limit for stables across entries and shop orders. Null when unlimited. */
@@ -450,11 +454,16 @@ export interface CompetitionEntrySettings {
   hookupsRemaining?: number | null;
 }
 
-/** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
+/** The public summary of a club's or organiser's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
 export interface PayoutsTo {
   clubName: string;
   maskedAccount: string | null;
   ready: boolean;
+  stripeConnected?: boolean;
+  stripeChargesEnabled?: boolean;
+  stripePayoutsEnabled?: boolean;
+  stripeDetailsSubmitted?: boolean;
+  manualBacsReady?: boolean;
 }
 
 /** Payout set-up status: 0 not started, 1 in progress, 2 ready. */
@@ -475,7 +484,7 @@ export interface PayoutBank {
   ibanCountry: string | null;
 }
 
-/** A club's payout set-up, for its managers and admins. Includes the responsible person's date of birth. */
+/** A club's or personal payout set-up, for its managers, trainers, organisers, sellers, and admins. */
 export interface ClubPayouts {
   clubId: number;
   clubName: string;
@@ -502,6 +511,19 @@ export interface ClubPayouts {
   /** Field keys still missing or invalid before the account can be finished. */
   missing: string[];
   updatedAt: string | null;
+  stripeConnected?: boolean;
+  stripeChargesEnabled?: boolean;
+  stripePayoutsEnabled?: boolean;
+  stripeDetailsSubmitted?: boolean;
+  stripeConfigured?: boolean;
+  manualBacsReady?: boolean;
+  stripeAccountId?: string | null;
+}
+
+/** Reply from `POST .../payouts/stripe/onboard`. */
+export interface StripeOnboardResponse {
+  url: string;
+  stripeAccountId: string;
 }
 
 export type ArrivalWindow = 'FridayEvening' | 'SaturdayMorning' | 'Other';
@@ -826,6 +848,8 @@ export interface CreateEventOrderLine {
   detail?: string | null;
   /** Required when the item has options, refused when it has none. */
   optionId?: number | null;
+  /** The unit price in pence the buyer was shown; the server answers 409 with the new price if it has changed since. */
+  expectedUnitPriceMinor?: number | null;
 }
 
 export interface ShopPost {

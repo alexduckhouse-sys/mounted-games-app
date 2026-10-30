@@ -198,6 +198,15 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 }
 @media (hover: hover) { .mg-nav-btn:hover { background: rgb(255 255 255 / .08); } }
 .mg-nav-btn[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
+/* Sign in on the events page: plain words, no box, 40px tall like the menu icon beside it, with a 48px tap area. */
+.mg-hdr-signin {
+  position: relative; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 8px;
+  border-radius: 10px; color: #fff !important; font: 500 15px/1 var(--mg-font); text-decoration: none !important;
+  transition: opacity var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+.mg-hdr-signin::before { content: ""; position: absolute; inset: -4px 0; }
+@media (hover: hover) { .mg-hdr-signin:hover { opacity: .8; } }
+.mg-hdr-signin:active { --mg-press-t: 90ms; scale: .96; }
 /* Header icon buttons: no box, 32x40 visible, 44x48 tap area. */
 .mg-hdr-icon {
   position: relative; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 40px;
@@ -210,17 +219,18 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-hdr-icon[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
 @media (hover: hover) { .mg-hdr-icon:hover { background: rgb(255 255 255 / .08); } .mg-hdr-icon[aria-pressed="true"]:hover { background: #fff; } }
 .mg-header :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.mg-strip-bar { display: flex; align-items: stretch; overflow: hidden; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); }
+/* A small radius, a barely-there shadow and the page's 16px side gutter, so the dock lines up with the content and reads as part of the tab bar. */
+.mg-strip-bar { display: flex; align-items: stretch; overflow: hidden; border-radius: 10px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 1px 3px rgb(15 42 74 / .12); }
 /* The ticker dock: just above the tab bar on every competition page, with room for one page button beside it. */
-.mg-dock { position: fixed; inset: auto 0 calc(76px + env(safe-area-inset-bottom)) 0; z-index: 31; padding: 0 10px; pointer-events: none; }
+.mg-dock { position: fixed; inset: auto 0 calc(74px + env(safe-area-inset-bottom)) 0; z-index: 31; padding: 0 16px; pointer-events: none; }
 .mg-dock-low { bottom: calc(12px + env(safe-area-inset-bottom)); }
 .mg-dock-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; }
 .mg-dock-row > * { pointer-events: auto; }
 .mg-dock-wrap { position: relative; flex: 1; min-width: 0; }
 .mg-dock-stage { position: relative; flex: 1; min-width: 0; align-self: stretch; overflow: hidden; }
 .mg-dock-action {
-  position: relative; flex: none; display: flex; width: 46px; height: 44px; align-items: center; justify-content: center; border-radius: 14px;
-  background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); cursor: pointer;
+  position: relative; flex: none; display: flex; width: 46px; height: 44px; align-items: center; justify-content: center; border-radius: 10px;
+  background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 1px 3px rgb(15 42 74 / .12); cursor: pointer;
   transition: background-color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
 .mg-dock-action:active { --mg-press-t: 90ms; scale: .96; }
@@ -259,7 +269,7 @@ button.mg-weather-line { cursor: pointer; }
 .mg-weather-act { flex: none; font: 700 12px/1 var(--mg-font); text-decoration: underline; }
 .mg-weather-bar :focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 .mg-strip-panel {
-  position: absolute; inset: auto 0 calc(100% + 8px) 0; z-index: 35; max-height: 60vh; overflow-y: auto; border-radius: 14px; background: rgb(var(--mg-header-deep));
+  position: absolute; inset: auto 0 calc(100% + 8px) 0; z-index: 35; max-height: 60vh; overflow-y: auto; border-radius: 10px; background: rgb(var(--mg-header-deep));
   box-shadow: 0 12px 24px rgb(0 0 0 / .25); color: #fff;
   animation: mg-pop-up 160ms var(--mg-ease-out); transform-origin: bottom center;
 }
@@ -512,7 +522,7 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .input:focus, .skin .input:focus { border-color: rgb(var(--mg-heading)); --tw-ring-color: rgb(var(--mg-heading) / .35); }
 
 @media (prefers-reduced-motion: reduce) {
-  .mg-btn, .mg-tab, .mg-nav-btn, .mg-hdr-icon, .mg-icon-btn, .mg-chip, .mg-row, .mg-line, .mg-seg > button, .mg-toggle > button, .mg-pill, .mg-conn-pill, .mg-field, .mg-tint-link { transition: none; }
+  .mg-btn, .mg-tab, .mg-nav-btn, .mg-hdr-icon, .mg-hdr-signin, .mg-icon-btn, .mg-chip, .mg-row, .mg-line, .mg-seg > button, .mg-toggle > button, .mg-pill, .mg-conn-pill, .mg-field, .mg-tint-link { transition: none; }
   .mg-badge-live::before, .mg-dropdown-menu, .mg-strip-panel { animation: none; }
   .skin *, .skin *::before, .skin *::after {
     animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
@@ -891,10 +901,20 @@ html[data-lite="true"] .mg-heat-ring[data-tone="live"] svg { animation: none !im
 .mg-pg-champ-sub { font-size: .9em; font-weight: 600; opacity: .8; }
 
 /* The header refresh icon turns once when tapped. */
-@keyframes mg-spin-once { to { transform: rotate(360deg); } }
-.mg-spin-once { animation: mg-spin-once .8s var(--mg-sheet-ease, ease-in-out); }
-@media (prefers-reduced-motion: reduce) { .mg-spin-once { animation: none; } }
-html[data-lite="true"] .mg-spin-once { animation: none; }
+/* The refresh button (components/RefreshButton.tsx): the arrow turns while the refresh is under way, then a tick,
+   no-signal icon or cross takes its place for a moment. The layers sit on top of each other so they cross-fade. */
+@keyframes mg-refresh-spin { to { transform: rotate(360deg); } }
+.mg-refresh-icon { position: relative; display: inline-grid; width: var(--mg-refresh-size, 15px); height: var(--mg-refresh-size, 15px); }
+.rf-ib .mg-refresh-icon { --mg-refresh-size: 20px; }
+.mg-refresh-layer { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; }
+.mg-refresh-layer svg { width: 100%; height: 100%; }
+.mg-refresh-spin { animation: mg-refresh-spin .8s linear infinite; }
+.mg-refresh-ring { position: absolute; inset: 0; border-radius: 9999px; border: 1.5px solid currentColor; pointer-events: none; }
+.mg-hdr-icon.mg-refresh:not([data-phase="idle"]):not([data-phase="loading"]) { color: rgb(var(--mg-header-ink)); }
+.mg-refresh-status { color: rgb(var(--mg-header-ink)); }
+@media (prefers-reduced-motion: reduce) { .mg-refresh-spin { animation: none; opacity: .55; } .mg-refresh-ring { display: none; } }
+html[data-lite="true"] .mg-refresh-spin { animation: none; opacity: .55; }
+html[data-lite="true"] .mg-refresh-ring { display: none; }
 
 /* A row's light sweep when its team is followed. */
 .mg-follow-glimmer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }

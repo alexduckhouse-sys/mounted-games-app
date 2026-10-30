@@ -347,6 +347,10 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
     label: col.label,
     underReview: col.roundHeats ? col.roundHeats.some((h) => h.races.some((r) => r.underReview)) : Boolean(col.race.underReview),
   })));
+  // A final that isn't drawn yet keeps its shape, as the printed sheets do: the race columns over empty lanes.
+  const blankLanes = isFinalHeat && grid.teams.length === 0 && columns.length > 0
+    ? session.lanesPerHeat || Math.max(0, ...heats.map((item) => item.entries.length)) || 6
+    : 0;
   const manyRaces = columns.length >= 8;
   const headRef = useRef<HTMLTableSectionElement>(null);
   const headHeight = useHeatHeadHeight(headRef, `${columns.map((col) => col.label).join('|')}|${manyRaces}|${showCarriedForward}`);
@@ -368,7 +372,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
 
       {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noHeats')}</p> : (
         <section aria-label={t('competition.scoring.scores')} className={bare ? 'overflow-hidden' : 'mg-card overflow-hidden'}>
-          {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noTeams')}</p> : (
+          {grid.teams.length === 0 && blankLanes === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noTeams')}</p> : (
             <div className="overflow-hidden">
               <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ '--heat-head-h': `${headHeight}px` } as CSSProperties}>
                 <thead ref={headRef}>
@@ -435,6 +439,19 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                       </motion.tr>
                     );
                   })}
+                  {Array.from({ length: blankLanes }, (_, lane) => (
+                    <tr key={`blank-${lane}`} className="heat-row-blank">
+                      {finished && <td className="heat-rank-cell" />}
+                      <th scope="row" className="heat-team">
+                        <span className="heat-team-name text-[rgb(var(--mg-muted))]">{t('competition.heat.notDrawn')}</span>
+                      </th>
+                      {showCarriedForward && <td className="heat-cell heat-cf" />}
+                      {columns.map((col, i) => (
+                        <td key={col.key} className={`heat-cell${i === runningIndex ? ' heat-cell-running' : ''}`}><span aria-hidden="true" className="heat-dash-empty" /></td>
+                      ))}
+                      <td className="heat-total" />
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

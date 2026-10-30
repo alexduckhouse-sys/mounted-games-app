@@ -232,7 +232,7 @@ function AgeGroupMenu({ groups, base, selectedSection, onPick }: { groups: AgeGr
           {groups.map((group) => {
             const active = group.id === selected.id;
             return (
-              <Link key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onPick} aria-current={active ? 'page' : undefined}
+              <Link key={group.id} to={`${base}/toplists?section=${group.id}`} onClick={onPick} aria-current={active ? 'page' : undefined}
                 className={`flex min-h-[48px] items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3.5 text-base !no-underline last:border-b-0 hover:!no-underline ${active ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>
                 <span className="min-w-0 flex-1 truncate">{group.name}</span>
                 {group.live ? <span className="mg-badge mg-badge-live">{t('shell.menu.live')}</span>

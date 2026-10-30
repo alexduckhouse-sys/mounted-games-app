@@ -174,6 +174,15 @@ describe('MySignupsPage', () => {
     expect(screen.getByRole('region', { name: 'Pair request' })).toBeInTheDocument();
   });
 
+  it('says a pair accepted before payment gets its team once both entries are paid', async () => {
+    mockSignups([{ ...signup(8), pairRequestFromSignupId: 9, pairRequestFromName: 'Cara Rider', pairRequestStatus: 'AcceptedAwaitingPayment' }]);
+    mount();
+    const sheet = await openRow(/^Event 8/);
+    expect(sheet.getByText('Paired with Cara Rider. The team is made once both entries are paid')).toBeInTheDocument();
+    // It isn't an incoming request any more, so there is nothing to accept.
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
+  });
+
   it('says in the sheet when a pair request was sent and is waiting', async () => {
     mockSignups([{ ...signup(6), pairRequestToSignupId: 7, pairRequestToName: 'Bea Rider', pairRequestStatus: 'Pending', lookingForPair: true, stablesCount: 1, waitingForGuestSpot: true, lookingForGuestRiders: true }]);
     mount();

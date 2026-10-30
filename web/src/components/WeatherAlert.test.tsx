@@ -69,6 +69,7 @@ describe('WeatherAlert: the warning line', () => {
   it.each([
     ['another day', { startDate: '2026-11-09' }, [race(1, { scheduledStart: new Date(at(14) + 7 * 86_400_000).toISOString() })]],
     ['racing finished', {}, [race(1, { status: 2 })]],
+    ['an indoor competition', { isIndoor: true }, [race(1)]],
   ])('shows nothing on %s', (_name, extra, sessions) => {
     mount(extra, sessions as Session[]);
     expect(state.forecastArgs[2]).toBe(false);

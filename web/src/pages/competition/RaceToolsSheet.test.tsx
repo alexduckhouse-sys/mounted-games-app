@@ -17,6 +17,7 @@ function mount(onClose = vi.fn()) {
         onHc={vi.fn()}
         onYellow={vi.fn()}
         onRed={vi.fn()}
+        onClearCard={vi.fn()}
         onStepPoints={vi.fn()}
         links={[]}
         onClose={onClose}

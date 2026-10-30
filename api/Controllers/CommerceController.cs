@@ -450,7 +450,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         return result.Error switch
         {
             CreateOrderError.CompetitionNotFound => NotFound(),
-            CreateOrderError.IdempotencyConflict or CreateOrderError.ListingUnavailable or CreateOrderError.OutOfStock
+            CreateOrderError.IdempotencyConflict or CreateOrderError.ListingUnavailable or CreateOrderError.OutOfStock or CreateOrderError.PriceChanged
                 => Conflict(new { message = result.Message }),
             _ => BadRequest(new { message = result.Message }),
         };
@@ -791,7 +791,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
                 await db.SaveChangesAsync(cancellationToken);
                 // Same as an organiser marking the entry paid: pair seekers and guest-spot waiters keep their own flows.
                 var meta = await db.Set<SignupMatchmaking>().FindAsync(new object[] { signup.Id }, cancellationToken);
-                if (meta?.LookingForPair != true && meta?.WaitingForGuestSpot != true)
+                if (!await SignupController.TryFormAcceptedPairForPaidSignupAsync(db, signup.Id)
+                    && meta?.LookingForPair != true && meta?.WaitingForGuestSpot != true)
                     await SignupController.FormTeamForPaidSignupAsync(db, competitionId, signup.CompetitionSectionId, signup.Id);
             }
             var payment = NewTestPayment(
@@ -878,6 +879,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
                 return Conflict(new { message = "Only a successful test payment can be refunded." });
             signup.Status = SignupPaymentStatus.Refunded;
             signup.PaidAt = null;
+            await SignupController.DetachAndCleanUpUnDrawnTeamsAsync(db, signup, userId, "Demo entry refunded.", cancellationToken);
             var payment = NewTestPayment(
                 competitionId,
                 TestPaymentTarget.SectionSignup,

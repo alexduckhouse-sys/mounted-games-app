@@ -7,7 +7,7 @@ public record PayoutBankDto(
     string AccountHolder, string? BankName, string? SortCode, string MaskedAccount, string? IbanCountry);
 
 /// <summary>
-/// A club's payout set-up for its managers and admins. Includes the responsible person's date of birth, so it
+/// A club's or user's payout set-up for its managers, trainers, sellers and admins. Includes the responsible person's date of birth, so it
 /// must never be sent to anyone else (see <c>ClubPayoutsController</c>).
 /// </summary>
 public record ClubPayoutsDto(
@@ -20,7 +20,14 @@ public record ClubPayoutsDto(
     string? StatementDescriptor, PayoutSchedule Schedule,
     PayoutBankDto? Bank,
     IReadOnlyList<string> Missing,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool StripeConnected = false,
+    bool StripeChargesEnabled = false,
+    bool StripePayoutsEnabled = false,
+    bool StripeDetailsSubmitted = false,
+    bool StripeConfigured = false,
+    bool ManualBacsReady = false,
+    string? StripeAccountId = null);
 
 /// <summary>
 /// Details apart from the bank account. A null field is left as it is; an empty string clears an optional one.
@@ -44,4 +51,13 @@ public record SavePayoutBankRequest(
     string? Iban = null, string? Bic = null);
 
 /// <summary>What anyone may see about where an event's entry fees go: the club, the masked account and whether it's ready.</summary>
-public record PayoutsToDto(string ClubName, string? MaskedAccount, bool Ready);
+public record PayoutsToDto(
+    string ClubName, string? MaskedAccount, bool Ready,
+    bool StripeConnected = false, bool StripeChargesEnabled = false, bool StripePayoutsEnabled = false,
+    bool StripeDetailsSubmitted = false, bool ManualBacsReady = false);
+
+/// <summary>Optional parameters when starting Stripe Connect onboarding (e.g. a 2-letter ISO country code for EU accounts).</summary>
+public record StripeOnboardRequestDto(string? Country = null);
+
+/// <summary>Hosted Stripe Connect onboarding redirect URL and connected account identifier.</summary>
+public record StripeOnboardResponseDto(string Url, string StripeAccountId);

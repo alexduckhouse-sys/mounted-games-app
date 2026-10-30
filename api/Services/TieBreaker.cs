@@ -4,12 +4,24 @@ using MountedGames.Api.Entities;
 
 namespace MountedGames.Api.Services;
 
+/// <summary>One race result aligned by its competition race order for tie-break comparison.</summary>
+public sealed record TieRaceEntry(
+    (int Session, int Race, int Id) Order,
+    string RaceName,
+    int? Placing,
+    double Points,
+    bool Eliminated,
+    bool IsSitOut = false);
+
 /// <summary>What a team brings to a tie: its total and the results that can separate it from the others.</summary>
 /// <param name="PlacingCounts">Index 0 is the number of 1st places, index 1 the 2nds, and so on (finished races only).</param>
 /// <param name="RecentPoints">Points per race, the most recent race first.</param>
 /// <param name="FinalPlacingCounts">Placing counts within lettered Final heats, when the team has raced in one.</param>
 /// <param name="FinalRecentPoints">Points per race in lettered Final heats, most recent first.</param>
 /// <param name="RecentRaces">Most recent race results first, with race name and placing for human-readable tie-break explanations.</param>
+/// <param name="FinalRecentRaces">Most recent race results in lettered Final heats first, with race name and placing.</param>
+/// <param name="OrderedRaces">Race results (including sit-outs) keyed by <c>(Session, Race, Id)</c> order, most recent first.</param>
+/// <param name="FinalOrderedRaces">Lettered Final race results (including sit-outs) keyed by <c>(Session, Race, Id)</c> order, most recent first.</param>
 public sealed record TieFacts(
     int TeamId,
     int? SectionId,
@@ -18,7 +30,10 @@ public sealed record TieFacts(
     double[] RecentPoints,
     int[]? FinalPlacingCounts = null,
     double[]? FinalRecentPoints = null,
-    (string RaceName, int? Placing, double Points, bool Eliminated)[]? RecentRaces = null)
+    (string RaceName, int? Placing, double Points, bool Eliminated)[]? RecentRaces = null,
+    (string RaceName, int? Placing, double Points, bool Eliminated)[]? FinalRecentRaces = null,
+    TieRaceEntry[]? OrderedRaces = null,
+    TieRaceEntry[]? FinalOrderedRaces = null)
 {
     public int Wins => PlacingCounts.Length > 0 ? PlacingCounts[0] : 0;
 }
@@ -146,7 +161,8 @@ public sealed class TieBreaker
     /// <param name="total">The team's total when it isn't just the sum of its race points (bonus points).</param>
     public TieFacts Facts(int teamId, int? sectionId, IEnumerable<Result> results, double? total = null)
     {
-        var list = EffectiveResults(results).Where(r => !r.IsSitOut).ToList();
+        var allEffective = EffectiveResults(results);
+        var list = allEffective.Where(r => !r.IsSitOut).ToList();
         var maxPlace = list.Where(r => !r.Eliminated && r.Placing > 0).Select(r => r.Placing!.Value).DefaultIfEmpty(0).Max();
         var counts = new int[maxPlace];
         foreach (var r in list.Where(r => !r.Eliminated && r.Placing > 0)) counts[r.Placing!.Value - 1]++;
@@ -165,20 +181,49 @@ public sealed class TieBreaker
             .Select(r => r.Points)
             .ToArray();
 
+        string NameOf(Result r) => !string.IsNullOrWhiteSpace(r.Race?.Name)
+            ? r.Race!.Name.Trim()
+            : _raceNames.TryGetValue(r.RaceId, out var n) && !string.IsNullOrWhiteSpace(n)
+                ? n.Trim()
+                : $"Race {r.RaceId}";
+
+        (string RaceName, int? Placing, double Points, bool Eliminated) ProjectRace(Result r) => (
+            RaceName: NameOf(r),
+            r.Placing,
+            r.Points,
+            r.Eliminated);
+
+        var hasDuplicateSessionRace = allEffective
+            .Where(r => _raceOrder.ContainsKey(r.RaceId))
+            .GroupBy(r => (_raceOrder[r.RaceId].Session, _raceOrder[r.RaceId].Race))
+            .Any(g => g.Count() > 1);
+
+        (int Session, int Race, int Id) OrderOf(Result r)
+            => _raceOrder.TryGetValue(r.RaceId, out var o)
+                ? (o.Session, o.Race, hasDuplicateSessionRace ? r.RaceId : 0)
+                : (int.MinValue, int.MinValue, r.RaceId);
+
+        TieRaceEntry ProjectEntry(Result r) => new(OrderOf(r), NameOf(r), r.Placing, r.Points, r.Eliminated, r.IsSitOut);
+
         var recentRaces = list
             .OrderByDescending(r => _raceOrder.TryGetValue(r.RaceId, out var o) ? o : (int.MinValue, int.MinValue, int.MinValue))
-            .Select(r => (
-                RaceName: !string.IsNullOrWhiteSpace(r.Race?.Name)
-                    ? r.Race!.Name.Trim()
-                    : _raceNames.TryGetValue(r.RaceId, out var n) && !string.IsNullOrWhiteSpace(n)
-                        ? n.Trim()
-                        : $"Race {r.RaceId}",
-                r.Placing,
-                r.Points,
-                r.Eliminated))
+            .Select(ProjectRace)
+            .ToArray();
+        var finalRecentRaces = finalList
+            .OrderByDescending(r => _raceOrder.TryGetValue(r.RaceId, out var o) ? o : (int.MinValue, int.MinValue, int.MinValue))
+            .Select(ProjectRace)
+            .ToArray();
+        var orderedRaces = allEffective
+            .OrderByDescending(r => _raceOrder.TryGetValue(r.RaceId, out var o) ? o : (int.MinValue, int.MinValue, int.MinValue))
+            .Select(ProjectEntry)
+            .ToArray();
+        var finalOrderedRaces = allEffective
+            .Where(IsFinalResult)
+            .OrderByDescending(r => _raceOrder.TryGetValue(r.RaceId, out var o) ? o : (int.MinValue, int.MinValue, int.MinValue))
+            .Select(ProjectEntry)
             .ToArray();
 
-        return new TieFacts(teamId, sectionId, total ?? list.Sum(r => r.Points), counts, recent, finalCounts, finalRecent, recentRaces);
+        return new TieFacts(teamId, sectionId, total ?? list.Sum(r => r.Points), counts, recent, finalCounts, finalRecent, recentRaces, finalRecentRaces, orderedRaces, finalOrderedRaces);
     }
 
     public TieFacts Facts(Team team) => Facts(team.Id, team.CompetitionSectionId, team.Results);
@@ -241,18 +286,40 @@ public sealed class TieBreaker
         var rule = RuleOf(level);
         if (rule == TieBreakRule.LastRace)
         {
-            var minRecent = Math.Min(above.RecentPoints.Length, below.RecentPoints.Length);
-            for (var i = 0; i < minRecent; i++)
+            var useFinals = above.FinalRecentPoints is { Length: > 0 } af && below.FinalRecentPoints is { Length: > 0 } bf
+                && CompareRecent(above.FinalOrderedRaces, below.FinalOrderedRaces, af, bf) != 0;
+            var aOrdered = useFinals ? above.FinalOrderedRaces : above.OrderedRaces;
+            var bOrdered = useFinals ? below.FinalOrderedRaces : below.OrderedRaces;
+            if (aOrdered is { Length: > 0 } && bOrdered is { Length: > 0 })
             {
-                if (above.RecentPoints[i] == below.RecentPoints[i]) continue;
-                if (above.RecentRaces is { } ar && i < ar.Length && below.RecentRaces is { } br && i < br.Length)
+                foreach (var (ar, br) in SharedRaces(aOrdered, bOrdered))
                 {
-                    var raceName = ar[i].RaceName;
-                    var aDesc = !ar[i].Eliminated && ar[i].Placing is > 0 ? Ordinal(ar[i].Placing!.Value) : $"{PointValues.Format(ar[i].Points)} pts";
-                    var bDesc = !br[i].Eliminated && br[i].Placing is > 0 ? Ordinal(br[i].Placing!.Value) : br[i].Eliminated ? "elim." : $"{PointValues.Format(br[i].Points)} pts";
-                    return $"Ahead on Last Race ({aDesc} in {raceName} vs {bDesc})";
+                    if (ar.Points == br.Points) continue;
+                    var aDesc = !ar.Eliminated && ar.Placing is > 0 ? Ordinal(ar.Placing!.Value) : $"{PointValues.Format(ar.Points)} pts";
+                    var bDesc = !br.Eliminated && br.Placing is > 0 ? Ordinal(br.Placing!.Value) : br.Eliminated ? "elim." : $"{PointValues.Format(br.Points)} pts";
+                    return $"Ahead on Last Race ({aDesc} in {ar.RaceName} vs {bDesc})";
                 }
-                return $"Ahead on Last Race ({PointValues.Format(above.RecentPoints[i])} pts vs {PointValues.Format(below.RecentPoints[i])} pts)";
+            }
+            else
+            {
+                var aPts = useFinals ? above.FinalRecentPoints! : above.RecentPoints;
+                var bPts = useFinals ? below.FinalRecentPoints! : below.RecentPoints;
+                var aRaces = useFinals ? (above.FinalRecentRaces ?? above.RecentRaces) : above.RecentRaces;
+                var bRaces = useFinals ? (below.FinalRecentRaces ?? below.RecentRaces) : below.RecentRaces;
+                var minRecent = Math.Min(aPts.Length, bPts.Length);
+                for (var i = 0; i < minRecent; i++)
+                {
+                    if (aPts[i] == bPts[i]) continue;
+                    if (aRaces is { } ar && i < ar.Length && bRaces is { } br && i < br.Length
+                        && ar[i].Points == aPts[i] && br[i].Points == bPts[i])
+                    {
+                        var raceName = ar[i].RaceName;
+                        var aDesc = !ar[i].Eliminated && ar[i].Placing is > 0 ? Ordinal(ar[i].Placing!.Value) : $"{PointValues.Format(ar[i].Points)} pts";
+                        var bDesc = !br[i].Eliminated && br[i].Placing is > 0 ? Ordinal(br[i].Placing!.Value) : br[i].Eliminated ? "elim." : $"{PointValues.Format(br[i].Points)} pts";
+                        return $"Ahead on Last Race ({aDesc} in {raceName} vs {bDesc})";
+                    }
+                    return $"Ahead on Last Race ({PointValues.Format(aPts[i])} pts vs {PointValues.Format(bPts[i])} pts)";
+                }
             }
         }
 
@@ -264,7 +331,7 @@ public sealed class TieBreaker
         if (aHasFinals && bHasFinals)
         {
             if (Lexicographic(above.FinalPlacingCounts ?? [], below.FinalPlacingCounts ?? [], padMissing: true) != 0
-                || Lexicographic(above.FinalRecentPoints ?? [], below.FinalRecentPoints ?? [], padMissing: false) != 0)
+                || CompareRecent(above.FinalOrderedRaces, below.FinalOrderedRaces, above.FinalRecentPoints ?? [], below.FinalRecentPoints ?? []) != 0)
             {
                 return "Ahead on A-Final placing";
             }
@@ -288,6 +355,7 @@ public sealed class TieBreaker
 
     public static string Ordinal(int n)
     {
+        if (n <= 0) return n.ToString();
         var mod100 = n % 100;
         if (mod100 is >= 11 and <= 13) return $"{n}th";
         return (n % 10) switch
@@ -319,10 +387,20 @@ public sealed class TieBreaker
 
     private static int RuleKey(TieFacts a, TieFacts b, TieBreakRule rule) => rule switch
     {
-        TieBreakRule.LastRace => Lexicographic(a.RecentPoints, b.RecentPoints, padMissing: false),
+        TieBreakRule.LastRace => CompareLastRace(a, b),
         TieBreakRule.Countback => CompareCountback(a, b),
         _ => 0,
     };
+
+    private static int CompareLastRace(TieFacts a, TieFacts b)
+    {
+        if (a.FinalRecentPoints is { Length: > 0 } && b.FinalRecentPoints is { Length: > 0 })
+        {
+            var byFinalRecent = CompareRecent(a.FinalOrderedRaces, b.FinalOrderedRaces, a.FinalRecentPoints, b.FinalRecentPoints);
+            if (byFinalRecent != 0) return byFinalRecent;
+        }
+        return CompareRecent(a.OrderedRaces, b.OrderedRaces, a.RecentPoints, b.RecentPoints);
+    }
 
     /// <summary>
     /// Compares countback across lettered Final heat results first when both teams have raced in a Final heat,
@@ -336,10 +414,38 @@ public sealed class TieBreaker
         {
             var byFinalPlaces = Lexicographic(a.FinalPlacingCounts ?? [], b.FinalPlacingCounts ?? [], padMissing: true);
             if (byFinalPlaces != 0) return byFinalPlaces;
-            var byFinalRecent = Lexicographic(a.FinalRecentPoints ?? [], b.FinalRecentPoints ?? [], padMissing: false);
+            var byFinalRecent = CompareRecent(a.FinalOrderedRaces, b.FinalOrderedRaces, a.FinalRecentPoints ?? [], b.FinalRecentPoints ?? []);
             if (byFinalRecent != 0) return byFinalRecent;
         }
         return Lexicographic(a.PlacingCounts, b.PlacingCounts, padMissing: true);
+    }
+
+    private static int CompareRecent(TieRaceEntry[]? aOrdered, TieRaceEntry[]? bOrdered, double[] aFallback, double[] bFallback)
+    {
+        if (aOrdered is { Length: > 0 } && bOrdered is { Length: > 0 })
+        {
+            foreach (var (aRace, bRace) in SharedRaces(aOrdered, bOrdered))
+            {
+                if (aRace.Points != bRace.Points)
+                    return bRace.Points.CompareTo(aRace.Points);
+            }
+            return 0;
+        }
+        return Lexicographic(aFallback, bFallback, padMissing: false);
+    }
+
+    private static IEnumerable<(TieRaceEntry A, TieRaceEntry B)> SharedRaces(TieRaceEntry[] aOrdered, TieRaceEntry[] bOrdered)
+    {
+        var bByOrder = new Dictionary<(int Session, int Race, int Id), TieRaceEntry>(bOrdered.Length);
+        foreach (var b in bOrdered)
+        {
+            if (!b.IsSitOut) bByOrder.TryAdd(b.Order, b);
+        }
+        foreach (var a in aOrdered)
+        {
+            if (!a.IsSitOut && bByOrder.TryGetValue(a.Order, out var b))
+                yield return (a, b);
+        }
     }
 
     /// <summary>

@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, ClipboardList, Mail, MapPin, QrCode as QrCodeIcon, Sparkles, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, ClipboardList, ExternalLink, QrCode as QrCodeIcon, Sparkles } from 'lucide-react';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { activeLocale } from '../../i18n/translate';
 import { eventDetailRows, type DetailRow } from './eventDetailRows';
@@ -19,15 +19,18 @@ import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
 import { HorseboxEntranceCard } from './HorseboxEntranceCard';
+import { horseboxEntrance } from '../operations/lorryEntrance';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { useStoryImage } from './StoryImage';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
 import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
+import { entryPhaseOnly } from '../../lib/competitionPhase';
 import { feesLine, sectionFull } from '../../lib/entryOptions';
 import { placesLeftText } from '../../lib/placesLeft';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
+import './details.css';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useT } from '../../i18n/LanguageContext';
 
@@ -35,48 +38,47 @@ import { useT } from '../../i18n/LanguageContext';
 function LinkRow({ to, href, label }: { to?: string; href?: string; label: string }) {
   const inner = (
     <>
-      <span className="sp-grow"><span className="sp-t1 !font-medium">{label}</span></span>
+      <span className="sp-grow"><span className="sp-t1">{label}</span></span>
       <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
     </>
   );
   return to ? <Link className="sp-row" to={to}>{inner}</Link> : <a className="sp-row" href={href}>{inner}</a>;
 }
 
-const DETAIL_ICON_CLASS = 'h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]';
-
+/** One fact the organiser has set: its name above, the value under it. Links open the map, what3words or an email. */
 function DetailLine({ row }: { row: DetailRow }) {
-  const icon = row.icon === 'pin' ? <MapPin aria-hidden="true" className={DETAIL_ICON_CLASS} />
-    : row.icon === 'mail' ? <Mail aria-hidden="true" className={DETAIL_ICON_CLASS} />
-      : row.icon === 'w3w' ? <span aria-hidden="true" className="w-5 shrink-0 text-center text-[15px] font-bold tracking-tighter text-[rgb(var(--mg-heading))]">{'///'}</span> : null;
   const inner = (
     <>
-      <span className="w-[7.25rem] shrink-0 text-[15.5px] leading-snug text-[rgb(var(--mg-muted))]">{row.label}</span>
-      <span className={`min-w-0 flex-1 break-words text-[16px] leading-snug ${row.href ? 'font-semibold text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>{row.value}</span>
-      {icon}
+      <span className="fl-grow">
+        <span className="fl-sub">{row.label}</span>
+        <span className={`fl-title ${row.href ? 'dt-fact-link' : ''}`}>{row.value}</span>
+      </span>
+      {row.href && <ExternalLink aria-hidden="true" className="fl-chev h-4 w-4" />}
     </>
   );
-  const box = 'flex min-h-14 items-center gap-3 px-4 py-2.5 !no-underline hover:!no-underline';
-  return <li className="border-t border-[rgb(var(--mg-rule-soft))]">
+  return <li>
     {row.href
-      ? <a className={box} href={row.href} {...(row.href.startsWith('mailto:') ? {} : { target: '_blank', rel: 'noreferrer' })}>{inner}</a>
-      : <div className={box}>{inner}</div>}
+      ? <a className="fl-row" href={row.href} {...(row.href.startsWith('mailto:') ? {} : { target: '_blank', rel: 'noreferrer' })}>{inner}</a>
+      : <div className="fl-row">{inner}</div>}
   </li>;
 }
 
-/** The foot of the title card: one row that opens, in the same card, everything the organiser has set. */
-function EventDetailsToggle({ rows, summary }: { rows: DetailRow[]; summary: string }) {
+/**
+ * Under the event's intro, always there: one control that opens, in place, the whole description, how to get there
+ * (the venue, postcode, what3words, then the horsebox gate as `children`) and every other fact the organiser has set.
+ * With nothing more to show it says so rather than vanishing.
+ */
+function FullDetails({ open, onToggle, rows, summary, panelId, children }: { open: boolean; onToggle: () => void; rows: DetailRow[]; summary: string; panelId: string; children?: ReactNode }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const still = useStillMotion();
-  const panelId = useId();
   return (
-    <div className="border-t border-[rgb(var(--mg-rule-soft))]">
-      <button type="button" className="sp-row !min-h-16" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((value) => !value)}>
-        <span className="sp-grow !gap-0.5">
-          <span className="text-[18px] font-semibold leading-tight text-[rgb(var(--mg-heading))]">{open ? t('competition.details.hideDetails') : t('competition.details.seeDetails')}</span>
-          {!open && <span className="sp-t2">{summary}</span>}
+    <div className="fl-list dt-facts">
+      <button type="button" className="fl-row" aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
+        <span className="fl-grow">
+          <span className="fl-title dt-fact-link">{open ? t('competition.details.hideDetails') : t('competition.details.seeDetails')}</span>
+          {!open && summary && <span className="fl-sub">{summary}</span>}
         </span>
-        <ChevronDown aria-hidden="true" className={`h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))] transition-transform duration-200 motion-reduce:transition-none [html[data-lite=true]_&]:transition-none ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown aria-hidden="true" className={`fl-chev h-5 w-5 transition-transform duration-200 motion-reduce:transition-none [html[data-lite=true]_&]:transition-none ${open ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -89,7 +91,9 @@ function EventDetailsToggle({ rows, summary }: { rows: DetailRow[]; summary: str
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <ul className="m-0 list-none p-0">{rows.map((row) => <DetailLine key={row.key} row={row} />)}</ul>
+            {rows.length > 0 && <ul className="m-0 list-none p-0">{rows.map((row) => <DetailLine key={row.key} row={row} />)}</ul>}
+            {children}
+            {rows.length === 0 && !children && <p className="dt-nothing">{t('competition.details.nothingMore')}</p>}
           </motion.div>
         )}
       </AnimatePresence>
@@ -106,7 +110,8 @@ export function DetailsTab() {
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
   const mayOrganise = canOrganise(competition);
   const allSignups = mayOrganise && signupResult?.key === signupKey ? signupResult.items : [];
-  const [descOpen, setDescOpen] = useState(false);
+  const [fullOpen, setFullOpen] = useState(false);
+  const fullId = useId();
   const entrySettings = useEntrySettings(competition);
 
   usePageHeader({ title: t('competition.details.title'), subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}` });
@@ -133,15 +138,37 @@ export function DetailsTab() {
   const dates = competitionDateText(competition.startDate, competition.endDate, true);
   const lower = (key: Parameters<typeof t>[0]) => t(key).toLocaleLowerCase(activeLocale());
   const detailRows = eventDetailRows(competition, {
-    venue: t('competition.details.venue'), postcode: t('competition.details.postcode'), lorryPark: t('competition.details.lorryPark'),
+    venue: t('competition.details.venue'), postcode: t('competition.details.postcode'), openMaps: t('competition.details.openMaps'),
     organiser: t('competition.details.organiser'), email: t('competition.details.email'), competitionNo: t('competition.details.compNo'),
     summary: {
-      venue: lower('competition.details.venue'), postcode: lower('competition.details.postcode'), what3words: 'what3words', lorryPark: lower('competition.details.lorryPark'),
+      venue: lower('competition.details.venue'), postcode: lower('competition.details.postcode'), what3words: 'what3words',
       organiser: lower('competition.details.organiser'), email: lower('competition.details.email'), competitionNo: t('competition.details.compNoWords'),
     },
   });
-  const detailSummary = (() => {
-    const text = new Intl.ListFormat(activeLocale(), { style: 'long', type: 'conjunction' }).format(detailRows.map((row) => row.summaryName));
+  // Everything folds away under Show full details, how to get there first; the horsebox gate closes the panel.
+  const hasHorsebox = horseboxEntrance(competition) !== null;
+  // Times only when the organiser gave one: a date-only start or finish is already the date line above.
+  const hasTime = (iso?: string | null): iso is string => !!iso && iso.includes('T') && !/T00:00(?::00(?:\.0+)?)?Z?$/i.test(iso) && !Number.isNaN(new Date(iso).getTime());
+  const at = (iso: string) => new Date(iso).toLocaleString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const left = (count: number) => (count > 0 ? t('competition.details.left', { count }) : t('competition.details.noneLeft'));
+  const fact = (key: DetailRow['key'], label: string, summaryName: string, value: string): DetailRow => ({ key, group: 'more', label, summaryName, value });
+  const fullRows: DetailRow[] = [
+    ...detailRows.filter((row) => row.group === 'arrival'),
+    ...(hasTime(competition.startDate) ? [fact('starts', t('competition.details.starts'), t('competition.details.timesWords'), at(competition.startDate))] : []),
+    ...(hasTime(competition.endDate) ? [fact('finishes', t('competition.details.finishes'), t('competition.details.timesWords'), at(competition.endDate))] : []),
+    ...(!entrySettings.closed && hasTime(entrySettings.entriesCloseAt) ? [fact('entriesClose', t('competition.details.entriesClose'), t('competition.details.entriesCloseWords'), at(entrySettings.entriesCloseAt))] : []),
+    ...(entrySettings.stablesRemaining != null ? [fact('stables', t('competition.details.stables'), t('competition.details.stablesWords'), left(entrySettings.stablesRemaining))] : []),
+    ...(entrySettings.hookupsRemaining != null ? [fact('hookups', t('competition.details.hookups'), t('competition.details.hookupsWords'), left(entrySettings.hookupsRemaining))] : []),
+    ...detailRows.filter((row) => row.group === 'more'),
+  ];
+  const fullSummary = (() => {
+    const names = [...new Set([
+      ...(longDescription ? [t('competition.details.descriptionWords')] : []),
+      ...fullRows.map((row) => row.summaryName),
+      ...(hasHorsebox ? [lower('competition.horsebox.heading')] : []),
+    ])];
+    if (names.length === 0) return '';
+    const text = new Intl.ListFormat(activeLocale(), { style: 'long', type: 'conjunction' }).format(names);
     return text.charAt(0).toLocaleUpperCase(activeLocale()) + text.slice(1);
   })();
   // Dec forms are for the people who fill them in or run the event, not the public.
@@ -150,35 +177,29 @@ export function DetailsTab() {
   const enterTo = `/competitions/${competition.id}/enter`;
   const closed = entrySettings.closed && !mayOrganise;
   const ended = !mayOrganise && hasEnded(competition.startDate, competition.endDate, new Date());
+  // While entries are the only thing to do, the timetable, toplists and live scores aren't there yet; say so here, not on the entry steps.
+  const awaitingDraw = Array.isArray(competition.sessions) && entryPhaseOnly(competition, mayOrganise);
 
   return (
-    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
+    <div className="rf-page mg-flat dt mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
       <h1 className="sr-only">{t('competition.details.heading')}</h1>
 
-      {/* The event card is the same width as the lists below it. */}
-      <section className="mg-card flex flex-col overflow-hidden" aria-label={t('competition.details.about')}>
-        <div className="flex flex-col p-4">
-          <div className="flex flex-col gap-1 pb-3">
-            <h2 className="ev-title">{competition.name}</h2>
-            <span className="ev-sub">{[dates, competition.location].filter(Boolean).join(' · ')}</span>
+      {/* The event's name leads the page; one Show full details control opens the whole description and the rest. */}
+      <section className="dt-intro" aria-label={t('competition.details.about')}>
+        <h2 className="dt-name">{competition.name}</h2>
+        {/* The venue is under Show full details, with its map, so it isn't repeated here. */}
+        {dates && <p className="dt-meta">{dates}</p>}
+        {competition.description && (
+          <div className="dt-about">
+            <p className={`dt-body whitespace-pre-wrap ${longDescription && !fullOpen ? 'line-clamp-3' : ''}`}>{competition.description}</p>
           </div>
-          {competition.description && (
-            <div>
-              <p className={`ev-body whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
-              {longDescription && (
-                <button type="button" className="ev-text-btn" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
-                  {descOpen ? t('competition.details.less') : t('competition.details.more')}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        {detailRows.length > 0 && <EventDetailsToggle rows={detailRows} summary={detailSummary} />}
+        )}
+        <FullDetails open={fullOpen} onToggle={() => setFullOpen((open) => !open)} rows={fullRows} summary={fullSummary} panelId={fullId}>
+          {hasHorsebox && <HorseboxEntranceCard competition={competition} />}
+        </FullDetails>
       </section>
 
-      <HorseboxEntranceCard competition={competition} />
-
-      <h2 className="sp-sec">{t('competition.details.atEvent')}</h2>
+      <h2 className="sp-sec fl-ruled">{t('competition.details.atEvent')}</h2>
       <div className="sp-card" role="list" aria-label={t('competition.details.atEvent')}>
         <LinkRow to="../teams" label={t('competition.details.teams')} />
         {showDecForms && <LinkRow to="../declarations" label={t('competition.details.decForms')} />}
@@ -192,7 +213,7 @@ export function DetailsTab() {
         {user && <EquipmentBlock competitionId={competition.id} />}
       </div>
 
-      <h2 className="sp-sec">{t('competition.details.sharePrint')}</h2>
+      <h2 className="sp-sec fl-ruled">{t('competition.details.sharePrint')}</h2>
       <div className="sp-card" role="list" aria-label={t('competition.details.sharePrint')}>
         <LinkRow href={competitionCalendarUrl(competition.id, window.location.origin)} label={t('competition.details.calendar')} />
         <EventShareRows competition={competition} />
@@ -205,22 +226,25 @@ export function DetailsTab() {
 
       {competition.sections.length > 0 && (
         <>
-          <h2 className="sp-sec">{t('competition.details.enterHeading')}</h2>
+          <h2 className="sp-sec fl-ruled">{t('competition.details.enterHeading')}</h2>
           <div className="sp-card" role="list" aria-label={t('competition.details.ageGroups')}>
             {competition.sections.map((section) => (
               <div key={section.id} className="sp-row" role="listitem">
-                <span className="sp-grow"><span className="sp-t1">{section.displayName}</span>{!closed && placesLeftText(section) && <span className="sp-t2">{placesLeftText(section)}</span>}</span>
-                <span className="sp-t2 !text-[15px] text-right">{feesLine(section, sectionFull(section))}</span>
+                <span className="sp-grow">
+                  <span className="sp-t1">{section.displayName}</span>
+                  <span className="sp-t2">{[!closed && placesLeftText(section), feesLine(section, sectionFull(section))].filter(Boolean).join(' · ')}</span>
+                </span>
               </div>
             ))}
           </div>
+          {awaitingDraw && <p className="sp-note">{t('entries.page.afterDraw')}</p>}
           {competition.sections.map((section) => <MatchmakingBoard key={section.id} competitionId={competition.id} section={section} />)}
           {ended ? (
-            <Notice tone="info" className="mx-4 mt-3">{t('competition.details.ended')}</Notice>
+            <Notice tone="info" className="mt-4">{t('competition.details.ended')}</Notice>
           ) : closed ? (
-            <Notice tone="info" className="mx-4 mt-3">{t('competition.details.entriesClosed')}</Notice>
+            <Notice tone="info" className="mt-4">{t('competition.details.entriesClosed')}</Notice>
           ) : (
-            <Link to={user ? enterTo : '/login'} state={user ? undefined : { from: enterTo }} className="ev-bar">{enterLabel}</Link>
+            <Link to={user ? enterTo : '/login'} state={user ? undefined : { from: enterTo }} className="fl-cta mt-4">{enterLabel}</Link>
           )}
         </>
       )}
@@ -305,19 +329,19 @@ export function EventShareRows({ competition }: { competition: CompetitionDetail
         {story.available ? (
           <button type="button" className="sp-row" onClick={() => setChoosing(true)} disabled={story.busy} aria-busy={story.busy}>
             <span className="sp-grow">
-              <span className="sp-t1 !font-medium">{t('competition.details.share')}</span>
+              <span className="sp-t1">{t('competition.details.share')}</span>
               {story.busy && <span className="sp-t2">{t('competition.details.storyMaking')}</span>}
             </span>
             <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
           </button>
         ) : (
           <button type="button" className="sp-row" onClick={() => { void shareEvent(); }}>
-            <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.details.shareLink')}</span></span>
+            <span className="sp-grow"><span className="sp-t1">{t('competition.details.shareLink')}</span></span>
             <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
           </button>
         )}
         {shareError && (
-          <Notice className="mx-4 my-2">
+          <Notice className="my-2">
             {copyBefore}<a className="ev-link" href={shareUrl}>{t('competition.details.copyFailedLink')}</a>{copyAfter}
           </Notice>
         )}
@@ -344,17 +368,17 @@ export function EventShareRows({ competition }: { competition: CompetitionDetail
       </div>
       <div>
         <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>
-          <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.details.showQr')}</span></span>
+          <span className="sp-grow"><span className="sp-t1">{t('competition.details.showQr')}</span></span>
           <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${showQr ? 'rotate-90' : ''}`} strokeWidth={2.5} />
         </button>
         {showQr && (
-          <div className="flex items-center gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-3">
+          <div className="dt-qr">
             <QrCode
               value={shareUrl}
               label={t('competition.details.qrFor', { name: competitionName })}
-              className="w-36 rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2"
+              className="w-36 flex-none rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2"
             />
-            <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
+            <p className="fl-sub m-0">
               {t('competition.details.qrHint', { name: competitionName })}
             </p>
           </div>
@@ -395,52 +419,46 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
     catch { setFailed(true); }
     finally { setBusy(false); }
   }
+  const pairs = seekers.filter((e) => e.lookingForPair && !e.teamId);
+  const guestSpots = seekers.filter((e) => e.lookingForGuestRiders);
+  const guestWanted = seekers.filter((e) => e.waitingForGuestSpot && !e.teamId);
   return seekers.length > 0 ? (
-    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5 text-sm">
-      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-heading))]">
-        <Users className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>{t('competition.match.title')}</span>
-      </div>
-      {seekers.filter((e) => e.lookingForPair && !e.teamId).map((e) => (
-        <div key={e.signupId} className="flex flex-col gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
-          <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
-              {t('competition.match.lookingPair')}
+    <section className="dt-match" aria-label={`${t('competition.match.title')}: ${section.displayName}`}>
+      <h3 className="dt-sub-heading">{t('competition.match.title')}<small>{section.displayName}</small></h3>
+      <div className="fl-list">
+        {pairs.map((e) => (
+          <div key={e.signupId} className="fl-row dt-match-row">
+            <span className="fl-grow">
+              <span className="fl-title">{e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}</span>
+              <span className="fl-sub">{t('competition.match.lookingPair')}</span>
             </span>
-            <span className="font-semibold text-[rgb(var(--mg-ink))]">
-              {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
+            {own && own.id !== e.signupId && (
+              <button type="button" className="sp-pill dt-match-ask" disabled={busy} onClick={() => void requestPair(e.signupId)}>
+                {t('competition.match.request', { name: e.fullName })}
+              </button>
+            )}
+          </div>
+        ))}
+        {guestSpots.map((e) => (
+          <div key={e.signupId} className="fl-row">
+            <span className="fl-grow">
+              <span className="fl-title">{e.teamName || e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}</span>
+              <span className="fl-sub">{t('competition.match.guestAvailable')}</span>
             </span>
           </div>
-          {own && own.id !== e.signupId && (
-            <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={busy} onClick={() => void requestPair(e.signupId)}>
-              {t('competition.match.request', { name: e.fullName })}
-            </button>
-          )}
-        </div>
-      ))}
-      {seekers.filter((e) => e.lookingForGuestRiders).map((e) => (
-        <div key={e.signupId} className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
-          <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
-            {t('competition.match.guestAvailable')}
-          </span>
-          <span className="font-semibold text-[rgb(var(--mg-ink))]">
-            {e.teamName || e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
-          </span>
-        </div>
-      ))}
-      {seekers.filter((e) => e.waitingForGuestSpot && !e.teamId).map((e) => (
-        <div key={e.signupId} className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
-          <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
-            {t('competition.match.guestWanted')}
-          </span>
-          <span className="font-semibold text-[rgb(var(--mg-ink))]">
-            {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
-          </span>
-        </div>
-      ))}
-      {failed && <Notice>{t('competition.match.failed')}</Notice>}
+        ))}
+        {guestWanted.map((e) => (
+          <div key={e.signupId} className="fl-row">
+            <span className="fl-grow">
+              <span className="fl-title">{e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}</span>
+              <span className="fl-sub">{t('competition.match.guestWanted')}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {failed && <Notice className="mt-2">{t('competition.match.failed')}</Notice>}
       {toast.node}
-    </div>
+    </section>
   ) : null;
 }
 
@@ -467,29 +485,29 @@ function EquipmentBlock({ competitionId }: { competitionId: number }) {
   return (
     <div>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="sp-row">
-        <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.equipment.title')}</span></span>
+        <span className="sp-grow"><span className="sp-t1">{t('competition.equipment.title')}</span></span>
         <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth={2.5} />
       </button>
       {open && (
         loadError ? (
-          <Notice className="mx-4 my-2" actionLabel={t('common.tryAgain')} onAction={() => setLoadError(false)}>{t('competition.equipment.failed')}</Notice>
+          <Notice className="my-2" actionLabel={t('common.tryAgain')} onAction={() => setLoadError(false)}>{t('competition.equipment.failed')}</Notice>
         ) : data == null ? (
-          <p className="sp-note !mx-4">{t('common.loading')}</p>
+          <p className="sp-note">{t('common.loading')}</p>
         ) : data.lines.length === 0 ? (
-          <p className="sp-note !mx-4 italic">{t('competition.equipment.empty')}</p>
+          <p className="sp-note">{t('competition.equipment.empty')}</p>
         ) : (
-          <div className="flex flex-col gap-3 px-4 py-3">
+          <div className="flex flex-col gap-3 pb-3 pr-1">
             <p className="sp-note !m-0">
               {t('competition.equipment.sizing', { sessions: t('competition.equipment.sessions', { count: data.sessions }), races: t('competition.equipment.races', { count: data.racesCounted }) })}
             </p>
             {bucketOrder.filter((b) => byBucket.has(b)).map((b) => (
               <div key={b}>
-                <h4 className="m-0 mb-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">{b}</h4>
-                <ul className="m-0 grid list-none grid-cols-1 gap-x-6 gap-y-1 p-0 text-sm sm:grid-cols-2 md:grid-cols-3">
+                <h4 className="dt-kit-heading">{b}</h4>
+                <ul className="dt-kit-list">
                   {byBucket.get(b)!.sort((a, b2) => a.kind.localeCompare(b2.kind)).map((l) => (
-                    <li key={`${b}-${l.kind}`} className="flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 truncate">{l.kind}</span>
-                      <span className="shrink-0 font-mono font-bold tabular-nums">×{l.count}</span>
+                    <li key={`${b}-${l.kind}`}>
+                      <span className="min-w-0 break-words">{l.kind}</span>
+                      <span className="dt-kit-count">×{l.count}</span>
                     </li>
                   ))}
                 </ul>

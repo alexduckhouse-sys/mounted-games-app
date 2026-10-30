@@ -356,6 +356,7 @@ public static class HistorySeeder
                 EndDate = DateTime.SpecifyKind(day.AddHours(17), DateTimeKind.Utc),
                 IsActive = upcoming,
                 IsArchived = !upcoming,
+                IsIndoor = def.Name.Contains("Indoor", StringComparison.OrdinalIgnoreCase),
                 SignupsLocked = !upcoming,
                 OrganiserName = "Series Organiser",
                 CreatedByUserId = OrganiserId,

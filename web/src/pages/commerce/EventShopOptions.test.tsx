@@ -83,7 +83,7 @@ describe('Event shop: options', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add one Club hoodie L' }));
     await userEvent.click(screen.getByRole('button', { name: 'Order: £56' }));
     expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders', expect.objectContaining({
-      items: [{ listingId: 10, quantity: 1, optionId: 2 }, { listingId: 10, quantity: 1, optionId: 3 }],
+      items: [{ listingId: 10, quantity: 1, optionId: 2, expectedUnitPriceMinor: 2800 }, { listingId: 10, quantity: 1, optionId: 3, expectedUnitPriceMinor: 2800 }],
     }));
     const summary = await screen.findByRole('list', { name: 'Order summary' });
     expect(within(summary).getByText('Club hoodie · M × 1')).toBeInTheDocument();

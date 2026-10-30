@@ -149,6 +149,8 @@ export interface CreatorDraft {
   noHatbands?: boolean;
   /** Stewards tick off each pony's passport and vaccinations on arrival. Switched on after a new competition is created. */
   passportCheck?: boolean;
+  /** True when the arena is indoors (suppresses outdoor weather warnings). */
+  isIndoor?: boolean;
 }
 
 export const HATBAND_COLOURS = ['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black', 'Orange', 'Pink'];
@@ -185,6 +187,7 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
     step: 0, name: '', icon: 'flag', organiserName: '',
     startDate: today.toISOString().slice(0, 10), startTime: '09:00', endDate: '', endTime: '17:00',
     location: '', postcode: '', shortName: '', competitionNumber: '', contactEmail: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
+    isIndoor: false,
     sections: [defaultSection()], arenas: [defaultArena()], breaks: [], laneHatbands: [],
   };
 }
@@ -440,5 +443,6 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
     ...(typeof r.cardsEnabled === 'boolean' ? { cardsEnabled: r.cardsEnabled } : {}),
     ...(r.noHatbands === true ? { noHatbands: true } : {}),
     ...(r.passportCheck === true ? { passportCheck: true } : {}),
+    isIndoor: r.isIndoor === true,
   };
 }

@@ -17,6 +17,12 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.header.onNow': 'En cours',
   'shell.header.next': 'Suivant',
   'shell.header.openingPage': 'Ouverture de la page…',
+  // What the header's refresh button says while it works and once it has an answer
+  'shell.refresh.loading': 'Actualisation…',
+  'shell.refresh.updated': 'Mis à jour',
+  'shell.refresh.same': 'À jour',
+  'shell.refresh.offline': 'Pas de réseau',
+  'shell.refresh.failed': 'Échec de l’actualisation',
 
   // Tabs
   'shell.tabs.competition': 'Compétition',
@@ -164,10 +170,8 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.events.comingUp': 'À venir',
   'shell.events.earlier': 'Plus tôt',
   'shell.events.liveBadge': 'EN DIRECT',
-  'shell.events.liveLine': '{heat} en cours dans {arena}',
-  'shell.events.theArena': 'l’arène',
+  'shell.events.liveHeat': '{heat} en cours',
   'shell.events.open': 'Ouvrir la compétition',
-  'shell.events.entriesOpen': 'Inscriptions ouvertes',
   'shell.events.current': '(compétition actuelle)',
   'shell.events.loadFailed': 'Impossible de charger les compétitions',
   'shell.events.checkSignal': 'Vérifiez votre signal et réessayez.',

@@ -1,29 +1,85 @@
-/* The competition's Following page: one card per followed team (name, then what it is doing and where it stands), and the
-   small preview of the bottom bar in the "add Following" sheet. Everything reads --mg-* tokens, so every theme works. */
+/* The competition's Following page: each followed team (name, then what it is doing and where it stands), and the small
+   preview of the bottom bar in the "add Following" sheet. Everything reads --mg-* tokens, so every theme works. */
 
-.fc-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
-.fc-card.is-live { box-shadow: inset 3px 0 0 rgb(var(--mg-red)), var(--mg-shadow-sm); }
-.fc-top { display: flex; align-items: center; gap: 8px; padding: 10px 6px 8px 14px; }
-.fc-name { flex: 1; min-width: 0; display: block; color: rgb(var(--mg-heading)) !important; font: 700 18px/1.15 var(--mg-font); text-decoration: none !important; overflow-wrap: anywhere; }
-.fc-name:hover { text-decoration: underline !important; }
-.fc-name small { display: block; margin-top: 2px; color: rgb(var(--mg-muted)); font: 500 13px/1.2 var(--mg-font); }
-.fc-star { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #C08308; cursor: pointer; }
+/* Each followed team sits on the page in the flat language (theme/flat.css) in two rows, with a hairline between teams:
+   its name, its place and its star; then the heat on now or next (or its last heat once it is done). A heat on now gets
+   only a small red dot, never a red band. Names wrap; nothing is cut off. */
+.fc-card { display: flex; flex-direction: column; padding: 4px 0 6px; }
+.fc-top { display: flex; align-items: center; gap: 4px; min-height: 48px; }
+.fc-name { flex: 1; min-width: 0; display: block; padding: 4px 0; color: rgb(var(--mg-ink)) !important; font: 600 16px/1.3 var(--mg-font); letter-spacing: -.005em; text-decoration: none !important; overflow-wrap: break-word; text-wrap: pretty; }
+.fc-name:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; border-radius: 4px; }
+@media (hover: hover) { .fc-name:hover { text-decoration: underline !important; } }
+.fc-name small { display: block; margin-top: 2px; color: rgb(var(--mg-muted)); font: 500 13.5px/1.3 var(--mg-font); }
+.fc-flag { display: inline-block; width: 20px; height: 14px; margin-right: 6px; border-radius: 2px; object-fit: cover; vertical-align: -1px; }
+/* The place (or last result) beside the name: the number in Barlow Condensed, its points underneath. */
+.fc-stand { flex: none; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px; min-width: 44px; min-height: 44px; padding: 2px 6px; border-radius: 8px; color: rgb(var(--mg-heading)) !important; text-decoration: none !important; transition: background-color 120ms var(--mg-ease-out); }
+.fc-stand b { font: 700 21px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
+.fc-stand b.is-need { color: rgb(var(--mg-late-time)); }
+.fc-stand b.is-safe { color: rgb(var(--mg-ok)); }
+.fc-stand small { font: 500 12.5px/1.1 var(--mg-font); color: rgb(var(--mg-muted)); white-space: nowrap; }
+@media (hover: hover) { .fc-stand:hover { background: rgb(var(--mg-heading) / .04); } }
+.fc-stand:active { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
+.fc-stand:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.fc-star { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; margin-right: -10px; padding: 0; border: 0; background: transparent; color: #C08308; cursor: pointer; }
 .fc-star:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -4px; border-radius: 10px; }
 
-.fc-line { display: grid; grid-template-columns: 62px minmax(0, 1fr) 14px; align-items: center; column-gap: 10px; min-height: 46px; padding: 6px 12px 6px 14px; border-top: 1px solid rgb(var(--mg-rule-soft)); color: rgb(var(--mg-ink)) !important; text-decoration: none !important; transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
-a.fc-line:hover { background: rgb(var(--mg-subtle)); }
-a.fc-line:active { background: rgb(var(--mg-tint) / .65); }
+/* A line: a lead (the time, the place, "On now"), what it is, and a chevron. It tints when pressed. */
+.fc-line { display: grid; grid-template-columns: 56px minmax(0, 1fr) 16px; align-items: center; column-gap: 10px; min-height: 48px; padding: 6px 4px 6px 0; border-radius: 8px; color: rgb(var(--mg-ink)) !important; text-decoration: none !important; transition: background-color 120ms var(--mg-ease-out); }
+@media (hover: hover) { a.fc-line:hover { background: rgb(var(--mg-heading) / .04); } }
+a.fc-line:active { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
 .fc-line:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 .fc-lead { color: rgb(var(--mg-heading)); font: 700 20px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
-.fc-lead.is-label { color: rgb(var(--mg-muted)); font: 600 13px/1.1 var(--mg-font); }
-.fc-lead.is-now { color: rgb(var(--mg-red)); font: 700 12px/1 var(--mg-font); letter-spacing: .06em; }
+.fc-lead.is-label { color: rgb(var(--mg-muted)); font: 600 13.5px/1.2 var(--mg-font); }
+.fc-lead.is-now { display: inline-flex; align-items: center; gap: 6px; color: rgb(var(--mg-heading)); font: 600 13.5px/1.2 var(--mg-font); }
+/* On now: the red dot alone leads the line (the group heading says "On now"), so the column is just wide enough for it. */
+.fc-line-now { grid-template-columns: 8px minmax(0, 1fr) 16px; }
+.fc-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--mg-red)); }
 .fc-lead.is-late { color: rgb(var(--mg-late-time)); }
 .fc-what { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.fc-what strong { font: 600 15px/1.2 var(--mg-font); overflow-wrap: anywhere; }
-.fc-what span { color: rgb(var(--mg-muted)); font: 500 13px/1.2 var(--mg-font); }
+.fc-what strong { font: 600 15.5px/1.3 var(--mg-font); overflow-wrap: break-word; }
+.fc-what span { color: rgb(var(--mg-muted)); font: 500 13.5px/1.3 var(--mg-font); }
 .fc-what span.is-need { color: rgb(var(--mg-late-time)); }
 .fc-what span.is-safe { color: rgb(var(--mg-ok)); }
+.fc-what .sp-note { margin: 0; }
 .fc-chev { color: rgb(var(--mg-faint)); }
+.fc-line.fc-quiet { grid-template-columns: minmax(0, 1fr); min-height: 0; padding-block: 2px 6px; color: rgb(var(--mg-muted)) !important; font: 500 13.5px/1.3 var(--mg-font); }
+
+/* Find a team or club: one search bar, and nothing under it until you type. Matching clubs then teams follow as plain rows
+   with a single fade. A club's follow-all is a light text button that flips at once to a ticked "Following"; a team's star
+   lines up with the stars on the cards above. */
+.fw-bar { flex: 1; min-width: 0; display: flex; align-items: center; height: 46px; padding-left: 16px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); }
+.fw-bar:focus-within { border-color: rgb(var(--mg-heading)); }
+.fw-bar-field { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 10px; }
+.fw-bar input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: rgb(var(--mg-ink)); font: 400 16px/1.2 var(--mg-font); -webkit-appearance: none; appearance: none; }
+.fw-bar input::placeholder { color: rgb(var(--mg-faint)); }
+.fw-bar input::-webkit-search-cancel-button, .fw-bar input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.fw-clear { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgb(var(--mg-muted)); cursor: pointer; transition: background-color 120ms var(--mg-ease-out); }
+@media (hover: hover) { .fw-clear:hover { background: rgb(var(--mg-subtle)); } }
+.fw-clear:active { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
+.fw-clear:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.fw-results { animation: fw-in 140ms var(--mg-ease-out) both; }
+@keyframes fw-in { from { opacity: 0; } }
+.fw-row { position: relative; gap: 8px; padding-right: 0; }
+.fw-club-btn { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 44px; margin-right: -12px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: rgb(var(--mg-heading)); font: 600 14.5px/1 var(--mg-font); cursor: pointer; transition: background-color 120ms var(--mg-ease-out); }
+.fw-club-btn[aria-pressed="true"] { color: rgb(var(--mg-muted)); font-weight: 500; }
+@media (hover: hover) { .fw-club-btn:hover { background: rgb(var(--mg-subtle)); } }
+.fw-club-btn:active { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
+.fw-club-btn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+
+/* Following nobody yet: a plain line above the finder saying what the page will show. */
+.fw-empty { display: flex; flex-direction: column; gap: 4px; padding: 14px 0 2px; }
+.fw-empty-title { margin: 0; font: 600 17px/1.3 var(--mg-font); color: rgb(var(--mg-heading)); }
+.fw-link { color: inherit !important; text-decoration: none !important; outline: 0; }
+.fw-link::after { content: ""; position: absolute; inset: 0; }
+.fw-row:has(.fw-link:active) { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
+@media (hover: hover) { .fw-row:has(.fw-link:hover) { background: rgb(var(--mg-subtle)); } }
+.fw-row:has(.fw-link:focus-visible) { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.fw-star { position: relative; z-index: 1; margin-right: -10px; color: rgb(var(--mg-muted)); }
+.fw-star[aria-pressed="true"] { color: #C08308; }
+
+@media (prefers-reduced-motion: reduce) { .fc-line, .fc-stand, .fw-club-btn, .fw-clear { transition: none; } .fw-results { animation: none; } }
+html[data-lite="true"] :is(.fc-line, .fc-stand, .fw-club-btn, .fw-clear) { transition: none; }
+html[data-lite="true"] .fw-results { animation: none; }
 
 /* "Add Following to your bottom bar": the bar as it will look, drawn small and still. */
 .fc-bar { display: flex; margin: 4px 0 16px; padding: 6px 2px; border: 1px solid rgb(var(--mg-line)); border-radius: 14px; background: rgb(var(--mg-surface)); }

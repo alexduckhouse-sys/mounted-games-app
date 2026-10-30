@@ -56,6 +56,37 @@ describe('layoutRunGraph fitting', () => {
   });
 });
 
+describe('layoutRunGraph size', () => {
+  it('keeps the usual 150 plot and 40 foot when no size is given', () => {
+    const usual = layoutRunGraph([2, 6], null);
+    expect(usual.bottom - usual.top).toBe(150);
+    expect(usual.height).toBe(usual.bottom + 40);
+    expect(layoutRunGraph([2, 6], null, undefined, {})).toEqual(usual);
+    expect(layoutRunGraph([2, 6], null, 360)).toEqual(layoutRunGraph([2, 6], null, 360, undefined));
+  });
+  it('draws a shorter plot and foot when asked, with the bars scaled to the shorter plot', () => {
+    const compact = layoutRunGraph([2, 6], 4, undefined, { plot: 120, foot: 28 });
+    expect(compact.bottom - compact.top).toBe(120);
+    expect(compact.height).toBe(compact.bottom + 28);
+    expect(compact.bars[1].height).toBeCloseTo(120);
+    expect(compact.averageY).toBeCloseTo(compact.bottom - (4 / compact.scale.max) * 120);
+    expect(compact.tickYs[compact.tickYs.length - 1]).toBeCloseTo(compact.top);
+  });
+  it('lets plot and foot be set one at a time', () => {
+    const plotOnly = layoutRunGraph([3], null, undefined, { plot: 100 });
+    expect(plotOnly.bottom - plotOnly.top).toBe(100);
+    expect(plotOnly.height).toBe(plotOnly.bottom + 40);
+    const footOnly = layoutRunGraph([3], null, undefined, { foot: 10 });
+    expect(footOnly.bottom - footOnly.top).toBe(150);
+    expect(footOnly.height).toBe(footOnly.bottom + 10);
+  });
+  it('fits and sizes together', () => {
+    const many = layoutRunGraph(Array.from({ length: 20 }, (_, index) => index), null, 360, { plot: 120, foot: 28 });
+    expect(many.width).toBeLessThanOrEqual(360);
+    expect(many.height).toBe(many.bottom + 28);
+  });
+});
+
 describe('shortLabel', () => {
   it('leaves a short label and cuts a long one with an ellipsis', () => {
     expect(shortLabel('Heat 2')).toBe('Heat 2');

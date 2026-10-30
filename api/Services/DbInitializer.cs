@@ -164,6 +164,12 @@ public static class DbInitializer
                 "AccountLast4" TEXT NULL,
                 "IbanCountry" TEXT NULL,
                 "IbanLast4" TEXT NULL,
+                "StripeAccountId" TEXT NULL,
+                "StripeChargesEnabled" INTEGER NOT NULL DEFAULT 0,
+                "StripePayoutsEnabled" INTEGER NOT NULL DEFAULT 0,
+                "StripeDetailsSubmitted" INTEGER NOT NULL DEFAULT 0,
+                "StripeConnectedAt" TEXT NULL,
+                "ManualBacsReady" INTEGER NOT NULL DEFAULT 0,
                 "CreatedAt" TEXT NOT NULL,
                 "UpdatedAt" TEXT NOT NULL,
                 "UpdatedByUserId" TEXT NULL,
@@ -171,6 +177,66 @@ public static class DbInitializer
                     REFERENCES "Clubs" ("Id") ON DELETE CASCADE
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_ClubPayoutAccounts_ClubId" ON "ClubPayoutAccounts" ("ClubId");
+            """);
+        await EnsureColumnAsync(db, "ClubPayoutAccounts", "StripeAccountId", "TEXT NULL");
+        await EnsureColumnAsync(db, "ClubPayoutAccounts", "StripeChargesEnabled", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "ClubPayoutAccounts", "StripePayoutsEnabled", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "ClubPayoutAccounts", "StripeDetailsSubmitted", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "ClubPayoutAccounts", "StripeConnectedAt", "TEXT NULL");
+        await EnsureColumnAsync(db, "ClubPayoutAccounts", "ManualBacsReady", "INTEGER NOT NULL DEFAULT 0");
+        await db.Database.ExecuteSqlRawAsync("""
+            UPDATE "ClubPayoutAccounts" SET "ManualBacsReady" = 1 WHERE "Status" = 2 AND ("StripeChargesEnabled" = 0 OR "StripePayoutsEnabled" = 0);
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ClubPayoutAccounts_StripeAccountId" ON "ClubPayoutAccounts" ("StripeAccountId");
+            CREATE TABLE IF NOT EXISTS "UserPayoutAccounts" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_UserPayoutAccounts" PRIMARY KEY AUTOINCREMENT,
+                "UserId" TEXT NOT NULL,
+                "Status" INTEGER NOT NULL DEFAULT 0,
+                "BusinessType" INTEGER NULL,
+                "Region" INTEGER NOT NULL DEFAULT 0,
+                "Currency" TEXT NOT NULL DEFAULT 'GBP',
+                "LegalName" TEXT NULL,
+                "TradingName" TEXT NULL,
+                "AddressLine1" TEXT NULL,
+                "AddressLine2" TEXT NULL,
+                "City" TEXT NULL,
+                "Postcode" TEXT NULL,
+                "ContactEmail" TEXT NULL,
+                "ContactPhone" TEXT NULL,
+                "RegistrationNumber" TEXT NULL,
+                "VatNumber" TEXT NULL,
+                "PersonFullName" TEXT NULL,
+                "PersonDateOfBirth" TEXT NULL,
+                "StatementDescriptor" TEXT NULL,
+                "Schedule" INTEGER NOT NULL DEFAULT 1,
+                "BankAccountHolder" TEXT NULL,
+                "BankName" TEXT NULL,
+                "SortCode" TEXT NULL,
+                "AccountLast4" TEXT NULL,
+                "IbanCountry" TEXT NULL,
+                "IbanLast4" TEXT NULL,
+                "StripeAccountId" TEXT NULL,
+                "StripeChargesEnabled" INTEGER NOT NULL DEFAULT 0,
+                "StripePayoutsEnabled" INTEGER NOT NULL DEFAULT 0,
+                "StripeDetailsSubmitted" INTEGER NOT NULL DEFAULT 0,
+                "StripeConnectedAt" TEXT NULL,
+                "ManualBacsReady" INTEGER NOT NULL DEFAULT 0,
+                "AnnualTackShopSalesCount" INTEGER NOT NULL DEFAULT 0,
+                "AnnualTackShopSalesMinor" INTEGER NOT NULL DEFAULT 0,
+                "TaxIdVerified" INTEGER NOT NULL DEFAULT 0,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                "UpdatedByUserId" TEXT NULL,
+                CONSTRAINT "FK_UserPayoutAccounts_AspNetUsers_UserId" FOREIGN KEY ("UserId")
+                    REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_UserPayoutAccounts_UserId" ON "UserPayoutAccounts" ("UserId");
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_UserPayoutAccounts_StripeAccountId" ON "UserPayoutAccounts" ("StripeAccountId");
+            CREATE TABLE IF NOT EXISTS "StripeWebhookEvents" (
+                "EventId" TEXT NOT NULL CONSTRAINT "PK_StripeWebhookEvents" PRIMARY KEY,
+                "AccountId" TEXT NULL,
+                "EventType" TEXT NOT NULL,
+                "ProcessedAtUtc" TEXT NOT NULL
+            );
             """);
 
         await db.Database.ExecuteSqlRawAsync("""
@@ -389,6 +455,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Competitions", "LorryLongitude", "REAL NULL");
         await EnsureColumnAsync(db, "Competitions", "LorryDirectionsNote", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "PaymentLinkUrl", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "IsIndoor", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAccepted", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedAt", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedByUserId", "TEXT NULL");

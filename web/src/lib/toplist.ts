@@ -1,5 +1,8 @@
 import type { Heat, Session, StandingRow, Team } from '../types';
 import { lanesInUse, sitsOut } from './lanes.ts';
+import { ordinal } from './ordinalText.ts';
+
+export { ordinal };
 
 export interface ToplistRow {
   teamId: number;
@@ -191,13 +194,6 @@ function inSection(session: Session, sectionId: number, teamIds: ReadonlySet<num
   if (teamIds.size === 0) return false;
   return session.heats.some((heat) => heat.entries.some((entry) => teamIds.has(entry.teamId))
     || heat.races.some((race) => race.results.some((result) => teamIds.has(result.teamId))));
-}
-
-/** "1st", "2nd", "3rd", "11th", "22nd". */
-export function ordinal(n: number): string {
-  const teen = n % 100 >= 11 && n % 100 <= 13;
-  const suffix = teen ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
-  return `${n}${suffix}`;
 }
 
 /**
@@ -618,6 +614,33 @@ function buildByGame(heatSessions: Session[], hcTeamIds: Set<number>): GameStand
 }
 
 const finalWording = /\bfinals?\b/i;
+/** A final's heading: its own name when that says "Final", otherwise the session's name and then the heat's. */
+function finalLabel(session: Session, heat: Heat): string {
+  const named = heat.label?.trim() ?? '';
+  return finalWording.test(named) ? named : [session.name, named].filter(Boolean).join(' · ');
+}
+
+export interface FinalLineup { id: number; label: string; teams: { teamId: number; teamName: string }[] }
+
+/** Every final drawn for an age group and the teams in it, in lane order: names only, no places or points. */
+export function finalLineups(sessions: Session[], teams: Team[], sectionId: number): FinalLineup[] {
+  const sectionTeamIds = new Set(teams.filter((team) => team.competitionSectionId === sectionId).map((team) => team.id));
+  const lineups: FinalLineup[] = [];
+  const ordered = sessions
+    .filter((session) => inSection(session, sectionId, sectionTeamIds) && isRace(session))
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  for (const session of ordered) {
+    for (const heat of [...session.heats].sort((a, b) => a.orderIndex - b.orderIndex)) {
+      if (!isFinal(session, heat) || heat.entries.length === 0) continue;
+      // A shared session can hold another age group's final: keep only a final with one of this group's teams in it,
+      // and then every team drawn in it.
+      if (session.competitionSectionId !== sectionId && !heat.entries.some((entry) => sectionTeamIds.has(entry.teamId))) continue;
+      const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
+      lineups.push({ id: heat.id, label: finalLabel(session, heat), teams: entries.map((entry) => ({ teamId: entry.teamId, teamName: entry.teamName })) });
+    }
+  }
+  return lineups;
+}
 
 /** One group per final heat that has results: teams by the points they scored in it, tied teams sharing a place. */
 function buildFinalGroups(sessions: Session[], sectionId: number, standingRank: Map<number, number> | undefined, sectionTeamIds: ReadonlySet<number>): FinalGroup[] {
@@ -648,14 +671,13 @@ function buildFinalGroups(sessions: Session[], sectionId: number, standingRank: 
         qualifyingPosition: null,
       }));
       for (const entry of unscored) rows.push({ teamId: entry.teamId, teamName: entry.teamName, place: null, points: null, qualifyingPosition: null });
-      const named = heat.label?.trim() ?? '';
       const races = new Map<number, TeamRaceResult[]>();
       for (const race of heat.races) {
         for (const result of race.results) {
           races.set(result.teamId, [...(races.get(result.teamId) ?? []), { id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status }]);
         }
       }
-      groups.push({ id: heat.id, label: finalWording.test(named) ? named : [session.name, named].filter(Boolean).join(' · '), rows, races, complete: heatDone(heat) });
+      groups.push({ id: heat.id, label: finalLabel(session, heat), rows, races, complete: heatDone(heat) });
     }
   }
   return groups;

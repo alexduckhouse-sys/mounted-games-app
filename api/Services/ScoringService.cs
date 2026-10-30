@@ -351,6 +351,12 @@ public class ScoringService
                 var label = string.IsNullOrWhiteSpace(heat.Label) ? $"Heat {heat.OrderIndex}" : heat.Label;
                 body = $"🔔 Ring call ({arena}): {entry.Team?.DisplayName ?? "Unnamed team"} (Lane {entry.LaneIndex}) needed at the collecting ring now for {label}.";
             }
+            else if (string.IsNullOrWhiteSpace(body))
+            {
+                var arena = string.IsNullOrWhiteSpace(heat.Session!.ArenaName) ? "Main Arena" : heat.Session.ArenaName.Trim();
+                var label = string.IsNullOrWhiteSpace(heat.Label) ? $"Heat {heat.OrderIndex}" : heat.Label;
+                body = $"🔔 Ring call ({arena}): {label} needed at the collecting ring now.";
+            }
             var tag = $"missing-team:{heatId}";
             var cleanBody = body!.Trim();
             var existing = await _db.ChatMessages.FirstOrDefaultAsync(m => m.CompetitionId == heat.Session!.CompetitionId

@@ -321,18 +321,7 @@ public static class SignupConfirmationEmail
         return e.Date <= s.Date ? first : $"{first} to {e.ToString("dddd d MMMM yyyy", Uk)}";
     }
 
-    private static DateTime ToUk(DateTime utc)
-    {
-        var value = utc.Kind == DateTimeKind.Local ? utc.ToUniversalTime() : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
-        try
-        {
-            return TimeZoneInfo.ConvertTimeFromUtc(value, TimeZoneInfo.FindSystemTimeZoneById("Europe/London"));
-        }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-        {
-            return value;
-        }
-    }
+    private static DateTime ToUk(DateTime utc) => UkTime.ToUk(utc);
 }
 
 /// <summary>Builds and sends the one entry confirmation, inline, and says how it went. Never throws.</summary>

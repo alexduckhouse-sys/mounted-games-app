@@ -558,7 +558,9 @@ public class VolunteerAndEmergencyController(
             ?? "Assigned steward";
         var sessionSuffix = shift.Session is not null ? $" for {shift.Session.Name}" : string.Empty;
         var defaultBody = $"📣 Steward call ({arena}): {targetLabel} needed now at {shift.Role}{sessionSuffix}.";
-        var body = CompetitionFields.Trimmed(req?.CustomMessage) ?? defaultBody;
+        var customMessage = CompetitionFields.Trimmed(req?.CustomMessage);
+        // The organiser's own words go out to everyone, so they get the same clean-up as a typed announcement.
+        var body = customMessage is null ? defaultBody : MountedGames.Api.Services.ProfanityFilter.Clean(customMessage);
 
         var msg = new ChatMessage
         {

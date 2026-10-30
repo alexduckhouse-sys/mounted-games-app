@@ -288,7 +288,7 @@ describe('NavigationDrawer: age groups', () => {
     mount({ competition: true, groups });
     await openGroups();
     expect(screen.getByRole('button', { name: /Age group/ })).toHaveAttribute('aria-expanded', 'true');
-    expect(links('Age groups')).toEqual([['SeniorsLive', '/competitions/4/scoring?section=11'], ['JuniorsNext 09:05', '/competitions/4/scoring?section=12'], ['Novices', '/competitions/4/scoring?section=13']]);
+    expect(links('Age groups')).toEqual([['SeniorsLive', '/competitions/4/toplists?section=11'], ['JuniorsNext 09:05', '/competitions/4/toplists?section=12'], ['Novices', '/competitions/4/toplists?section=13']]);
     await userEvent.click(screen.getByRole('link', { name: /Juniors/ }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

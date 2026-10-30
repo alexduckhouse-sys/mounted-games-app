@@ -17,6 +17,12 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.header.onNow': 'Nawr',
   'shell.header.next': 'Nesaf',
   'shell.header.openingPage': 'Yn agor y dudalen…',
+  // What the header's refresh button says while it works and once it has an answer
+  'shell.refresh.loading': 'Yn adnewyddu…',
+  'shell.refresh.updated': 'Wedi diweddaru',
+  'shell.refresh.same': 'Yn gyfredol',
+  'shell.refresh.offline': 'Dim signal',
+  'shell.refresh.failed': 'Methu adnewyddu',
 
   // Tabs
   'shell.tabs.competition': 'Cystadleuaeth',
@@ -164,10 +170,8 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.events.comingUp': 'Ar y gweill',
   'shell.events.earlier': 'Yn gynharach',
   'shell.events.liveBadge': 'YN FYW',
-  'shell.events.liveLine': '{heat} ymlaen nawr yn {arena}',
-  'shell.events.theArena': 'yr arena',
+  'shell.events.liveHeat': '{heat} ymlaen nawr',
   'shell.events.open': 'Agor y gystadleuaeth',
-  'shell.events.entriesOpen': 'Cofrestru ar agor',
   'shell.events.current': '(y gystadleuaeth gyfredol)',
   'shell.events.loadFailed': 'Methwyd llwytho’r cystadlaethau',
   'shell.events.checkSignal': 'Gwiriwch eich signal a rhowch gynnig arall arni.',

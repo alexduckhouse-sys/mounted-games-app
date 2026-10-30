@@ -27,7 +27,8 @@ describe('ToplistView positions', () => {
 
   it('shows real positions once there are points, tints tied rows, and has no gap behind the leader', () => {
     const { container } = render(<ToplistView list={list([6, 6, 2])} section={null} />);
-    expect(positions()).toEqual(['1=', '1=', '3']);
+    expect(positions()).toEqual(['1', '1', '3']);
+    expect(container.querySelectorAll('li.tl-tied')).toHaveLength(2);
     expect(screen.getAllByText('(joint)', { exact: false })).toHaveLength(2);
     expect([...container.querySelectorAll('li[data-tied="true"]')].map((li) => li.getAttribute('data-rank-id'))).toEqual(['1', '2']);
     expect(screen.queryByText('−4')).not.toBeInTheDocument();
@@ -44,8 +45,35 @@ describe('ToplistView positions', () => {
     expect(screen.getByText('2 pts to stay in the A Final')).toHaveClass('text-[rgb(var(--mg-late-time))]');
     expect(screen.getByText('8 pts needed for the A Final (normal finishes)')).toHaveClass('text-[rgb(var(--mg-late-time))]');
     const cut = screen.getByRole('separator', { name: 'A Final cut-off' });
-    expect(cut).toHaveClass('text-[rgb(var(--mg-red))]');
+    expect(cut).toHaveClass('tl-cut');
     expect(cut.className).not.toMatch(/mg-muted/);
+  });
+
+  it('says it is waiting for results before any race is scored, and stops once one is', () => {
+    const { rerender } = render(<MemoryRouter><ToplistView list={list([0, 0])} section={null} /></MemoryRouter>);
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting for the first results');
+    rerender(<MemoryRouter><ToplistView list={list([4, 0])} section={null} /></MemoryRouter>);
+    expect(screen.queryByText('Waiting for the first results')).not.toBeInTheDocument();
+  });
+
+  it('gives a team awarded nought a place, but leaves a team with no result unplaced and out of any tie', () => {
+    const sessions = [{ id: 1, label: 'S1', title: 'Session 1' }];
+    const toplist = { ...list([6, 0, 0, 0]), bySession: { sessions, cells: new Map([[1, [6]], [2, [0]], [3, [0]]]) } };
+    const { container } = render(<MemoryRouter><ToplistView list={toplist} section={null} /></MemoryRouter>);
+    const items = within(screen.getByRole('region', { name: 'Totals' })).getAllByRole('listitem');
+    expect(positions()).toEqual(['1', '2', '2', '—']);
+    expect([...container.querySelectorAll('li.tl-tied')].map((li) => li.getAttribute('data-rank-id'))).toEqual(['2', '3']);
+    expect(items[3]).toHaveTextContent('no place yet');
+    expect(items[3].querySelector('.tl-place-none')).not.toBeNull();
+    expect(items[3].querySelector('.tl-points-none')).not.toBeNull();
+    expect(items[1].querySelector('.tl-points-none')).toBeNull();
+  });
+
+  it('fades a place in when the team gets its first result', () => {
+    const { container, rerender } = render(<MemoryRouter><ToplistView list={list([0, 0])} section={null} /></MemoryRouter>);
+    expect(container.querySelector('.tl-place-in')).toBeNull();
+    rerender(<MemoryRouter><ToplistView list={list([3, 1])} section={null} /></MemoryRouter>);
+    expect(container.querySelectorAll('.tl-place-in')).toHaveLength(2);
   });
 
   it('does not tint anyone before a race is scored, even though everyone is level', () => {

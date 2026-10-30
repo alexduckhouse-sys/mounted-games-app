@@ -312,11 +312,19 @@ it('shows a failed announcement load separately and retries it', async () => {
   expect((await screen.findAllByText('Racing resumes at two'))[0]).toBeVisible();
 });
 
-it('traps focus in the announcement sheet and restores the All button', async () => {
+it('offers All only when the page shows fewer announcements than there are', async () => {
   context.roles = [];
   context.messages = [chat(1, { body: 'One' }), chat(2, { body: 'Two' })];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  const opener = screen.getByRole('button', { name: 'All 2' });
+  expect(screen.queryByRole('button', { name: /^All \d+$/ })).toBeNull();
+});
+
+it('traps focus in the announcement sheet and restores the All button', async () => {
+  context.roles = [];
+  // The page shows the latest three; the All button opens the rest.
+  context.messages = [chat(1, { body: 'One' }), chat(2, { body: 'Two' }), chat(3, { body: 'Three' }), chat(4, { body: 'Four' })];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  const opener = screen.getByRole('button', { name: 'All 4' });
   fireEvent.click(opener);
   const close = screen.getByRole('button', { name: 'Close announcements' });
   expect(close).toHaveFocus();

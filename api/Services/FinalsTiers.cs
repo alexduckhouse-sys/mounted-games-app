@@ -19,21 +19,90 @@ public sealed class FinalsTiers
     private readonly Dictionary<int, int> _tierByTeam;
     private FinalsTiers(Dictionary<int, int> tierByTeam) => _tierByTeam = tierByTeam;
 
-    /// <summary>0 for the A Final, 1 for the B Final, and so on (including multi-part finals like "A Final Part 1"); null for a label that isn't a lettered final.</summary>
+    /// <summary>
+    /// 0 for the A Final (or Grand Final), 1 for the B Final, and so on (including "Final A" / "Finale A"
+    /// and multi-part finals like "A Final Part 1"); null for a label that isn't a lettered final.
+    /// </summary>
     public static int? ParseLabel(string? label)
     {
-        var text = label?.Trim();
-        if (text is not { Length: >= 7 }) return null;
-        var letter = char.ToUpperInvariant(text[0]);
-        if (letter is < 'A' or > 'Z') return null;
-        if (!text.AsSpan(1).StartsWith(" Final", StringComparison.OrdinalIgnoreCase)) return null;
-        if (text.Length == 7) return letter - 'A';
-        var suffix = text[7..].Trim();
-        if (suffix.StartsWith('-') || suffix.StartsWith('·') || suffix.StartsWith('–'))
-            suffix = suffix[1..].TrimStart();
+        if (label is null) return null;
+        var text = label.Trim();
+        if (text.Length < 7) return null;
+
+        var first = char.ToUpperInvariant(text[0]);
+        if (first is >= 'A' and <= 'Z')
+        {
+            if (TryStripPrefix(text[1..], " Finale", out var afterLetterFinale) && IsValidSuffix(afterLetterFinale))
+                return first - 'A';
+            if (TryStripPrefix(text[1..], " Final", out var afterLetterFinal) && IsValidSuffix(afterLetterFinal))
+                return first - 'A';
+        }
+
+        if (TryStripPrefix(text, "Finale ", out var afterFinale) || TryStripPrefix(text, "Final ", out afterFinale))
+        {
+            afterFinale = afterFinale.TrimStart();
+            if (afterFinale.Length >= 1)
+            {
+                var letter = char.ToUpperInvariant(afterFinale[0]);
+                if (letter is >= 'A' and <= 'Z' && IsValidSuffix(afterFinale[1..]))
+                    return letter - 'A';
+            }
+        }
+
+        foreach (var (prefix, tier) in NamedFinals)
+        {
+            if (TryStripPrefix(text, prefix, out var afterGrand) && IsValidSuffix(afterGrand))
+                return tier;
+        }
+
+        return null;
+    }
+
+    private static readonly (string Prefix, int Tier)[] NamedFinals =
+    [
+        ("Grande Finale", 0),
+        ("Grand Finale", 0),
+        ("Grande Final", 0),
+        ("Grand Final", 0),
+        ("Championship Finale", 0),
+        ("Championship Final", 0),
+        ("Consolation Finale", 1),
+        ("Consolation Final", 1),
+        ("Plate Finale", 1),
+        ("Plate Final", 1),
+        ("Bowl Finale", 2),
+        ("Bowl Final", 2),
+        ("Shield Finale", 3),
+        ("Shield Final", 3),
+    ];
+
+    private static bool TryStripPrefix(string text, string prefix, out string rest)
+    {
+        if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            rest = text[prefix.Length..];
+            return true;
+        }
+        rest = string.Empty;
+        return false;
+    }
+
+    private static bool IsValidSuffix(string rawSuffix)
+    {
+        if (rawSuffix.Length == 0) return true;
+        if (!char.IsWhiteSpace(rawSuffix[0]) && rawSuffix[0] is not ('-' or '·' or '–' or '—' or ':' or '/' or '('))
+            return false;
+        var suffix = rawSuffix.Trim();
+        if (suffix.StartsWith('(') && suffix.EndsWith(')') && suffix.Length > 2)
+            return true;
+        if (suffix[0] is '-' or '·' or '–' or '—' or ':' or '/')
+        {
+            var afterSep = suffix[1..].TrimStart();
+            return afterSep.Length > 0;
+        }
         if (suffix.StartsWith("Part ", StringComparison.OrdinalIgnoreCase))
             suffix = suffix[5..].TrimStart();
-        return suffix.Length > 0 && suffix.All(char.IsAsciiDigit) ? letter - 'A' : null;
+        return suffix.Length > 0 && suffix.All(char.IsAsciiDigit);
     }
 
     /// <summary>Reads the tiers from the heats of the race sessions given (heats must have their entries loaded).</summary>

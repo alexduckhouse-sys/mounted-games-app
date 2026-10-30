@@ -8,6 +8,7 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import { EntryStepper } from '../../components/EntryStepper';
 import { usePageWidth } from '../../components/pageWidthState';
+import { useQuietTicker } from '../../components/TickerContext';
 import { EntryRosette } from '../../components/Rosette';
 import { entryPhaseOnly } from '../../lib/competitionPhase';
 import { entryOptions, feeText, parseEntryKind, sectionFull, type EntryKind } from '../../lib/entryOptions';
@@ -20,6 +21,14 @@ import { BankDetailsCard } from './BankDetailsCard';
 import { useEntrySettings } from './entrySettings';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
+import './entry.css';
+
+/** "Friday 20 November at 18:00", in the device's zone. */
+function closingText(iso: string) {
+  const at = new Date(iso);
+  const day = at.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  return `${day}, ${at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 /**
  * Entering a competition, in up to three steps that share one stepper so it can animate from step to step:
@@ -30,6 +39,8 @@ import '../../components/eventPages.css';
 export function EntryPage() {
   const t = useT();
   usePageWidth('narrow');
+  // No NEXT / LIVE line over the entry steps: it is about the day, and the age groups and forms are all that matters here.
+  useQuietTicker();
   const { competition, reload } = useCompetition();
   const { user, canOrganise } = useAuth();
   const location = useLocation();
@@ -106,40 +117,45 @@ export function EntryPage() {
     body = (
       <>
         <h2 className="ev-step-title">{t('entries.page.whatEntering')}</h2>
+        {!closed && entrySettings.entriesCloseAt && <p className="ev-closes">{t('entries.page.closesOn', { date: closingText(entrySettings.entriesCloseAt) })}</p>}
         {closed && <Notice tone="info" className="mb-3">{t('entries.page.closed')}</Notice>}
         {competition.sections.length === 0 && <p className="sp-note">{t('entries.page.noAgeGroups')}</p>}
-        {competition.sections.map((s) => (
-          <section key={s.id} aria-label={s.displayName}>
-            <h3 className="sp-sec">{displaySectionName(s.displayName)}</h3>
-            {!closed && placesLeftText(s) && <p className="sp-note !mt-0 !mb-1.5">{placesLeftText(s)}</p>}
-            <div className="sp-card">
-              {closed ? (
-                <div className="sp-row"><span className="sp-grow"><span className="sp-t1 !text-[var(--mg-muted)]">{t('entries.page.entriesClosed')}</span></span></div>
-              ) : entryOptions(s, sectionFull(s)).map((o) => (
-                <Link
-                  key={o.kind}
-                  className="sp-row"
-                  to={user ? chooseHref(s.id, o.kind) : '/login'}
-                  state={user ? { from: cameFrom } : { from: chooseHref(s.id, o.kind) }}
-                  onClick={() => setSent(null)}
-                >
-                  <span className="sp-grow"><span className="sp-t1">{o.label}</span>{o.sub && <span className="sp-t2">{o.sub}</span>}</span>
-                  <span className="ev-price">{feeText(o.priceMinor)}</span>
-                  <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))}
-        {atHome && <p className="sp-note">{t('entries.page.afterDraw')}</p>}
+        <div className="en-groups">
+          {competition.sections.map((s) => {
+            const places = closed ? null : placesLeftText(s);
+            return (
+              <section key={s.id} className="en-group" aria-label={s.displayName}>
+                <h3 className="en-head"><span className="en-name">{displaySectionName(s.displayName)}</span>{places && <small>{places}</small>}</h3>
+                <div className="en-list">
+                  {closed ? (
+                    <div className="en-row en-closed"><span className="en-main"><span className="en-label">{t('entries.page.entriesClosed')}</span></span></div>
+                  ) : entryOptions(s, sectionFull(s)).map((o) => (
+                    <Link
+                      key={o.kind}
+                      className="en-row"
+                      to={user ? chooseHref(s.id, o.kind) : '/login'}
+                      state={user ? { from: cameFrom } : { from: chooseHref(s.id, o.kind) }}
+                      onClick={() => setSent(null)}
+                    >
+                      <span className="en-main"><span className="en-label">{o.label}</span>{o.sub && <span className="en-sub">{o.sub}</span>}</span>
+                      <span className="en-price">{feeText(o.priceMinor)}</span>
+                      <ChevronRight aria-hidden="true" className="en-chev" strokeWidth={2.25} />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </>
     );
   }
 
   return (
-    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3">
+    <div className="rf-page mg-flat mx-auto flex w-full max-w-xl flex-col pb-4 pt-3">
       <h1 className="sr-only">{t('entries.page.srTitle', { competition: competition.name })}</h1>
-      <EntryStepper labels={labels} current={current} />
+      {/* As the competition's front page, the age groups lead; the steps appear once you start an entry. */}
+      {!(atHome && !section && !sent) && <EntryStepper labels={labels} current={current} />}
       {body}
     </div>
   );

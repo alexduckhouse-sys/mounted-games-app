@@ -48,6 +48,7 @@ export function basicsPayload(draft: CreatorDraft) {
     paymentDestination: draft.paymentDestination.trim() || null,
     termsText: draft.termsText.trim() || null,
     laneHatbands: hatbandsFor(draft),
+    isIndoor: Boolean(draft.isIndoor),
     startDate: start,
     endDate: hasEnd ? new Date(`${draft.endDate || draft.startDate}T${draft.endTime || '17:00'}`).toISOString() : null,
   };

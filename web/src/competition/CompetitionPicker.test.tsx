@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCopies';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
-import { CompetitionPicker } from './CompetitionPicker';
+import { CompetitionPicker, LiveText } from './CompetitionPicker';
 import { CurrentCompetitionProvider, useCurrentCompetition } from './CurrentCompetitionContext';
 import { canCachePublicApi } from '../offline/cachePolicy';
 const authState = vi.hoisted(() => ({ user: { id: 'example-member' } as { id: string } | null }));
@@ -89,17 +89,19 @@ describe('CompetitionPicker: the list', () => {
     expect(within(onToday).getByText('Today Cup')).toBeInTheDocument();
     expect(within(onToday).getByText('Ashdown · Sat 17 – Sun 18 Oct')).toBeInTheDocument();
     expect(within(onToday).getByText('LIVE')).toBeInTheDocument();
-    expect(within(onToday).getByText('Seniors · Heat 2 on now in Main arena')).toBeInTheDocument();
+    expect(within(onToday).getByText('Heat 2 on now')).toHaveClass('cp-live-heat');
+    expect(within(onToday).getByText('Seniors · Main arena')).toHaveClass('cp-live-place');
     expect(within(onToday).getByRole('button', { name: 'Open competition: Today Cup' })).toBeInTheDocument();
     const later = screen.getByRole('region', { name: 'Coming up' });
     expect(within(later).getAllByRole('button').map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
     expect(within(later).queryByText('Today Cup')).not.toBeInTheDocument();
   });
 
-  it('describes a live competition’s heat without an arena name or age group', async () => {
+  it('describes a live competition’s heat on one line when there is no arena name or age group', async () => {
     reply(page([{ ...today, live: { heatLabel: 'Heat 1' }, ageGroupCount: 1, location: null }]));
     renderPicker();
-    expect(await loaded('Heat 1 on now in the arena')).toBeInTheDocument();
+    expect(await loaded('Heat 1 on now')).toBeInTheDocument();
+    expect(document.querySelector('.cp-live-place')).toBeNull();
     expect(screen.getByText('Sat 17 – Sun 18 Oct')).toBeInTheDocument();
   });
 
@@ -111,27 +113,22 @@ describe('CompetitionPicker: the list', () => {
     expect(screen.getByText('Sat 17 – Sun 18 Oct')).toBeInTheDocument();
   });
 
-  it('shows a one-day competition with its venue, and a multi-day one with its dates', async () => {
+  it('keeps each row to its date, name and icon: no venue or end date, with the full dates for screen readers', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByText('Hillside')).toBeInTheDocument();
-    expect(screen.getByText('Sat 14 – Sun 15 Nov')).toBeInTheDocument();
+    expect(screen.queryByText(/Hillside/)).not.toBeInTheDocument();
+    expect(screen.getByText('Sat 14 – Sun 15 Nov')).toHaveClass('sr-only');
+    expect(screen.getByText('Sat 7 Nov')).toHaveClass('sr-only');
   });
 
-  it('shows the date for a one-day competition that has no venue', async () => {
-    reply(page([{ ...autumn, location: null }]));
-    renderPicker();
-    expect(await loaded('Sat 7 Nov')).toBeInTheDocument();
-  });
-
-  it('shows the flag for country competitions, nothing for the default icon, and uses a placeholder date when the start is unreadable', async () => {
+  it('shows every competition’s icon, the default chequered flag included, and uses a placeholder date when the start is unreadable', async () => {
     reply(page([festival, { ...autumn, startDate: 'whenever' }]));
     renderPicker();
     await loaded('Weekend Fest');
     const flag = screen.getByRole('img', { name: 'Ireland' });
     expect(flag).toHaveAttribute('title', 'Ireland');
     expect(flag.querySelector('img')).toHaveAttribute('src', '/flags/ie.png');
-    expect(screen.queryByRole('img', { name: 'Chequered flag' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Chequered flag' }).querySelector('svg[data-icon="flag"]')).toBeInTheDocument();
     expect(screen.getByText('–')).toBeInTheDocument();
   });
 
@@ -144,7 +141,7 @@ describe('CompetitionPicker: the list', () => {
     expect(screen.queryByRole('region', { name: 'On today' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: '2026' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Finished' })).not.toBeInTheDocument();
-    expect(screen.getByText('Sat 7 Nov 2026 · Hillside')).toBeInTheDocument();
+    expect(screen.getByText('Sat 7 Nov 2026')).toHaveClass('sr-only');
     expect(screen.queryByRole('link', { name: /Back to upcoming competitions/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Past competitions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Year|Location/ })).not.toBeInTheDocument();
@@ -213,6 +210,101 @@ describe('CompetitionPicker: choosing', () => {
   });
 });
 
+describe('CompetitionPicker: several events on today', () => {
+  const second: CompetitionPickerItem = {
+    id: 4, name: 'Ring Two Classic', startDate: '2026-10-17T09:00:00', endDate: '2026-10-17T17:00:00', icon: 'ie',
+    location: 'Elsewhere', live: { sectionName: 'Teams Juniors', heatLabel: 'Heat 4', arenaName: 'Ring 2' },
+  };
+  const quiet: CompetitionPickerItem = { id: 5, name: 'Quiet Meet', startDate: '2026-10-17T09:00:00', endDate: '2026-10-17T17:00:00', icon: 'flag', location: 'Lowfield', live: null };
+  const rowFor = (name: string) => screen.getByRole('button', { name: `Open competition: ${name}` });
+
+  it('keeps one event on today as the big card, with no compact rows', async () => {
+    renderPicker();
+    await loaded('Autumn Open');
+    const onToday = screen.getByRole('region', { name: 'On today' });
+    expect(onToday.querySelector('.cp-now')).not.toBeNull();
+    expect(onToday.querySelector('.cp-live-row')).toBeNull();
+    expect(within(onToday).getByText('LIVE')).toBeInTheDocument();
+  });
+
+  it('gives each live event a compact row: its name and one line, age group then heat, with a red dot and no visible LIVE word', async () => {
+    reply(page([today, second, autumn]));
+    renderPicker();
+    await loaded('Autumn Open');
+    const onToday = screen.getByRole('region', { name: 'On today' });
+    expect(onToday.querySelector('.cp-now')).toBeNull();
+    expect(onToday.querySelectorAll('.cp-live-row')).toHaveLength(2);
+    for (const [name, line] of [['Today Cup', 'Seniors · Heat 2'], ['Ring Two Classic', 'Juniors · Heat 4']] as const) {
+      const row = rowFor(name);
+      expect(within(row).getByText(name)).toBeInTheDocument();
+      // One line only: no venue, no dates, no arena, no "on now".
+      expect(row.querySelector('.cp-live-line')).toHaveTextContent(new RegExp(`^${line}$`));
+      expect(row.querySelectorAll('.cp-live-heat')).toHaveLength(1);
+      expect(row.querySelector('.cp-live-place')).toBeNull();
+      expect(row).not.toHaveTextContent(/Ashdown|Elsewhere|Main arena|Ring 2|Sat 17|Oct|on now/);
+      // The live state is a still red dot plus words for screen readers only.
+      expect(row.querySelector('.cp-live-dot')).toHaveAttribute('aria-hidden', 'true');
+      expect(within(row).getByText(/LIVE/)).toHaveClass('sr-only');
+      expect(row.querySelector('.mg-badge-live')).toBeNull();
+      expect(row).toHaveAccessibleDescription(new RegExp(`LIVE:.*${line}`));
+    }
+  });
+
+  it('shows a quiet event on today with its place and dates and the words On today, not a red dot', async () => {
+    reply(page([today, quiet]));
+    renderPicker();
+    await loaded('Quiet Meet');
+    const row = rowFor('Quiet Meet');
+    expect(row).toHaveTextContent('Lowfield · Sat 17 Oct');
+    expect(row.querySelector('.cp-live-dot')).toBeNull();
+    expect(row.querySelector('.cp-live-mark-quiet')).toHaveTextContent('On today');
+    expect(row.querySelector('.cp-live-line')).toBeNull();
+    expect(rowFor('Today Cup').querySelector('.cp-live-dot')).not.toBeNull();
+  });
+
+  it('falls back to what is known when a live row has no heat or no age group yet, never leaving a stray separator', async () => {
+    reply(page([
+      { ...today, live: { sectionName: 'Teams Seniors', heatLabel: '' } },
+      { ...second, live: { heatLabel: 'Heat 4' } },
+      { ...quiet, id: 6, name: 'Bare Live', live: { heatLabel: '' } },
+    ]));
+    renderPicker();
+    await loaded('Bare Live');
+    expect(rowFor('Today Cup').querySelector('.cp-live-line')).toHaveTextContent(/^Seniors$/);
+    expect(rowFor('Ring Two Classic').querySelector('.cp-live-line')).toHaveTextContent(/^Heat 4$/);
+    const bare = rowFor('Bare Live');
+    expect(bare.querySelector('.cp-live-line')).toHaveTextContent(/^$/);
+    // Still marked live for everyone.
+    expect(bare.querySelector('.cp-live-dot')).not.toBeNull();
+    for (const name of ['Today Cup', 'Ring Two Classic', 'Bare Live']) expect(rowFor(name).textContent).not.toMatch(/·\s*$|^\s*·|·\s*·/);
+  });
+
+  it('opens a live row exactly as the big card does: remembers it and goes to its page, marking it current', async () => {
+    reply(page([today, second]));
+    renderPicker();
+    await loaded('Ring Two Classic');
+    expect(rowFor('Ring Two Classic')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(rowFor('Ring Two Classic'));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/4|Ring Two Classic');
+    expect(rowFor('Ring Two Classic')).toHaveAttribute('aria-pressed', 'true');
+    expect(rowFor('Ring Two Classic')).toHaveClass('cp-row-current');
+    expect(rowFor('Today Cup')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(rowFor('Today Cup'));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/1|Today Cup');
+  });
+
+  it('starts loading a live row’s competition when it is pointed at or pressed, once', async () => {
+    reply(page([today, second]));
+    renderPicker();
+    await loaded('Ring Two Classic');
+    fireEvent.mouseEnter(rowFor('Ring Two Classic'));
+    fireEvent.pointerDown(rowFor('Ring Two Classic'));
+    fireEvent.pointerDown(rowFor('Today Cup'));
+    const warmed = get.mock.calls.map(([url]) => url).filter((url) => /^\/competitions\/\d+$/.test(String(url)));
+    expect(warmed).toEqual(['/competitions/4', '/competitions/1']);
+  });
+});
+
 describe('CompetitionPicker: no forget button', () => {
   const remember = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 2, name: 'Autumn Open' }))}; Path=/`; };
 
@@ -236,20 +328,13 @@ describe('CompetitionPicker: search and tags', () => {
     expect(screen.queryByRole('button', { name: /Archive filters/ })).not.toBeInTheDocument();
   });
 
-  it('tags a competition taking entries, and says nothing about a demo event', async () => {
+  it('says nothing about entries or demo events in the list', async () => {
     reply(page([{ ...autumn, entriesOpen: true }, { ...festival, isDemo: true }, { ...today, entriesOpen: true, isDemo: true }]));
     renderPicker();
     await loaded('Autumn Open');
     const later = screen.getByRole('region', { name: 'Coming up' });
-    const open = within(within(later).getByRole('button', { name: /Autumn Open/ })).getByText(/Entries open/);
-    expect(open).toHaveTextContent('· Entries open');
-    expect(open).not.toHaveClass('mg-tag');
-    expect(open).toHaveClass('text-[rgb(var(--mg-ok))]');
-    expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Demo event');
-    expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Entries open');
-    const onToday = screen.getByRole('region', { name: 'On today' });
-    expect(onToday).not.toHaveTextContent('Entries open');
-    expect(onToday).not.toHaveTextContent('Demo event');
+    expect(later).not.toHaveTextContent(/Entries open|Demo event/);
+    expect(screen.getByRole('region', { name: 'On today' })).not.toHaveTextContent(/Entries open|Demo event/);
   });
 
   it('filters the full archive on the server, resetting pagination and showing complete facets', async () => {
@@ -532,6 +617,22 @@ describe('CompetitionPicker: date order and flags', () => {
     const row = (await loaded('Weekend Fest')).closest('button') as HTMLElement;
     const flag = within(row).getByRole('img');
     expect(flag.parentElement?.parentElement).toBe(row);
-    expect(row.className).toContain('grid-cols-[44px_minmax(0,1fr)_40px_14px]');
+    expect(row).toHaveClass('cp-row');
+    expect(row.querySelector('.cp-icon')).toContainElement(flag);
+  });
+});
+
+describe('LiveText', () => {
+  it('crossfades a changed live line: the old words fade out, hidden from screen readers, then go', async () => {
+    const { container, rerender } = render(<LiveText heat="Heat 1 on now" place="Under 12 · Main Arena" />);
+    expect(container.querySelector('.cp-swap-out')).toBeNull();
+    expect(container.querySelector('.cp-swap-in')).toBeNull();
+    rerender(<LiveText heat="Heat 2 on now" place="Under 12 · Main Arena" />);
+    const old = container.querySelector('.cp-swap-out') as HTMLElement;
+    expect(old).toHaveTextContent('Heat 1');
+    expect(old).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('.cp-swap-in')).toHaveTextContent('Heat 2');
+    await waitFor(() => expect(container.querySelector('.cp-swap-out')).toBeNull());
+    expect(container).toHaveTextContent(/^Heat 2 on nowUnder 12 · Main Arena$/);
   });
 });

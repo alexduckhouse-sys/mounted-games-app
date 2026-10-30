@@ -93,6 +93,7 @@ Some organiser and site admin pages shipped without following this file (found 2
 - **Top bar (option C, 29 October 2026):** everything on a 4px grid with 16px side margins. 40px content row, 12px above and 8px below.
   - Logo: 40px rounded square (radius 12) with a thin inner ring.
   - Header icons (refresh, menu, edit, back) are unboxed, 15px, in a 32×40 box with a 44×48 tap area (`.mg-hdr-icon`). Refresh is pale, the rest white. This replaces the squircle menu button; the box was dropped on purpose.
+  - Refresh shows what happened (asked for by the owner, 30 October 2026): the arrow turns until the page has its answer (at least about 0.65s), then becomes a tick ("Updated" or "Up to date"), a no-signal icon ("No signal") or a cross ("Couldn’t refresh") for about 2 seconds, and turns back into the arrow. The words take the place of the time at the end of the subtitle. Reduced motion and Lite mode keep the icons and words but drop the turning and the ring (`components/RefreshButton.tsx`).
   - Page title is semibold 22px, subtitle medium 13px.
   - Age group selector: one 28px soft-filled bar with the name, a dot, the team count and a chevron, in sentence case.
 - **Footers:** no Back/Next footers except in the creator wizard, where Back / "Step N of 10" / Next sit in a bottom bar.
@@ -187,7 +188,7 @@ The owner reviewed each public page as "live capture beside a tidier version" on
     - race names are all 10.5px, medium weight, at 55°, in the same place in their lane; the running race is navy, not bolder;
     - faint dividers between races (none before the first) that fade out towards the top;
     - the header grows to fit the longest race name in the heat, so names aren't cut short (only the last two lanes stop at the card edge);
-    - team names 13.5px medium; alternate rows are shaded instead of ruled; thin faint lines between race columns;
+    - team names 13.5px medium; alternate rows are shaded, with a faint line between teams; thin faint lines between race columns;
     - three tints only: alternate rows, the running race column (pale blue) and the PTS column (pale navy);
     - an elimination is a muted red 0 (`--mg-zero`); DNS, DNF and R keep their letters; a race not run yet is a short faint bar;
     - PTS is right-aligned at the foot of the header;

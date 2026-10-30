@@ -1,0 +1,85 @@
+/* The toplist in the flat page language (theme/flat.css): rows on the page with hairlines, the place and points in
+   Barlow Condensed, team names wrapping onto a second line rather than cut off. A followed team, a tie and the
+   champions are tinted bands running to the screen edges, with no bar at the side. */
+.tl { --tl-line: rgb(var(--mg-heading) / .07); --tl-tie: rgb(var(--mg-heading) / .06); }
+.tl-list { display: flex; flex-direction: column; border-bottom: 1px solid var(--tl-line); }
+.tl-row { position: relative; display: flex; align-items: center; min-height: 48px; transition: background-color 250ms var(--mg-ease-out); }
+.tl-list > * + * { border-top: 1px solid var(--tl-line); }
+.tl-box { transition: background-color 120ms var(--mg-ease-out); display: flex; min-width: 0; min-height: 48px; flex: 1; align-items: center; gap: 12px; padding: 0 4px 0 0; text-align: left; color: inherit; text-decoration: none; }
+@media (hover: hover) { :is(a, button).tl-box:hover { background: rgb(var(--mg-subtle)); } }
+:is(a, button).tl-box:active { background: rgb(var(--mg-heading) / .06); }
+.tl-box:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+
+.tl-place { flex: none; width: 34px; font: 700 22px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.tl-ordinal { font-size: 19px; }
+/* Times: the planned start, wide enough for "14:05" so the heat names line up. */
+.tl-time { flex: none; min-width: 52px; font: 700 19px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.tl-name { font: 600 16px/1.3 var(--mg-font); letter-spacing: -.005em; overflow-wrap: break-word; text-wrap: pretty; }
+.tl-note { font: 500 13.5px/1.3 var(--mg-font); }
+.tl-points { flex: none; font: 700 22px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); transition: color 250ms var(--mg-ease-out); }
+/* No result yet: a short muted dash where the place goes and a quiet nought, so the team doesn't read as level on zero with
+   teams that raced and scored nothing. */
+.tl-place { transition: color 250ms var(--mg-ease-out); }
+.tl-place-none { font-size: 17px; font-weight: 600; color: rgb(var(--mg-dash)); }
+.tl-points-none { font-size: 18px; font-weight: 600; color: rgb(var(--mg-faint)); }
+.tl-place-in { animation: tl-place-in 260ms var(--mg-ease-out); }
+@keyframes tl-place-in { from { opacity: 0; transform: translateY(3px); } }
+.tl-faint { color: rgb(var(--mg-faint)); }
+.tl-muted, .tl-hc .tl-name { color: rgb(var(--mg-muted)); }
+.tl-lead { margin: 0; font: 500 15px/1.4 var(--mg-font); color: rgb(var(--mg-body)); }
+.tl-sub-heading { margin: 22px 0 2px; font: 600 17px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); }
+.tl-list + .tl-sub-heading { border-top: 0; }
+
+/* Before any result: one quiet line saying why there are no places. The list has no column names (owner, 29 Oct). */
+.tl-waiting { display: flex; align-items: center; gap: 8px; margin: 0; font: 500 14px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
+.tl-waiting-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; }
+
+/* Bands: followed, tied, champions. Tied teams share the same number on a soft navy band (the theme's heading colour,
+   so every theme gets its own); a hairline still parts
+   one tied team from the next. A followed team keeps its own tint and star, tied or not; no bar at the edge. */
+.tl-fav, .tl-tied, .tl-bleed { margin-inline: -16px; padding-inline: 16px; }
+.tl-tied { background: var(--tl-tie); }
+.tl-fav { background: var(--fl-follow); }
+/* A followed team that shares a place keeps the tie band: the star already says it is followed. */
+.tl-fav.tl-tied { background: var(--tl-tie); }
+.tl-list > :is(.tl-fav, .tl-tied, .tl-bleed) + *, .tl-list > * + :is(.tl-fav, .tl-tied, .tl-bleed) { border-top-color: transparent; }
+.tl-list > :is(.tl-tied, .tl-fav) + :is(.tl-tied, .tl-fav) { border-top-color: rgb(var(--mg-heading) / .07); }
+/* A banded row (followed or tied) runs past its tappable box to the screen edge, so hovering or pressing darkens the
+   whole row and leaves the box clear; painting the box alone left a pale middle with the band showing at each side. */
+.tl-row:is(.tl-fav, .tl-tied) > :is(a, button).tl-box { background: transparent; }
+@media (hover: hover) {
+  .tl-fav:has(> :is(a, button).tl-box:hover) { background: rgb(var(--mg-heading) / .07); }
+  .tl-tied:has(> :is(a, button).tl-box:hover) { background: rgb(var(--mg-heading) / .09); }
+}
+.tl-fav:has(> :is(a, button).tl-box:active) { background: rgb(var(--mg-heading) / .09); }
+.tl-tied:has(> :is(a, button).tl-box:active) { background: rgb(var(--mg-heading) / .11); }
+.tl-runoff-end { border-bottom: 1px dashed rgb(var(--mg-rule)); }
+
+/* "A Final cut-off": its name, then a thin red line out to the edge. */
+.tl-cut { display: flex; align-items: center; gap: 10px; padding: 9px 0 8px; color: rgb(var(--mg-red)); font: 600 12.5px/1 var(--mg-font); }
+.tl-list > .tl-cut, .tl-list > .tl-cut + * { border-top-color: transparent; }
+.tl-cut-label { flex: none; }
+.tl-cut-line { flex: 1; height: 1px; background: currentColor; opacity: .45; }
+
+/* Points per session: the same lines, headings in plain muted text. */
+.tl-table { border-bottom: 1px solid var(--tl-line); }
+.tl-table table { width: 100%; }
+.tl-thead { border-bottom: 1px solid rgb(var(--mg-heading) / .14); font: 600 13px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
+.tl-tr { position: relative; transition: background-color 120ms var(--mg-ease-out); }
+.tl-tr + .tl-tr { border-top: 1px solid var(--tl-line); }
+.tl-tr:active { background: rgb(var(--mg-heading) / .06); }
+.tl-fav-tr { background: var(--fl-follow); }
+/* Every row's place (and the # heading) sits 6px in, so the numbers line up and a followed row's tint has room. */
+.tl-table tr > :first-child { padding-left: 6px; }
+
+/* Finals: each final under its own heading. */
+.tl-finals { display: flex; flex-direction: column; }
+.tl-finals > .fl-heading:first-child { margin-top: 0; }
+
+/* A run-off still to race. */
+.tl-runoff { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.tl-runoff > div { display: flex; align-items: baseline; gap: 10px; }
+
+@media (min-width: 1024px) { .tl-fav, .tl-tied, .tl-bleed { margin-inline: 0; padding-inline: 12px 0; border-radius: 8px; } }
+@media (prefers-reduced-motion: reduce) { .tl-box, .tl-tr, .tl-row, .tl-place, .tl-points { transition: none; } .tl-place-in { animation: none; } }
+html[data-lite="true"] .tl-place-in { animation: none; }

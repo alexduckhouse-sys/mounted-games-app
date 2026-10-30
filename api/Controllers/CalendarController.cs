@@ -12,6 +12,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Security;
+using MountedGames.Api.Services;
 using MountedGames.Api.Services.Calendar;
 
 namespace MountedGames.Api.Controllers;
@@ -41,12 +42,16 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
         var c = await db.Competitions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (c is null) return NotFound();
 
-        var start = Utc(c.StartDate);
-        var allDay = start.TimeOfDay == TimeSpan.Zero && c.EndDate is { } endDay && Utc(endDay).TimeOfDay == TimeSpan.Zero;
+        var rawStart = Utc(c.StartDate);
+        var startIsDate = TryCalendarDate(rawStart, out var startDay);
+        var endDay = startDay;
+        var endIsDate = c.EndDate is null ? startIsDate : TryCalendarDate(Utc(c.EndDate.Value), out endDay);
+        var allDay = startIsDate && endIsDate && endDay >= startDay;
+        var start = allDay ? startDay : rawStart;
         var end = allDay
-            ? Utc(c.EndDate!.Value).Date.AddDays(1)
-            : c.EndDate is { } e && Utc(e) > start
-                ? (Utc(e).TimeOfDay == TimeSpan.Zero ? Utc(e).Date.AddHours(17) : Utc(e))
+            ? endDay.AddDays(1)
+            : c.EndDate is { } e
+                ? ((endIsDate ? UkTime.FromUk(endDay.AddHours(17)) : Utc(e)) is var candidate && candidate > start ? candidate : start.AddHours(8))
                 : start.AddHours(8);
         var link = SiteLink(site, $"/competitions/{c.Id}");
         var description = new StringBuilder();
@@ -217,6 +222,28 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
     private string? SiteLink(string? site, string path) => PublicSite.Resolve(configuration, site) is { } origin ? origin + path : null;
 
     private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Recognises a midnight date stored either as UTC midnight (<c>00:00:00Z</c>) or UK local midnight
+    /// (<c>00:00</c> in <c>Europe/London</c>, which is <c>23:00:00Z</c> the day before during BST) and
+    /// returns the corresponding calendar date in UTC.
+    /// </summary>
+    private static bool TryCalendarDate(DateTime utc, out DateTime calendarDate)
+    {
+        var uk = UkTime.ToUk(utc);
+        if (uk.TimeOfDay == TimeSpan.Zero)
+        {
+            calendarDate = DateTime.SpecifyKind(uk.Date, DateTimeKind.Utc);
+            return true;
+        }
+        if (utc.TimeOfDay == TimeSpan.Zero)
+        {
+            calendarDate = utc.Date;
+            return true;
+        }
+        calendarDate = default;
+        return false;
+    }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max].TrimEnd() + "…";
 

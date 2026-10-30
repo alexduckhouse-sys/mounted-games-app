@@ -1,7 +1,7 @@
 import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '../../components/Sheet';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
@@ -11,7 +11,9 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { CompetitionDetail, StandingRow } from '../../types';
 import type { FinalsBoundary } from '../../lib/tieBreak';
-import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
+import { buildToplist, finalLineups, sectionScoreVersion } from '../../lib/toplist';
+import { timetableRows } from '../../lib/timetableRows';
+import { computeTimings } from '../../lib/time';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { ToplistView, type ToplistViewTab } from './ToplistView';
 import { TackLeaderboard } from './TackLeaderboard';
@@ -31,6 +33,8 @@ import { useProvisionalState } from '../../hooks/useProvisionalState';
 import { useHeldFor } from '../../hooks/useHeldFor';
 import { getSectionProvisionalState } from '../../lib/provisionalResults';
 import { useT } from '../../i18n/LanguageContext';
+import { failedRefreshOutcome, refreshOutcomeFor, type RefreshHandler } from '../../lib/refreshOutcome';
+import { useRefreshWaiters } from '../../hooks/useRefreshWaiters';
 
 /** The three tabs of the age group page: the draw (Heats), the heat tables (Scores) and the Toplist. */
 export type SectionSubTab = 'draw' | 'scores' | 'toplist';
@@ -38,7 +42,7 @@ export type SectionSubTab = 'draw' | 'scores' | 'toplist';
 const NO_ROWS: StandingRow[] = [];
 const TOPLIST_VIEW_PREF_KEY = 'mg.prefs.toplistView';
 const DEFAULT_AGE_GROUP_PREF_KEY = 'mg.prefs.defaultAgeGroup';
-const VALID_TOPLIST_VIEWS = new Set<ToplistViewTab>(['finals', 'totals', 'sessions', 'heats']);
+const VALID_TOPLIST_VIEWS = new Set<ToplistViewTab>(['finals', 'totals', 'sessions', 'heats', 'lineups', 'times']);
 
 function readPreferredToplistView(): ToplistViewTab | null {
   try {
@@ -94,7 +98,7 @@ function defaultSectionId(competition: CompetitionDetail): number | null {
 }
 
 /** Puts the page's title and refresh button in the app header while the Scores or Toplist tab is showing. (The Heats tab's timetable sets its own.) */
-function TabHeader({ title, subtitle, refreshLabel, onRefresh }: { title: string; subtitle: string; refreshLabel: string; onRefresh: () => void }) {
+function TabHeader({ title, subtitle, refreshLabel, onRefresh }: { title: string; subtitle: string; refreshLabel: string; onRefresh: RefreshHandler }) {
   usePageHeader({ title, subtitle, onRefresh, refreshLabel });
   return null;
 }
@@ -187,6 +191,16 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const standings = !standingsError && currentResult ? currentResult.rows : savedStandings?.data ?? NO_ROWS;
   const standingsStale = currentResult ? currentResult.savedCopy || currentResult.source !== refreshSource : savedStandings != null;
   const standingsLoading = sectionId != null && !currentResult && !savedStandings && standings.length === 0;
+  // The toplist's refresh button hears how the next standings request went, and whether anything changed.
+  const toplistRefresh = useRefreshWaiters();
+  const shownStandings = useRef(standings);
+  useLayoutEffect(() => { shownStandings.current = standings; }, [standings]);
+  const refreshToplist = () => {
+    if (sectionId == null) return;
+    const answer = toplistRefresh.wait();
+    setRetry((n) => n + 1);
+    return answer;
+  };
   // Old standings are on screen for a moment on every refresh; only say so if it lasts half a minute.
   const showSavedNotice = useHeldFor(standingsStale, SAVED_STANDINGS_NOTICE_MS);
   // Whether this age group's finished results are still open to queries, held for a review, or official.
@@ -204,6 +218,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
         const local = fallback === null ? null : readSavedCopy<StandingRow[]>(key);
         const preferLocal = local != null && (fallback === 'unknown' || Date.parse(local.savedAt) >= (fallback as Date).getTime());
         const rows = preferLocal ? local.data : r.data;
+        if (toplistRefresh.pending()) toplistRefresh.settle(fallback !== null ? 'offline' : refreshOutcomeFor(shownStandings.current, r.data));
         setStandingsBySection((prev) => ({
           ...prev,
           [sectionId]: { source: refreshSource, rows, error: false, savedCopy: fallback !== null },
@@ -211,6 +226,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
       })
       .catch(() => {
         if (cancelled) return;
+        toplistRefresh.settle(failedRefreshOutcome());
         setStandingsBySection((prev) => {
           const existing = prev[sectionId];
           // A failed refresh keeps the list on screen rather than blanking it.
@@ -225,7 +241,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
         });
       });
     return () => { cancelled = true; };
-  }, [competition.id, sectionId, refreshSource, retry]);
+  }, [competition.id, sectionId, refreshSource, retry, toplistRefresh]);
 
   const section = competition.sections.find((s) => s.id === sectionId) ?? null;
   const sectionName = displaySectionName(section?.displayName);
@@ -237,12 +253,26 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     : list.sessionsDone === list.sessionsTotal ? (list.sessionsTotal === 1 ? t('competition.scoring.afterOne') : t('competition.scoring.afterAll', { n: list.sessionsTotal }))
     : list.sessionsDone > 0 ? t('competition.scoring.afterSome', { done: list.sessionsDone, total: list.sessionsTotal }) : null;
   const chooseSection = (id: number) => setSearchParams({ section: String(id) }, { replace: true });
+  const sectionSessions = useMemo(
+    () => competition.sessions
+      .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
+      .sort((a, b) => a.orderIndex - b.orderIndex),
+    [competition.sessions, sectionId],
+  );
+  // "Finals": the teams drawn into each final, names only. "Times": the age group's planned heat times, in time order.
+  const lineups = useMemo(() => finalLineups(competition.sessions, competition.teams, sectionId ?? -1), [competition.sessions, competition.teams, sectionId]);
+  const times = useMemo(() => {
+    const ids = new Set(sectionSessions.map((s) => s.id));
+    return timetableRows(competition.sessions, computeTimings(competition.sessions), true)
+      .filter((row) => ids.has(row.session.id))
+      .sort((a, b) => (a.scheduled?.getTime() ?? Infinity) - (b.scheduled?.getTime() ?? Infinity) || a.session.orderIndex - b.session.orderIndex || a.heatIndex - b.heatIndex);
+  }, [competition.sessions, sectionSessions]);
   const notices = (
     <>
       {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
       {showSavedNotice && <Notice tone="info">{t('competition.scoring.savedStandings')}</Notice>}
       {standingsError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { if (sectionId != null) setStandingsBySection((prev) => { const next = { ...prev }; delete next[sectionId]; return next; }); setRetry((n) => n + 1); }}>{t('competition.scoring.loadFailed')}</Notice>}
-      {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.scoring.noResults')}</p>}
+      {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && lineups.length === 0 && times.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.scoring.noResults')}</p>}
     </>
   );
   const sectionLabel = `${t('competition.scoring.toplist')}${sectionName ? `, ${sectionName}` : ''}`;
@@ -273,13 +303,6 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   // Show sheet. The age group page from the menu keeps its Heats · Scores · Toplist row.
   const showTabs = startOn !== 'toplist';
   const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} seamless={showTabs} onChange={chooseSection} />;
-  const sectionSessions = useMemo(
-    () => competition.sessions
-      .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
-      .sort((a, b) => a.orderIndex - b.orderIndex),
-    [competition.sessions, sectionId],
-  );
-
   if (sectionId == null) {
     const empty = (
       <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
@@ -307,7 +330,9 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
       </div>
     </div>
   );
-  const band = <>{ageGroups}{tabBar}</>;
+  // The navy band (age group, and the tabs where they show) stays pinned under the header as the page scrolls,
+  // so the age group can be changed from anywhere down a long toplist.
+  const band = (ageGroups || tabBar) ? <div className={rail ? '' : 'sticky top-[var(--mg-shell-h,0px)] z-20'}>{ageGroups}{tabBar}</div> : null;
 
   const scores = (
     <div className="flex flex-col gap-4 pt-3" role="region" aria-label={t('competition.scoring.heatScoresRegion')}>
@@ -329,12 +354,15 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   );
 
   const toplist = (
-    <section aria-label={sectionLabel} className="flex flex-col">
-      <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
-      {standings.length > 0 && provisional && <div className="pt-3"><ProvisionalBadge state={provisional} /></div>}
+    // One 12px gap above and between the notices, the provisional pill and the list, so the spaces never add up.
+    // The toplist leaves out the "Official" pill (official is the normal state); provisional and review warnings stay.
+    <section aria-label={sectionLabel} className="flex flex-col gap-3 pt-3">
+      <div className="flex flex-col gap-2.5 empty:hidden">{notices}</div>
+      {standings.length > 0 && provisional && provisional.status !== 'official' && <div><ProvisionalBadge state={provisional} /></div>}
       {/* The rows fade in over the placeholder they replace, rather than popping in. */}
-      {standings.length > 0 && <div key={sectionId} className="mg-settle"><ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={sectionSessions.some((s) => s.heats.length > 0) ? scores : undefined} /></div>}
-      {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
+      {/* Before any standings the planned times and drawn finals still show; the toplist itself waits for results. */}
+      {(standings.length > 0 || lineups.length > 0 || times.length > 0) && <div key={sectionId} className="mg-settle"><ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={sectionSessions.some((s) => s.heats.length > 0) ? scores : undefined} finalLineups={lineups} times={times} /></div>}
+      {sectionId != null && <div className="empty:hidden"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   );
   const board = subTab === 'draw' ? (
@@ -342,7 +370,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   ) : (
     <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
       {subTab === 'toplist'
-        ? <TabHeader title={t('competition.scoring.toplist')} subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel={t('competition.scoring.refreshToplist')} onRefresh={() => setRetry((n) => n + 1)} />
+        ? <TabHeader title={t('competition.scoring.toplist')} subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel={t('competition.scoring.refreshToplist')} onRefresh={refreshToplist} />
         : <TabHeader title={sectionName || t('competition.timetable.ageGroup')} subtitle={competition.name} refreshLabel={t('competition.scoring.refreshScores')} onRefresh={reload} />}
       {band}
       {subTab === 'toplist' ? (

@@ -248,4 +248,36 @@ public class StartingPointsTests : IClassFixture<ApiFactory>
 
         Assert.False(await db.StartingPoints.AnyAsync(p => p.Id == saved.Id));
     }
+
+    [Theory]
+    [InlineData("2026-07-17T23:00:00Z")] // UK midnight BST for 2026-07-18
+    [InlineData("2026-07-18T00:00:00Z")] // UTC midnight date-only anchor for 2026-07-18
+    public void OffsetMinutes_PreservesMorningWallClockAcrossBstAndUtcMidnightAnchors(string startIso)
+    {
+        var startDate = DateTime.Parse(startIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal);
+        var scheduledMorning = new DateTime(2026, 7, 18, 8, 0, 0, DateTimeKind.Utc); // 09:00 BST
+
+        var offset = MountedGames.Api.Services.EventTools.CompetitionSetup.OffsetMinutesFromStart(scheduledMorning, startDate);
+        Assert.Equal(9 * 60, offset);
+
+        // Applying to a winter GMT date (both 00:00Z and 00:00 GMT) yields 09:00 UTC.
+        var winterStart = new DateTime(2026, 12, 5, 0, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(
+            new DateTime(2026, 12, 5, 9, 0, 0, DateTimeKind.Utc),
+            MountedGames.Api.Services.EventTools.CompetitionSetup.ApplyOffsetMinutes(winterStart, offset));
+
+        // Applying to a summer BST date (whether anchored at 23:00Z or 00:00Z) yields 08:00 UTC (09:00 BST).
+        var summerUtcMidnight = new DateTime(2027, 7, 17, 0, 0, 0, DateTimeKind.Utc);
+        var summerBstMidnight = new DateTime(2027, 7, 16, 23, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(
+            new DateTime(2027, 7, 17, 8, 0, 0, DateTimeKind.Utc),
+            MountedGames.Api.Services.EventTools.CompetitionSetup.ApplyOffsetMinutes(summerUtcMidnight, offset));
+        Assert.Equal(
+            new DateTime(2027, 7, 17, 8, 0, 0, DateTimeKind.Utc),
+            MountedGames.Api.Services.EventTools.CompetitionSetup.ApplyOffsetMinutes(summerBstMidnight, offset));
+
+        // When both ScheduledStart and StartDate are 00:00:00Z on a BST date, offset is 0, not +60m.
+        var utcMidnight = new DateTime(2026, 7, 18, 0, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(0, MountedGames.Api.Services.EventTools.CompetitionSetup.OffsetMinutesFromStart(utcMidnight, utcMidnight));
+    }
 }

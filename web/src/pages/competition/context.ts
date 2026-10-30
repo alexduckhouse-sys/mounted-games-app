@@ -4,10 +4,12 @@ import type { CompetitionDetail, LiveStream, ChatMessage, Sponsor, StreamCommand
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 import type { PrizeGiving } from '../../lib/prizeGiving';
+import type { RefreshOutcome } from '../../lib/refreshOutcome';
 
 export interface CompetitionCtx {
   competition: CompetitionDetail;
-  reload: () => void;
+  /** Fetch the competition again; resolves with how it went once the answer is in. */
+  reload: () => void | Promise<RefreshOutcome>;
   streams: LiveStream[];
   streamTelemetry?: Record<number, StreamTelemetry>;
   lastStreamCommand?: StreamCommand | null;

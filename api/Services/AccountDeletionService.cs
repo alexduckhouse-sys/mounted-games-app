@@ -72,6 +72,11 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         await db.OverlayLooks.Where(l => l.OwnerUserId == id).ExecuteDeleteAsync(ct);
         await db.TeamSupporters.Where(s => s.UserId == id).ExecuteDeleteAsync(ct);
         await db.CompetitionCollaborators.Where(c => c.UserId == id).ExecuteDeleteAsync(ct);
+        await db.UserPayoutAccounts.Where(a => a.UserId == id).ExecuteDeleteAsync(ct);
+        await db.ClubPayoutAccounts.Where(a => a.UpdatedByUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.UpdatedByUserId, (string?)null), ct);
+        await db.UserPayoutAccounts.Where(a => a.UpdatedByUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.UpdatedByUserId, (string?)null), ct);
         // The rider roster holds other people's children; entries already made from it keep their own copy of the details.
         var riders = db.SavedRiders.Where(r => r.CreatedByUserId == id);
         // Detaching the roster must not undo a child's current surname privacy choice.

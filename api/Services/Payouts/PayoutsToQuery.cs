@@ -18,8 +18,45 @@ public static class PayoutsToQuery
         if (DecFormConfig.Parse(decFormConfigJson)?.PayoutClubId is { } pinnedClubId)
             return await db.PayoutsToForClubAsync(pinnedClubId, ct);
         if (string.IsNullOrEmpty(organiserUserId)) return null;
-        var clubId = await db.Users.AsNoTracking().Where(u => u.Id == organiserUserId).Select(u => u.ClubId).FirstOrDefaultAsync(ct);
-        return clubId is { } id ? await db.PayoutsToForClubAsync(id, ct) : null;
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == organiserUserId)
+            .Select(u => new { u.ClubId, u.FullName })
+            .FirstOrDefaultAsync(ct);
+        if (user is null) return null;
+        if (user.ClubId is { } id) return await db.PayoutsToForClubAsync(id, ct);
+
+        var userAccount = await db.UserPayoutAccounts.AsNoTracking()
+            .Where(a => a.UserId == organiserUserId)
+            .Select(a => new UserPayoutAccount
+            {
+                Status = a.Status,
+                LegalName = a.LegalName,
+                TradingName = a.TradingName,
+                AccountLast4 = a.AccountLast4,
+                IbanLast4 = a.IbanLast4,
+                StripeAccountId = a.StripeAccountId,
+                StripeChargesEnabled = a.StripeChargesEnabled,
+                StripePayoutsEnabled = a.StripePayoutsEnabled,
+                StripeDetailsSubmitted = a.StripeDetailsSubmitted,
+                ManualBacsReady = a.ManualBacsReady,
+            })
+            .FirstOrDefaultAsync(ct);
+        if (userAccount is null) return null;
+        var ready = userAccount.Status == PayoutStatus.Ready;
+        var displayName = !string.IsNullOrWhiteSpace(userAccount.TradingName)
+            ? userAccount.TradingName!
+            : !string.IsNullOrWhiteSpace(userAccount.LegalName)
+                ? userAccount.LegalName!
+                : user.FullName;
+        return new PayoutsToDto(
+            displayName,
+            ready ? PayoutRules.MaskedAccount(userAccount) : null,
+            ready,
+            StripeConnected: !string.IsNullOrEmpty(userAccount.StripeAccountId),
+            StripeChargesEnabled: userAccount.StripeChargesEnabled,
+            StripePayoutsEnabled: userAccount.StripePayoutsEnabled,
+            StripeDetailsSubmitted: userAccount.StripeDetailsSubmitted,
+            ManualBacsReady: userAccount.ManualBacsReady);
     }
 
     /// <summary>The same public summary for a club by id. Null when the club doesn't exist.</summary>
@@ -28,9 +65,27 @@ public static class PayoutsToQuery
         var clubName = await db.Clubs.AsNoTracking().Where(c => c.Id == id).Select(c => c.Name).FirstOrDefaultAsync(ct);
         if (clubName is null) return null;
         var account = await db.ClubPayoutAccounts.AsNoTracking().Where(a => a.ClubId == id)
-            .Select(a => new ClubPayoutAccount { Status = a.Status, AccountLast4 = a.AccountLast4, IbanLast4 = a.IbanLast4 })
+            .Select(a => new ClubPayoutAccount
+            {
+                Status = a.Status,
+                AccountLast4 = a.AccountLast4,
+                IbanLast4 = a.IbanLast4,
+                StripeAccountId = a.StripeAccountId,
+                StripeChargesEnabled = a.StripeChargesEnabled,
+                StripePayoutsEnabled = a.StripePayoutsEnabled,
+                StripeDetailsSubmitted = a.StripeDetailsSubmitted,
+                ManualBacsReady = a.ManualBacsReady,
+            })
             .FirstOrDefaultAsync(ct);
         var ready = account?.Status == PayoutStatus.Ready;
-        return new PayoutsToDto(clubName, ready ? PayoutRules.MaskedAccount(account!) : null, ready);
+        return new PayoutsToDto(
+            clubName,
+            ready ? PayoutRules.MaskedAccount(account!) : null,
+            ready,
+            StripeConnected: !string.IsNullOrEmpty(account?.StripeAccountId),
+            StripeChargesEnabled: account?.StripeChargesEnabled ?? false,
+            StripePayoutsEnabled: account?.StripePayoutsEnabled ?? false,
+            StripeDetailsSubmitted: account?.StripeDetailsSubmitted ?? false,
+            ManualBacsReady: account?.ManualBacsReady ?? false);
     }
 }
