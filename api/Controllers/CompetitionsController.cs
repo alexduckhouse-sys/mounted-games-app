@@ -182,6 +182,24 @@ public class CompetitionsController : ControllerBase
     private Task<bool> IsDemoCompetitionAsync(int competitionId) =>
         _db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo);
 
+    /// <summary>
+    /// Payment/bank details are shown only to the event's staff and to someone who has entered it, not to every
+    /// signed-in account (sign-up is open to anyone). Callers pass this only for a signed-in viewer.
+    /// </summary>
+    private async Task<bool> CanSeeBankDetailsAsync(int competitionId, CancellationToken ct)
+    {
+        if (await _db.CanManageAsync(User, competitionId, ct)) return true;
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return !string.IsNullOrEmpty(uid)
+            && await _db.SectionSignups.AnyAsync(s => s.Section!.CompetitionId == competitionId && s.UserId == uid, ct);
+    }
+
+    /// <summary>Only the event owner or a site admin, never an added competition collaborator.</summary>
+    private bool IsOwnerOrAdmin(string? ownerUserId) =>
+        User.IsInRole(Roles.Admin)
+        || (!string.IsNullOrEmpty(ownerUserId)
+            && ownerUserId == User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value);
+
     [HttpGet("{id:int}")]
     [AllowAnonymous]
     [PublicRead]
@@ -189,10 +207,11 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<CompetitionDetail>> Get(int id, CancellationToken ct = default)
     {
         var signedIn = User.Identity?.IsAuthenticated == true;
+        var canSeeBank = signedIn && await CanSeeBankDetailsAsync(id, ct);
         var snapshot = signedIn || _snapshots is null
-            ? await CompetitionDetailReader.LoadAsync(_db, id, signedIn, ct)
+            ? await CompetitionDetailReader.LoadAsync(_db, id, signedIn, canSeeBank, ct)
             : await _snapshots.ReadAsync(_db, id, true, "anonymous-detail",
-                (db, token) => CompetitionDetailReader.LoadAsync(db, id, false, token), ct, s => s.ValidUntil);
+                (db, token) => CompetitionDetailReader.LoadAsync(db, id, false, false, token), ct, s => s.ValidUntil);
         return snapshot.Value is { } detail ? detail : NotFound();
     }
 
@@ -208,10 +227,11 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<CompetitionDetail>> FirstView(int id, CancellationToken ct = default)
     {
         var signedIn = User.Identity?.IsAuthenticated == true;
+        var canSeeBank = signedIn && await CanSeeBankDetailsAsync(id, ct);
         var snapshot = signedIn || _snapshots is null
-            ? await CompetitionDetailReader.LoadAsync(_db, id, signedIn, ct, firstView: true)
+            ? await CompetitionDetailReader.LoadAsync(_db, id, signedIn, canSeeBank, ct, firstView: true)
             : await _snapshots.ReadAsync(_db, id, true, "anonymous-first-view",
-                (db, token) => CompetitionDetailReader.LoadAsync(db, id, false, token, firstView: true), ct, s => s.ValidUntil);
+                (db, token) => CompetitionDetailReader.LoadAsync(db, id, false, false, token, firstView: true), ct, s => s.ValidUntil);
         return snapshot.Value is { } detail ? detail : NotFound();
     }
 
@@ -372,6 +392,15 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Sections).Include(c => c.Teams).Include(c => c.Sessions)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (c is null) return NotFound();
+        // A collaborator may edit the event, but changing the payment details entrants are shown is owner/admin only.
+        if (!IsOwnerOrAdmin(c.CreatedByUserId))
+        {
+            var newDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
+            var changesDestination = newDestination != c.PaymentDestination;
+            var changesLink = req.PaymentLinkUrl is not null && paymentLinkUrl != c.PaymentLinkUrl;
+            if (changesDestination || changesLink)
+                return StatusCode(403, new { message = "Only the event owner or a site admin can change the payment details." });
+        }
         c.Name = req.Name;
         if (req.Icon is not null) c.Icon = req.Icon;
         c.Location = req.Location;
@@ -707,6 +736,10 @@ public class CompetitionsController : ControllerBase
             .Include(s => s.Sessions).ThenInclude(ss => ss.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
+
+        var ownerId = await _db.Competitions.Where(c => c.Id == id).Select(c => c.CreatedByUserId).FirstOrDefaultAsync();
+        if (!IsOwnerOrAdmin(ownerId))
+            return StatusCode(403, new { message = "Only the event owner or a site admin can delete a section." });
 
         if (await _db.Set<MountedGames.Api.Entities.Seasons.SeasonRound>().AnyAsync(r => r.CompetitionSectionId == sectionId))
             return Conflict(new { message = "This section can't be deleted because it is a round in a season. Remove it from the season first." });

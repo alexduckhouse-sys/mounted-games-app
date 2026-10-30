@@ -12,7 +12,7 @@ public static class CompetitionDetailReader
 {
     public sealed record Snapshot(CompetitionDetail? Value, DateTime? ValidUntil);
 
-    public static async Task<Snapshot> LoadAsync(AppDbContext db, int id, bool includePaymentDetails, CancellationToken ct, bool firstView = false)
+    public static async Task<Snapshot> LoadAsync(AppDbContext db, int id, bool includePaymentDetails, bool includeBankDetails, CancellationToken ct, bool firstView = false)
     {
         var c = await db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
         if (c is null) return new(null, null);
@@ -99,7 +99,8 @@ public static class CompetitionDetailReader
         return new(c.ToDto(sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(counts.GetValueOrDefault(s.Id))).ToList(),
             teams.OrderBy(t => t.DisplayName).Select(t => includePaymentDetails ? t.ToDto() : t.ToDto() with { TrainerUserId = null }).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(), isDemo: demo, payoutsTo: payout,
-            includePaymentDetails: includePaymentDetails, maxStables: capacity.MaxStables, maxHookups: capacity.MaxHookups,
+            includePaymentDetails: includePaymentDetails, includeBankDetails: includeBankDetails,
+            maxStables: capacity.MaxStables, maxHookups: capacity.MaxHookups,
             stablesRemaining: capacity.StablesRemaining, hookupsRemaining: capacity.HookupsRemaining), expiry);
     }
 }

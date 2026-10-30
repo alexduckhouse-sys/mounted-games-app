@@ -93,7 +93,7 @@ public class CompetitionDetailSnapshotTests(ApiFactory factory) : IClassFixture<
         var url = $"/api/competitions/{section.CompetitionId}";
         var first = await anon.GetFromJsonAsync<CompetitionDetail>(url);
         Assert.Equal(7, first!.StablesRemaining);
-        var snapshot = await factory.InDbAsync(db => CompetitionDetailReader.LoadAsync(db, section.CompetitionId, false, default));
+        var snapshot = await factory.InDbAsync(db => CompetitionDetailReader.LoadAsync(db, section.CompetitionId, false, false, default));
         Assert.Equal(expiry, snapshot.ValidUntil);
         var standingsVersion = await factory.InDbAsync(db => CompetitionSnapshotCache.VersionAsync(db, section.CompetitionId, false, default));
         await factory.InDbAsync(db => db.Set<SignupExtras>().Where(x => x.SignupId == signupId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsWithdrawn, true)));
