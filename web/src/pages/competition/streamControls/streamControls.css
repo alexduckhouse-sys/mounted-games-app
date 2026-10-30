@@ -132,9 +132,9 @@
 html[data-lite="true"] .sx-auto-count { animation-duration: var(--sx-count, 10s) !important; }
 .sx-broadcast { margin-top: 20px; border-top: 1px solid var(--mg-border, #dce1e8); padding: 16px 0; }
 .sx-broadcast summary { cursor: pointer; font-weight: 700; min-height: 44px; }
-.sx-broadcast-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
-.sx-broadcast-row select, .sx-broadcast-row input, .sx-broadcast-url input { min-height: 44px; font-size: 16px; border: 1px solid var(--mg-border, #dce1e8); border-radius: 8px; padding: 6px 10px; background: var(--mg-surface, white); color: inherit; max-width: 60%; }
-.sx-broadcast-row input { width: 90px; }
-.sx-broadcast-preview { width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--mg-border, #dce1e8); border-radius: 8px; }
+.sx-broadcast-preview { display: block; width: 100%; aspect-ratio: 16 / 9; margin-top: 12px; border: 1px solid var(--mg-border, #dce1e8); border-radius: 8px; }
 .sx-broadcast-url { display: block; margin: 12px 0; }
-.sx-broadcast-url input { display: block; width: 100%; max-width: none; margin-top: 6px; }
+.sx-broadcast-url input { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; min-height: 44px; font-size: 16px; border: 1px solid var(--mg-border, #dce1e8); border-radius: 8px; padding: 6px 10px; background: var(--mg-surface, white); color: inherit; }
+.sx-howto h3 { margin: 12px 0 4px; font: 700 15px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); }
+.sx-howto ol { margin: 0; padding-left: 20px; font: 400 14px/1.45 var(--mg-font); color: rgb(var(--mg-body)); }
+.sx-howto p { margin: 0; font: 400 14px/1.45 var(--mg-font); color: rgb(var(--mg-body)); }
