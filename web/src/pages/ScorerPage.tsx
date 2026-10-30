@@ -2,12 +2,15 @@ import { windDraftKey } from '../lib/windScoring';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useDialogFocus } from '../components/useDialogFocus';
-import { Camera, CloudOff, Eye, Film, Lock, Mic, MicOff, Pause, Play, RefreshCw, Square, Table2, Trophy, Video } from 'lucide-react';
+import { Camera, ChevronLeft, CloudOff, Eye, Film, Lock, Menu, Mic, MicOff, Pause, Play, RefreshCw, Square, Table2, Trophy, Video } from 'lucide-react';
 import { Notice } from '../components/Notice';
 import { PageProblem } from '../components/PageProblem';
 import { Sheet } from '../components/Sheet';
 import { QrPermissionScannerModal } from '../components/QrPermissionScannerModal';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
+import { OutboxTransfer } from '../components/OutboxTransfer';
+import { BackLink } from '../components/BackLink';
+import { NavigationDrawer } from '../components/NavigationDrawer';
 import { StreamControlStrip } from '../components/stream/StreamControlStrip';
 import { formatPoints } from '../lib/formatPoints';
 import { statusLetter } from '../lib/resultStatus';
@@ -34,6 +37,8 @@ import { useLiveHub } from '../live/useLiveHub';
 import { useReplayPreparation } from '../live/useReplayPreparation';
 import { ReplayPreparation } from '../components/stream/ReplayPreparation';
 import { CameraLockButtons } from '../components/stream/CameraLocks';
+import { HeatPickerBar, type HeatPickItem } from './competition/HeatViews';
+import { arenaOf, groupOf, heatBarLabel, heatStatus } from '../lib/heatChoices';
 import { SelectField } from '../components/SelectField';
 import type { Heat, LiveStream, LiveStreamsResponse, ScorerSession, Session, StreamQualityPreset } from '../types';
 
@@ -150,12 +155,13 @@ export function ScorerPage() {
   );
 
   return (
-    <main className="skin mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-3 p-3 pb-10 sm:p-5">
-      <header className="space-y-1 pt-2">
-        <p className="mg-meta">Scorer link</p>
-        <h1 className="mg-h1 mg-h1-sm">{session ? `${session.competitionName || 'Competition'} · ${session.arenaName}` : 'Score this arena'}</h1>
-        {session && <p className="mg-meta">Scoring as {session.label}</p>}
-      </header>
+    <div className="skin min-h-dvh">
+    <ScorerTopBar
+      title={session ? session.competitionName || 'Competition' : 'Score this arena'}
+      subtitle={session ? `${session.arenaName} · Scoring as ${session.label}` : undefined}
+      backTo={session ? `/competitions/${session.competitionId}` : '/events'}
+    />
+    <main className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-4 pb-10 pt-3 sm:p-5">
 
       {loading && !session && <p role="status" className="mg-card p-4">Loading the timetable…</p>}
 
@@ -183,10 +189,10 @@ export function ScorerPage() {
         ) : (
           <>
             {session.scope === 2 && <RemoteStreamControlBar session={session} />}
-            <ScoreOutboxPanel competitionId={session.competitionId} competitionName={session.competitionName} alwaysImport viaLink />
+            <ScoreOutboxPanel competitionId={session.competitionId} competitionName={session.competitionName} viaLink />
             {raceSessions.length === 0
               ? <p className="mg-card p-4">Nothing is timetabled for this arena yet. It will appear here once the organiser adds it.</p>
-              : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} canStream={session.scope === 2} />}
+              : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} canStream={session.scope === 2} competitionName={session.competitionName} />}
           </>
         )
       )}
@@ -209,6 +215,29 @@ export function ScorerPage() {
         }}
       />
     </main>
+    </div>
+  );
+}
+
+/** The same top bar as the rest of the app: back, the event and arena, and the menu. */
+function ScorerTopBar({ title, subtitle, backTo }: { title: string; subtitle?: string; backTo: string }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <>
+      <div className="sticky top-0 z-30">
+        <header className="mg-header">
+          <div className="mx-auto flex max-w-4xl items-center gap-2.5 py-1.5 pl-4 pr-3 sm:py-3">
+            <BackLink to={backTo} className="mg-nav-btn !px-0" aria-label="Back"><ChevronLeft className="h-5 w-5" /></BackLink>
+            <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
+              <h1 className="mg-display truncate text-[22px] font-bold leading-none">{title}</h1>
+              {subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{subtitle}</span>}
+            </div>
+            <button type="button" onClick={() => setMenuOpen(true)} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+          </div>
+        </header>
+      </div>
+      {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}
+    </>
   );
 }
 
@@ -686,7 +715,8 @@ function DimmedLock({ label, className, onUnlock, children }: { label: string; c
   );
 }
 
-function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; outbox: ReturnType<typeof useScoreOutbox>; canStream: boolean }) {
+function ArenaScoring({ sessions, outbox, canStream, competitionName }: { sessions: Session[]; outbox: ReturnType<typeof useScoreOutbox>; canStream: boolean; competitionName?: string }) {
+  const [importOpen, setImportOpen] = useState(false);
   const [chosenSessionId, setChosenSessionId] = useState<number | null>(null);
   const [chosenHeatId, setChosenHeatId] = useState<number | null>(null);
   const [chosenRaceId, setChosenRaceId] = useState<number | null>(null);
@@ -752,6 +782,21 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, viewHeats[heatIndex + 1] ?? null, qualifiersOf(session)) : null;
   // In a qualifier only the teams that go through to the final are placed; the rest score 1 point each.
   const qualifierCap = heat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
+
+  // One list for the whole arena: every heat of every session this link covers, in the order the parent sorted them.
+  const pickItems: HeatPickItem[] = sessions.flatMap((s) => s.heats
+    .slice()
+    .sort((x, y) => x.orderIndex - y.orderIndex)
+    .map((h, index) => {
+      const ref = { session: s, heat: h, index };
+      return {
+        key: `${s.id}:${h.id}`,
+        label: heatBarLabel(ref),
+        status: heatStatus(ref),
+        selected: s.id === session.id && h.id === heat?.id,
+        onSelect: () => choose({ session: s.id, heat: h.id }),
+      };
+    }));
 
   function choose(change: { session?: number; heat?: number; race?: number }) {
     setPostRaceRecap(null);
@@ -944,20 +989,6 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          aria-pressed={commentatorMode}
-          onClick={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
-          className={`mg-btn !min-h-11 !px-3 text-xs font-bold ${
-            commentatorMode ? 'mg-btn-primary' : 'mg-btn-secondary'
-          }`}
-        >
-          <Mic className="h-3.5 w-3.5" aria-hidden="true" />
-          {commentatorMode ? 'Commentator facts: ON' : 'Commentator facts: OFF'}
-        </button>
-      </div>
-
       {commentatorChoice === null && (
         <Sheet
           title="Show commentator facts while you score?"
@@ -974,28 +1005,13 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
         </Sheet>
       )}
 
-      {sessions.length > 1 && (
-        <label className="flex flex-col gap-1 text-sm font-semibold">Session
-          <select className="input min-h-11" value={session.id} onChange={(event) => choose({ session: Number(event.target.value) })}>
-            {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </label>
-      )}
       {heats.length === 0 && <p className="mg-card p-4">No heats in this session yet.</p>}
-      {heats.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Heats">
-          {heats.map((h, i) => (
-            <button
-              key={h.id}
-              role="tab"
-              aria-selected={h.id === heat?.id}
-              onClick={() => choose({ heat: h.id })}
-              className={`min-h-11 whitespace-nowrap rounded-md px-3 text-sm font-semibold ${h.id === heat?.id ? 'bg-brand-600 text-white' : heatIsComplete(h) ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}`}
-            >
-              {h.label ?? `Heat ${i + 1}`}
-            </button>
-          ))}
-        </div>
+      {pickItems.length > 0 && (
+        <HeatPickerBar
+          arena={arenaOf(session)}
+          label={heat ? heatBarLabel({ session, heat, index: Math.max(0, heatIndex) }) : groupOf(session)}
+          items={pickItems}
+        />
       )}
 
       {commentatorMode && viewHeat && (
@@ -1070,7 +1086,21 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           nextLanes={nextLanes}
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
           onCorrectionReason={(reason) => { if (activeRace) setReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
+          factsOn={commentatorMode}
+          onToggleFacts={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
+          toolLinks={[{ key: 'import', label: 'Import scores', sub: 'Bring in scores saved on another phone', onSelect: () => setImportOpen(true) }]}
         />
+      )}
+
+      {importOpen && viewHeat && (
+        <Sheet title="Import scores" onClose={() => setImportOpen(false)}>
+          {({ close }) => (
+            <>
+              <OutboxTransfer competitionId={session.competitionId} competitionName={competitionName} viaLink />
+              <div className="kit-acts"><button type="button" className="kit-pill" onClick={() => close()}>Close</button></div>
+            </>
+          )}
+        </Sheet>
       )}
 
       {postRaceRecap && (
