@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LazyImage } from './LazyImage';
 import { liteWrapper } from '../test/lite';
 
@@ -26,6 +26,14 @@ describe('LazyImage in normal mode', () => {
     const img = container.querySelector('img')!;
     fireEvent.error(img);
     expect(img).toHaveAttribute('data-state', 'failed');
+  });
+
+  it('tells the caller when the picture fails', () => {
+    const Normal = liteWrapper('off');
+    const onFailed = vi.fn();
+    const { container } = render(<Normal><LazyImage src={URL_A} alt="" onFailed={onFailed} /></Normal>);
+    fireEvent.error(container.querySelector('img')!);
+    expect(onFailed).toHaveBeenCalledTimes(1);
   });
 
   it('starts again when the address changes', () => {

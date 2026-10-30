@@ -589,6 +589,8 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .mg-wipe-words { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 20vh; }
 .mg-wipe-words strong { display: inline-flex; align-items: center; gap: .18em; font: 800 clamp(44px, 10vw, 128px)/1 var(--mg-font-display, var(--mg-font)); letter-spacing: -.02em; }
 .mg-wipe-words small { max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 clamp(14px, 1.6vw, 20px)/1.2 var(--mg-font); opacity: .8; }
+.mg-wipe-words .mg-wipe-sponsor-name { max-width: 70vw; text-align: center; overflow-wrap: anywhere; font-size: clamp(32px, 6vw, 72px); }
+.mg-wipe-logo { height: clamp(56px, 14vh, 120px); max-width: 60vw; min-width: 56px; padding: 6px 10px; border-radius: 12px; background: #fff; object-fit: contain; }
 .mg-wipe-dot { width: .32em; height: .32em; border-radius: 50%; background: rgb(var(--mg-red, 214 40 40)); }
 
 /* Re-sorting tables: a climbing row lifts while it slides, its name and points swell (see hooks/useRankMotion). */

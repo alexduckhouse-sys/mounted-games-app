@@ -238,6 +238,9 @@ describe('sponsor proof-of-value report & CSV', () => {
     expect(sponsorReportPlacementLabel('Results')).toBe('Standings');
     expect(sponsorReportPlacementLabel('Timetable')).toBe('Timetable');
     expect(sponsorReportPlacementLabel('SponsorPage')).toBe('Sponsor Page');
+    expect(sponsorReportPlacementLabel('Replays')).toBe('Live Stream Overlay');
+    expect(sponsorReportPlacementLabel(64)).toBe('Live Stream Overlay');
+    expect(sponsorReportPlacementLabels(64)).toEqual(['Live Stream Overlay']);
     expect(sponsorReportPlacementLabel(4)).toBe('Overview');
     expect(sponsorReportPlacementLabel(2)).toBe('Standings');
     expect(sponsorReportPlacementLabels(1 | 2 | 4 | 8 | 32)).toEqual([

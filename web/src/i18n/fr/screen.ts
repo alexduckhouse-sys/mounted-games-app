@@ -122,6 +122,7 @@ export const screen: AreaCatalogue<typeof en> = {
   'screen.sponsor.tierLabel': 'Sponsor {tier}',
   'screen.sponsor.one': 'Sponsor',
   'screen.wipe.replay': 'Rediffusion',
+  'screen.wipe.sponsor': 'Rediffusion offerte par',
   'screen.wipe.live': 'En direct',
 
   'screen.embed.view.standings': 'Classement',
