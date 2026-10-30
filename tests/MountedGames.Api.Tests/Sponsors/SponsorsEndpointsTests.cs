@@ -429,7 +429,7 @@ public class SponsorsEndpointsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 0, views = 1, seconds = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 3, views = 1, seconds = 0 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 64, views = 1, seconds = 0 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 128, views = 1, seconds = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 1, views = -1, seconds = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 1, views = 501, seconds = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(new { sponsorId = sponsor.Id, placement = 1, views = 1, seconds = 3601 })).StatusCode);

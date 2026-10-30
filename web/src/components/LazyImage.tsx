@@ -5,9 +5,10 @@ import { useLiteMode } from '../lite/LiteModeContext';
 /**
  * A picture from a web address. Normally it loads as it scrolls into view, with a soft block of colour
  * until it arrives. In lite mode it waits for a tap. Use `compact` for small thumbnails, where the
- * tap target shows only an icon. Give `className` the size and shape, as for an `<img>`.
+ * tap target shows only an icon. Give `className` the size and shape, as for an `<img>`. `onFailed` is called
+ * when the picture cannot be loaded, so a caller can show something else.
  */
-export function LazyImage({ src, alt, className = '', compact = false }: { src: string; alt: string; className?: string; compact?: boolean }) {
+export function LazyImage({ src, alt, className = '', compact = false, onFailed }: { src: string; alt: string; className?: string; compact?: boolean; onFailed?: () => void }) {
   const { lite } = useLiteMode();
   const [asked, setAsked] = useState<string | null>(null);
   const [state, setState] = useState<{ src: string; value: 'loaded' | 'failed' } | null>(null);
@@ -30,7 +31,7 @@ export function LazyImage({ src, alt, className = '', compact = false }: { src: 
       data-state={status}
       className={`mg-lazy-img ${className}`}
       onLoad={() => setState({ src, value: 'loaded' })}
-      onError={() => setState({ src, value: 'failed' })}
+      onError={() => { setState({ src, value: 'failed' }); onFailed?.(); }}
     />
   );
 }

@@ -42,7 +42,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   const [localAudioOnly, setLocalAudioOnly] = useState(false);
   const [activeReplay, setActiveReplay] = useState<SavedReplayClip | null>(null);
   const { look } = useOverlay();
-  const { wipe, layer: wipeLayer } = useReplayWipe(look.accent, look.background);
+  const { wipe, layer: wipeLayer } = useReplayWipe(look.accent, look.background, { sponsor: true });
   // Into a replay, or from one clip to another, the band sweeps over the change; closing sweeps back to live.
   const showReplay = (clip: SavedReplayClip) => wipe({ title: 'Replay', detail: clip.label }, () => setActiveReplay(clip));
   const backToLive = () => wipe({ title: 'Live' }, () => setActiveReplay(null));

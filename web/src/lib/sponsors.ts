@@ -23,6 +23,7 @@ export const SPONSOR_PLACEMENTS = [
   { key: 'Stream', placement: 8, label: 'Live video', description: 'A small logo over the video, any time.' },
   { key: 'BreakStream', placement: 16, label: 'Video breaks', description: 'Logo and name over the video during breaks and briefings.' },
   { key: 'SponsorPage', placement: 32, label: 'Sponsor page', description: 'The full list of sponsors.' },
+  { key: 'Replays', placement: 64, label: 'Before replays', description: 'Logo shown for a moment before each replay.' },
 ] as const;
 
 export type SponsorPlacementKey = (typeof SPONSOR_PLACEMENTS)[number]['key'];
@@ -141,7 +142,7 @@ export const SPONSOR_REPORT_PLACEMENTS = [
   { key: 'overview', label: 'Overview', mask: 4 },
   { key: 'standings', label: 'Standings', mask: 2 },
   { key: 'timetable', label: 'Timetable', mask: 1 },
-  { key: 'liveStreamOverlay', label: 'Live Stream Overlay', mask: 8 | 16 },
+  { key: 'liveStreamOverlay', label: 'Live Stream Overlay', mask: 8 | 16 | 64 },
   { key: 'sponsorPage', label: 'Sponsor Page', mask: 32 },
 ] as const;
 
@@ -157,7 +158,7 @@ export function sponsorReportPlacementLabel(placement: number | string): Sponsor
   if (norm === 'details' || norm === 'overview') return 'Overview';
   if (norm === 'results' || norm === 'standings') return 'Standings';
   if (norm === 'timetable') return 'Timetable';
-  if (norm === 'stream' || norm === 'breakstream' || norm === 'livestreamoverlay' || norm === 'live stream overlay' || norm === 'sponsorexposure') {
+  if (norm === 'stream' || norm === 'breakstream' || norm === 'replays' || norm === 'livestreamoverlay' || norm === 'live stream overlay' || norm === 'sponsorexposure') {
     return 'Live Stream Overlay';
   }
   if (norm === 'sponsorpage' || norm === 'sponsor page') return 'Sponsor Page';

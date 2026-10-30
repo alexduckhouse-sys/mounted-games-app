@@ -14,6 +14,8 @@ public enum SponsorPlacement
     BreakStream = 16,
     /// <summary>The competition's own sponsor page.</summary>
     SponsorPage = 32,
+    /// <summary>A logo and name shown on the viewer's screen for a moment before each replay starts.</summary>
+    Replays = 64,
 }
 
 public static class SponsorPlacements
