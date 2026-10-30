@@ -625,7 +625,7 @@ public class ClubPayoutsTests : IClassFixture<ClubPayoutsTests.StripePayoutsApiF
     // ---- Step 1: expanded club access, personal /api/me/payouts, Stripe Connect & webhooks ----
 
     [Fact]
-    public async Task ClubPayouts_AreOpenToApprovedClubTrainer_AndPinnedCompetitionOrganiserOrCollaborator()
+    public async Task ClubPayouts_AreOpenToApprovedClubTrainer_ButNotToCollaboratorsOrOrganisersWhoMovedClub()
     {
         var clubName = NewClubName();
         var (manager, _) = await _f.ApprovedManagerAsync(clubName);
@@ -641,7 +641,7 @@ public class ClubPayoutsTests : IClassFixture<ClubPayoutsTests.StripePayoutsApiF
         Assert.Equal(HttpStatusCode.OK, (await sameClubTrainer.GetAsync(Url(clubId))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await sameClubTrainer.PutAsJsonAsync(Url(clubId), Complete())).StatusCode);
 
-        // A trainer who moved away to another club, or a collaborator on a competition pinned to clubId, still has access.
+        // A collaborator on a competition pinned to clubId must not be able to change where the club's money goes.
         var (collabClient, collabAuth) = await _f.SignupAsync("Member", NewClubName());
         var compId = await _f.SeedCompetitionAsync(ownerUserId: sameClubTrainerAuth.User.Id);
         await _f.InDbAsync(async db =>
@@ -656,8 +656,22 @@ public class ClubPayoutsTests : IClassFixture<ClubPayoutsTests.StripePayoutsApiF
             await db.SaveChangesAsync();
         });
 
-        Assert.Equal(HttpStatusCode.OK, (await collabClient.GetAsync(Url(clubId))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await collabClient.GetAsync(Url(clubId))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await collabClient.PutAsJsonAsync(Url(clubId, "/bank"), UkBank())).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await collabClient.PostAsync(Url(clubId, "/stripe/onboard"), null)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await manager.GetAsync(Url(clubId))).StatusCode);
+
+        // The competition's creator loses access once they move to another club, though the competition still pays clubId.
+        var movedTo = await _f.SeedClubAsync(NewClubName());
+        await _f.InDbAsync(async db =>
+        {
+            var u = await db.Users.SingleAsync(x => x.Id == sameClubTrainerAuth.User.Id);
+            u.ClubId = movedTo;
+            await db.SaveChangesAsync();
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, (await sameClubTrainer.GetAsync(Url(clubId))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await sameClubTrainer.PutAsJsonAsync(Url(clubId, "/bank"), UkBank())).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await sameClubTrainer.GetAsync(Url(movedTo))).StatusCode);
     }
 
     [Fact]
