@@ -1,6 +1,8 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { chat, competition } from '../../test/factories';
@@ -8,11 +10,12 @@ import type { ChatMessage, Team } from '../../types';
 import { AnnouncementsPage } from './AnnouncementsPage';
 import { CompetitionContext } from './context';
 
+const state = vi.hoisted(() => ({ roles: ['Admin'] as string[] }));
 vi.mock('../../api', () => ({
   pinChatMessage: async (competitionId: number, messageId: number) => (await import('../../api')).api.post(`/competitions/${competitionId}/chat/${messageId}/pin`, {}),
   api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'admin', roles: ['Admin'] }, hasRole: (role: string) => role === 'Admin', canEdit: () => true }),
+  useAuth: () => ({ user: { id: 'admin', roles: state.roles }, hasRole: (role: string) => state.roles.includes(role), canEdit: () => true, canOrganise: () => false }),
 }));
 vi.mock('../../live/useLiveHub', () => ({ useLiveHub: () => ({ connected: true }) }));
 
@@ -20,14 +23,24 @@ let feed: ChatMessage[] = [];
 const at = (minutes: number) => new Date(Date.UTC(2026, 5, 1, 12, minutes)).toISOString();
 const team = { id: 1, trainerUserId: 'u1', displayName: 'Warwickshire Hunt A' } as Team;
 
-function mount() {
+function mount(path = '/competitions/1/announcements') {
   const value = { competition: competition({ teams: [team] }), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
-  return render(<MemoryRouter><CompetitionContext.Provider value={value}><AnnouncementsPage /></CompetitionContext.Provider></MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <CompetitionContext.Provider value={value}>
+        <Routes>
+          <Route path="/competitions/:id/announcements" element={<AnnouncementsPage />} />
+          <Route path="/competitions/:id/contact" element={<p>Contact page</p>} />
+        </Routes>
+      </CompetitionContext.Provider>
+    </MemoryRouter>,
+  );
 }
 
 describe('AnnouncementsPage', () => {
   beforeEach(() => {
     localStorage.clear();
+    state.roles = ['Admin'];
     feed = [
       chat(1, { body: 'Lunch at one', createdAt: at(1) }),
       chat(2, { body: 'Finals at four', createdAt: at(2) }),
@@ -39,8 +52,10 @@ describe('AnnouncementsPage', () => {
     vi.mocked(api.delete).mockReset().mockResolvedValue({ data: {} });
   });
 
-  it('shows pinned, the new box, sent without the pinned one, and messages', async () => {
+  it('shows pinned, sent without the pinned one and messages on one page, with the new box at the foot', async () => {
     mount();
+    expect(await screen.findByRole('heading', { name: 'Announcements' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).toBeNull();
     expect(await screen.findByRole('heading', { name: 'Pinned' })).toBeInTheDocument();
     const pinned = screen.getByRole('heading', { name: 'Pinned' }).parentElement!;
     expect(within(pinned).getByText('Finals at four')).toBeInTheDocument();
@@ -55,6 +70,22 @@ describe('AnnouncementsPage', () => {
     const link = screen.getByRole('link', { name: /Pat Rider · Warwickshire Hunt A/ });
     expect(link).toHaveAttribute('href', '/competitions/1/messages/u1');
     expect(within(link).getByLabelText('1 unread')).toBeInTheDocument();
+    const foot = screen.getByRole('region', { name: 'New announcement' });
+    expect(foot).toHaveClass('rf-foot');
+    expect(within(foot).getByPlaceholderText('Write an announcement')).toBeInTheDocument();
+  });
+
+  it('sends anyone who is not an organiser to the contact page instead', async () => {
+    state.roles = ['Member'];
+    mount();
+    expect(await screen.findByText('Contact page')).toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('gives the Pin pill a 44px tap target through an invisible hit area', () => {
+    const css = readFileSync(resolve(__dirname, 'announcements.css'), 'utf8');
+    expect(css).toMatch(/\.ann-pill::after\s*\{[^}]*inset:\s*-6px/);
+    expect(css).toMatch(/\.ann-pill\s*\{[^}]*min-height:\s*32px/);
   });
 
   it('hides Pinned and Sent when there is nothing to show, and says when there are no messages', async () => {
