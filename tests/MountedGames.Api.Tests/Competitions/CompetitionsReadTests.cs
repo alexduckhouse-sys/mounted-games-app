@@ -207,6 +207,46 @@ public class CompetitionsReadTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Get_ShowsPaymentDetailsOnlyToStaffAndEntrants()
+    {
+        var trainerId = await _f.TrainerIdAsync();
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: trainerId);
+        var section = await _f.SeedSectionAsync(comp);
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == comp);
+            c.PaymentDestination = "BACS 00-00-00 12345678";
+            c.PaymentLinkUrl = "https://pay.example/evt";
+            await db.SaveChangesAsync();
+        });
+        var (entrant, entrantAuth) = await _f.SignupAsync("Member");
+        await _f.InDbAsync(async db =>
+        {
+            db.SectionSignups.Add(new SectionSignup
+            { CompetitionSectionId = section, UserId = entrantAuth.User.Id, Status = SignupPaymentStatus.Pending });
+            await db.SaveChangesAsync();
+        });
+
+        // Anonymous and a signed-in account with no entry see no payment details...
+        var anon = await (await _f.CreateClient().GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Null(anon.PaymentDestination);
+        Assert.Null(anon.PaymentLinkUrl);
+        var (stranger, _) = await _f.SignupAsync("Member");
+        var strangerView = await (await stranger.GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Null(strangerView.PaymentDestination);
+        Assert.Null(strangerView.PaymentLinkUrl);
+        Assert.Equal(trainerId, strangerView.CreatedByUserId); // the account id is still shown to any signed-in viewer
+
+        // ...but an entrant and the owning staff do.
+        var entrantView = await (await entrant.GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal("BACS 00-00-00 12345678", entrantView.PaymentDestination);
+        Assert.NotNull(entrantView.PaymentLinkUrl);
+        var owner = await _f.TrainerAsync();
+        var ownerView = await (await owner.GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal("BACS 00-00-00 12345678", ownerView.PaymentDestination);
+    }
+
+    [Fact]
     public async Task Get_IncludesRaceResultsOrderedByPlacing_WithEliminatedLast()
     {
         var comp = await _f.SeedCompetitionAsync();

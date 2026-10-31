@@ -92,9 +92,10 @@ public class PassportVaccineTests(ApiFactory f) : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CompetitionDetail_RedactsPaymentDestinationForAnonymousCallers_AndIncludesItWhenAuthenticated()
+    public async Task CompetitionDetail_RedactsPaymentDestinationExceptForStaffAndEntrants()
     {
         var comp = await f.SeedCompetitionAsync();
+        var section = await f.SeedSectionAsync(comp);
         await f.WithDbAsync(async db =>
         {
             var c = await db.Competitions.FindAsync(comp);
@@ -108,7 +109,19 @@ public class PassportVaccineTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Null(anonDetail.PaymentDestination);
         Assert.Null(anonFirstView.PaymentDestination);
 
-        var (member, _) = await f.SignupAsync("Member");
+        // A signed-in account with no entry and no staff role still cannot see the payment details.
+        var (stranger, _) = await f.SignupAsync("Member");
+        var strangerDetail = await (await stranger.GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+        Assert.Null(strangerDetail.PaymentDestination);
+
+        // Someone with an entry in this event does.
+        var (member, memberAuth) = await f.SignupAsync("Member");
+        await f.WithDbAsync(async db =>
+        {
+            db.SectionSignups.Add(new SectionSignup
+            { CompetitionSectionId = section, UserId = memberAuth.User.Id, Status = SignupPaymentStatus.Pending });
+            await db.SaveChangesAsync();
+        });
         var authedDetail = await (await member.GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
         var authedFirstView = await (await member.GetAsync($"/api/competitions/{comp}/first-view")).ReadAsync<CompetitionDetail>();
         Assert.Equal("Sort code 12-34-56 Acc 12345678", authedDetail.PaymentDestination);
