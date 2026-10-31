@@ -37,6 +37,9 @@ export interface SavedReplayClip {
   resolutionLabel?: string;
   /** Where the clip came from: a race recording made when a race was scored, or an instant replay. Absent for other clips. */
   source?: 'race' | 'instant';
+  /** For a race recording: the race and heat it was kept for. Older recordings have neither and are matched by their label. */
+  raceId?: number;
+  heatId?: number;
   races?: ReadonlyArray<{
     id: number;
     name: string;
@@ -172,7 +175,7 @@ async function persistClip(clip: SavedReplayClip): Promise<void> {
         savedHighlight: clip.savedHighlight, trimStartSeconds: clip.trimStartSeconds,
         trimEndSeconds: clip.trimEndSeconds, followKeyframes: clip.followKeyframes,
         resolutionLabel: clip.resolutionLabel,
-        source: clip.source, races: clip.races, recordingSegments: clip.recordingSegments,
+        source: clip.source, raceId: clip.raceId, heatId: clip.heatId, races: clip.races, recordingSegments: clip.recordingSegments,
       });
     });
     clip.storageWarning = undefined;
@@ -297,11 +300,12 @@ export function subscribeSavedReplays(listener: () => void): () => void {
 }
 
 /** Remembers where a clip came from, so the Replay tab can list race recordings apart from the rest. */
-export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>, races?: SavedReplayClip['races']): SavedReplayClip | null {
+export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>, races?: SavedReplayClip['races'], race?: { raceId: number; heatId: number }): SavedReplayClip | null {
   const clip = savedReplays.find((c) => c.id === clipId);
   if (!clip) return null;
   clip.source = source;
   if (races) clip.races = races;
+  if (race) { clip.raceId = race.raceId; clip.heatId = race.heatId; }
   void persistClip(clip);
   notifyListeners();
   return clip;

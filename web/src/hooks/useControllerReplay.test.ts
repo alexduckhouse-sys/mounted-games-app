@@ -109,10 +109,18 @@ describe('useControllerReplay', () => {
     rerender({ competitionId: 1, arena: 'Main', streamId: 4, media, scoreCards: [card('old'), card('r2')] });
     await act(async () => {});
     expect(handle.saveClip).toHaveBeenCalledWith('Seniors · Heat 1 · Race r2', expect.objectContaining({ durationSeconds: RACE_RECORDING_SECONDS }));
-    expect(buffer.tagSavedReplay).toHaveBeenCalledWith('Seniors · Heat 1 · Race r2', 'race');
+    expect(buffer.tagSavedReplay).toHaveBeenCalledWith('Seniors · Heat 1 · Race r2', 'race', undefined, undefined);
     rerender({ competitionId: 1, arena: 'Main', streamId: 4, media, scoreCards: [card('old'), card('r2')] });
     await act(async () => {});
     expect(handle.saveClip).toHaveBeenCalledTimes(1);
+  });
+
+  it('notes which race and heat a recording is for, so the recordings page can place it', async () => {
+    const { rerender } = setup({ scoreCards: [card('old')] });
+    const scored = { ...card('r2'), card: { raceName: 'Race r2', raceId: 12, heatId: 3 } as never };
+    rerender({ competitionId: 1, arena: 'Main', streamId: 4, media, scoreCards: [card('old'), scored] });
+    await act(async () => {});
+    expect(buffer.tagSavedReplay).toHaveBeenCalledWith('Seniors · Heat 1 · Race r2', 'race', undefined, { raceId: 12, heatId: 3 });
   });
 
   it('records a race with no arena, and skips other arenas, an empty list and a missing video', async () => {
