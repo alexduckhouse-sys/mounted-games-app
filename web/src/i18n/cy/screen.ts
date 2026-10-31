@@ -122,6 +122,7 @@ export const screen: AreaCatalogue<typeof en> = {
   'screen.sponsor.tierLabel': 'Noddwr {tier}',
   'screen.sponsor.one': 'Noddwr',
   'screen.wipe.replay': 'Ailchwarae',
+  'screen.wipe.sponsor': 'Ailchwarae gyda chefnogaeth',
   'screen.wipe.live': 'Yn fyw',
 
   'screen.embed.view.standings': 'Safleoedd',

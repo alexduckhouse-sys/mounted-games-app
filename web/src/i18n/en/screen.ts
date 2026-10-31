@@ -126,6 +126,7 @@ export const screen = {
   'screen.sponsor.tierLabel': '{tier} sponsor',
   'screen.sponsor.one': 'Sponsor',
   'screen.wipe.replay': 'Replay',
+  'screen.wipe.sponsor': 'Replay brought to you by',
   'screen.wipe.live': 'Live',
 
   // Embeds (/embed/...)

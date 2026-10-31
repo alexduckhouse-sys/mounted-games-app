@@ -148,7 +148,7 @@ public class DrawUndoPlannerSponsorPrintTests : IClassFixture<ApiFactory>
                 "Baileys Horse Feeds",
                 "https://baileys.example",
                 SponsorTier.Headline,
-                SponsorPlacement.Details | SponsorPlacement.Results | SponsorPlacement.Stream | SponsorPlacement.SponsorPage,
+                SponsorPlacement.Details | SponsorPlacement.Results | SponsorPlacement.Stream | SponsorPlacement.SponsorPage | SponsorPlacement.Replays,
                 true,
                 null,
                 null))).ReadAsync<SponsorAdminDto>();
@@ -162,6 +162,7 @@ public class DrawUndoPlannerSponsorPrintTests : IClassFixture<ApiFactory>
                 new SponsorExposureItem(created.Id, SponsorPlacement.Stream, 25, 3600),
                 new SponsorExposureItem(created.Id, SponsorPlacement.BreakStream, 20, 65),
                 new SponsorExposureItem(created.Id, SponsorPlacement.SponsorPage, 15, 0),
+                new SponsorExposureItem(created.Id, SponsorPlacement.Replays, 10, 0),
             ]));
         Assert.Equal(HttpStatusCode.NoContent, exposureResp.StatusCode);
 
@@ -169,7 +170,7 @@ public class DrawUndoPlannerSponsorPrintTests : IClassFixture<ApiFactory>
             $"/api/competitions/{arena.CompetitionId}/sponsor-stats")).ReadAsync<SponsorValueReportDto>();
 
         Assert.Equal(arena.CompetitionId, report.CompetitionId);
-        Assert.Equal(260, report.TotalViews);
+        Assert.Equal(270, report.TotalViews);
         Assert.Equal(3665, report.TotalSeconds);
         Assert.Equal("1h 1m 5s", report.FormattedTotalOnScreenTime);
         Assert.Single(report.Sponsors);
@@ -181,7 +182,7 @@ public class DrawUndoPlannerSponsorPrintTests : IClassFixture<ApiFactory>
         Assert.Equal("1h 1m 5s", item.FormattedOnScreenTime);
 
         var streamPlacement = item.Placements.Single(p => p.Label == "Live Stream Overlay");
-        Assert.Equal(45, streamPlacement.Views);
+        Assert.Equal(55, streamPlacement.Views);
         Assert.Equal(3665, streamPlacement.Seconds);
         Assert.Equal("1h 1m 5s", streamPlacement.FormattedOnScreenTime);
     }

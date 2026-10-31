@@ -142,8 +142,8 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
                 BuildPlacementStat("standings", "Standings", ViewsFor(SponsorPlacement.Results), SecondsFor(SponsorPlacement.Results)),
                 BuildPlacementStat("timetable", "Timetable", ViewsFor(SponsorPlacement.Timetable), SecondsFor(SponsorPlacement.Timetable)),
                 BuildPlacementStat("liveStreamOverlay", "Live Stream Overlay",
-                    ViewsFor(SponsorPlacement.Stream | SponsorPlacement.BreakStream),
-                    SecondsFor(SponsorPlacement.Stream | SponsorPlacement.BreakStream)),
+                    ViewsFor(SponsorPlacement.Stream | SponsorPlacement.BreakStream | SponsorPlacement.Replays),
+                    SecondsFor(SponsorPlacement.Stream | SponsorPlacement.BreakStream | SponsorPlacement.Replays)),
                 BuildPlacementStat("sponsorPage", "Sponsor Page", ViewsFor(SponsorPlacement.SponsorPage), SecondsFor(SponsorPlacement.SponsorPage)),
             };
 
@@ -190,7 +190,7 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
         if ((showOn & SponsorPlacement.Details) != 0) labels.Add("Overview");
         if ((showOn & SponsorPlacement.Results) != 0) labels.Add("Standings");
         if ((showOn & SponsorPlacement.Timetable) != 0) labels.Add("Timetable");
-        if ((showOn & (SponsorPlacement.Stream | SponsorPlacement.BreakStream)) != 0) labels.Add("Live Stream Overlay");
+        if ((showOn & (SponsorPlacement.Stream | SponsorPlacement.BreakStream | SponsorPlacement.Replays)) != 0) labels.Add("Live Stream Overlay");
         if ((showOn & SponsorPlacement.SponsorPage) != 0) labels.Add("Sponsor Page");
         return labels;
     }
