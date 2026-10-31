@@ -201,6 +201,13 @@ builder.Services.AddHttpClient("geocoding", c =>
     c.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddScoped<GeocodingService>();
+// Nearest A&E for the emergency poster: OpenStreetMap's Overpass API asks callers to identify themselves.
+builder.Services.AddHttpClient(MountedGames.Api.Services.Geo.NearestEmergencyService.HttpClientName, c =>
+{
+    c.Timeout = MountedGames.Api.Services.Geo.NearestEmergencyService.Timeout;
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("MountedGamesApp/1.0 (+https://mounted-games-app.vercel.app)");
+});
+builder.Services.AddScoped<MountedGames.Api.Services.Geo.NearestEmergencyService>();
 builder.Services.AddHttpClient(MountedGames.Api.Services.Payouts.StripeConnectService.HttpClientName, c =>
     {
         c.BaseAddress = new Uri("https://api.stripe.com/");

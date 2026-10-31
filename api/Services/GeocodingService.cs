@@ -61,6 +61,34 @@ public class GeocodingService
         }
     }
 
+    /// <summary>
+    /// The postcode nearest a point (postcodes.io reverse lookup), or null when there is none or the lookup fails.
+    /// Coordinates are passed in the query, so only a public place (a hospital) should be looked up this way.
+    /// </summary>
+    public async Task<string?> ReversePostcodeAsync(double latitude, double longitude, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = string.Create(CultureInfo.InvariantCulture,
+                $"https://api.postcodes.io/postcodes?lon={longitude:0.#####}&lat={latitude:0.#####}&limit=1");
+            using var resp = await _http.GetAsync(url, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array) return null;
+            foreach (var item in result.EnumerateArray())
+                if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("postcode", out var pc) && pc.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(pc.GetString()))
+                    return pc.GetString()!.Trim().ToUpperInvariant();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning("Reverse postcode lookup failed ({Reason})", ex.GetType().Name);
+            return null;
+        }
+    }
+
     public async Task<(double? lat, double? lon)> ResolveWhat3WordsAsync(string words, CancellationToken ct = default)
     {
         var key = _config["What3Words:ApiKey"];
