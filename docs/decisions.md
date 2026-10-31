@@ -1,5 +1,12 @@
 # Project decisions
 
+## 2026-10-30: Nest cameras are out; simulcast and GoPro/DJI cameras are specced, not built
+- Why: the owner asked for simulcast to YouTube/Facebook (c11) and GoPro/DJI cameras (c14), and said only the basic app needs to work for the 31 October weekend.
+- Decision: Nest cameras are out. Google Device Access costs $5, gives only short sessions and has no open live feed. The rest is a spec only: `docs/specs/simulcast-and-external-cameras.md`.
+- Finding: phone WebRTC cameras can't be restreamed by Cloudflare (Stream's WebRTC input has no simulcast, and the SFU has no RTMP output). RTMP cameras can, via Stream Live Inputs, but they play back over HLS, not the sub-second SFU player. Scores on YouTube need OBS with the existing overlay page.
+- Rejected: a server-side compositor now (the Vercel API can't run long ffmpeg jobs); YouTube/Facebook API sign-in to set Unlisted for the organiser.
+- Files: `docs/specs/simulcast-and-external-cameras.md`.
+
 ## 2026-10-29: Efficiency caches use committed database revisions
 - Why: standings and anonymous competition snapshots need reusable work across bursts of readers without retaining stale scores after a write, rollback or missed cross-instance message.
 - Approach: per-competition database revisions change in the same transaction through versioned triggers; bounded local snapshots check the committed revision, coalesce fills in their own scope and return independent DTOs. Signed-in detail reads bypass the shared cache.
