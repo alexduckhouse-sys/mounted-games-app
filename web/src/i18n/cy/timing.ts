@@ -1,9 +1,7 @@
 import type { Message } from '../messages';
 
 export const timing = {
-  "timing.start": "Dechrau ras · baner i lawr",
   "timing.skip": "Sgorio heb amser dechrau",
-  "timing.storage": "Ni ellid cadw’r amser dechrau ar y ffôn hwn. Rhyddhewch le neu sgoriwch heb amser dechrau.",
   "timing.jump": "Neidio i ras",
   "timing.choose": "Dewiswch ras",
   "timing.estimated": " (amcangyfrif)",

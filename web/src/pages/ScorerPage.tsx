@@ -1055,7 +1055,6 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           qualifiers={qualifiersOf(session)}
           pending={shown}
           canScore
-          viaScorerLink
           queued={outbox}
           onClickTeam={clickTeam}
           onToggleElim={toggleElim}
