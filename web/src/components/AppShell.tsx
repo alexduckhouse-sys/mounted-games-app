@@ -62,7 +62,7 @@ function Shell({ width }: { width: PageWidth }) {
   const choosingCompetition = ['/', '/events', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   const filmingMode = /\/competitions\/\d+\/broadcast\/?$/.test(location.pathname);
-  // The full-screen scoring screen asks for no app header and no ticker dock (it has its own back button and fits one screen).
+  // The scoring screen asks for no ticker dock, so the lanes and Save fit one screen.
   const chromeHidden = useChromeHidden();
   const onLiveFeed = /\/competitions\/\d+\/chat\/?$/.test(location.pathname);
   // No ticker over a message composer, or behind the creator wizard's Back / Next footer.
@@ -101,11 +101,11 @@ function Shell({ width }: { width: PageWidth }) {
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
     observer?.observe(bar);
     return () => observer?.disconnect();
-  }, [filmingMode, chromeHidden]);
+  }, [filmingMode]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      {!filmingMode && !chromeHidden && (
+      {!filmingMode && (
       <div ref={barRef} className="sticky top-0 z-30">
         <header className="mg-header">
           {compactBar ? (

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 interface ScreenChromeState {
-  /** True while a page has asked for the app header and the ticker dock to be left out (the full-screen scoring screen). */
+  /** True while a page has asked for the ticker dock to be left out (the scoring screen). */
   hidden: boolean;
   hide: (owner: symbol) => void;
   show: (owner: symbol) => void;
@@ -17,14 +17,14 @@ export function ScreenChromeProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-/** Whether a page has asked for the app header and ticker dock to be hidden. False outside the app shell. */
+/** Whether a page has asked for the ticker dock to be hidden. False outside the app shell. */
 // The provider and its hooks deliberately share this context module.
 // eslint-disable-next-line react-refresh/only-export-components
 export function useChromeHidden(): boolean {
   return useContext(Ctx)?.hidden ?? false;
 }
 
-/** Hides the app header and the ticker dock for as long as `active` is true. Does nothing outside the app shell. */
+/** Hides the ticker dock for as long as `active` is true. Does nothing outside the app shell. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useHideChrome(active: boolean) {
   const context = useContext(Ctx);

@@ -173,6 +173,8 @@ html[data-lite="true"] .sc-hold { animation-duration: 350ms !important; }
   margin: 0 4px 0 0;
   box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.14);
 }
+/* The band runs the full height of the card, into its rounded corners (the row clips it to its radius). */
+.sc-main-btn > .sc-band { margin-block: -4px; }
 .sc-row-out .sc-name {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
@@ -541,6 +543,8 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 /* Scoring fills the screen: the lanes stretch, the tools and Save sit just above the bottom tabs. */
 .sc-fit .sc-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .sc-fit .sc-row { flex: 1 1 0; min-height: 44px; max-height: 84px; }
+/* A squeezed row keeps the name centred: the button shrinks with it rather than overflowing the card. */
+.sc-fit .sc-main-btn { min-height: 0; }
 .sc-fit .sc-bottom { margin-top: auto; padding-top: 10px; }
 body:has(.sc-fit) main.skin { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 .sc-bottom-saved { display: flex; flex-direction: row; gap: 8px; align-items: center; }

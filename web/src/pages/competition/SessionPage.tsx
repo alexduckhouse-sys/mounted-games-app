@@ -9,6 +9,7 @@ import { ArenaHelpSheet } from './ArenaHelpSheet';
 import { setHeatEntryBibOverride } from '../../lib/heatBibOverride';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { useHideChrome } from '../../components/ScreenChrome';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { stripInternalSessionNotes } from '../../lib/gateCheck';
 import { ConfirmOfficialButton } from '../../components/ProvisionalStatus';
 import { useProvisionalState } from '../../hooks/useProvisionalState';
@@ -252,8 +253,10 @@ function SessionScoring() {
   const activeHeat = orderedHeats.find((h) => h.id === activeHeatId) ?? null;
   // Keep the screen on while staff are scoring a heat.
   useWakeLock(Boolean(session && activeHeat && view === 'score' && canManage(competition)));
-  // The scoring screen has its own back button, and no app header or ticker above it.
+  // Staff get the app's top bar (back to Scoring, and the menu) but no ticker dock, so the lanes and Save fit one screen.
   useHideChrome(canManage(competition));
+  const scoringBack = `/competitions/${competition.id}/scoring${session?.competitionSectionId != null ? `?section=${session.competitionSectionId}` : ''}`;
+  usePageHeader(session && canManage(competition) ? { title: session.name, subtitle: competition.name, backTo: scoringBack, backLabel: 'Back to scoring' } : null);
 
   const orderedRaces = useMemo(
     () => (activeHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
@@ -694,7 +697,8 @@ function SessionScoring() {
 
   return (
     <div className="space-y-3 pt-3">
-      {canOrganise(competition) && <div className="flex flex-wrap gap-2"><CallUpStrip compact competitionId={competition.id} sessions={competition.sessions} arenaName={session.arenaName ?? ''} /><SubstitutionRequests compact competitionId={competition.id} canDecide onChanged={reload} /></div>}
+      {/* Nothing sits above the heat picker but a substitution waiting for a decision; ring calls live under ⋯. */}
+      {canOrganise(competition) && <SubstitutionRequests compact competitionId={competition.id} canDecide onChanged={reload} />}
       {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
       {/* The Official / Provisional mark is not shown on the heat page; organisers keep the Confirm official button. */}
@@ -709,7 +713,6 @@ function SessionScoring() {
           {activeRef && (
             <div>
               <HeatPickerBar
-                back={{ to: `/competitions/${competition.id}/scoring${sectionQuery}`, label: 'Back to scoring' }}
                 arena={arena}
                 label={heatBarLabel(activeRef)}
                 items={[
@@ -902,6 +905,7 @@ function SessionScoring() {
               ]}
               heatTools={(
                 <div className="mt-4 space-y-3 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+                  {canOrganise(competition) && <CallUpStrip compact competitionId={competition.id} sessions={competition.sessions} arenaName={session.arenaName ?? ''} />}
                   <OutboxTransfer competitionId={competition.id} competitionName={competition.name} viaLink={false} />
                   <SessionSharePrint competition={competition} session={session} />
                   <div className="flex flex-wrap items-center gap-3">
