@@ -28,6 +28,7 @@ import { heatName, nextHeats } from '../../lib/following';
 import { computeTeamStats } from '../../lib/teamStats';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
+import { matchTeamProfile } from './teamProfileMatch';
 import { clubLabel } from '../../lib/clubName';
 import { blockLabelText, blockNoteText } from '../../lib/toplistText';
 
@@ -84,9 +85,7 @@ export function CompetitionTeamPage() {
     api.get<TeamProfile[]>('/team-profiles')
       .then((r) => {
         if (cancelled || !Array.isArray(r.data)) return;
-        const found = r.data.find(
-          (p) => p.clubId === team.clubId && (p.displayName.toLowerCase() === team.displayName.toLowerCase() || (p.suffix && p.suffix.toLowerCase() === team.suffix.toLowerCase())),
-        ) ?? r.data.find((p) => p.clubId === team.clubId) ?? null;
+        const found = matchTeamProfile(r.data, team);
         setMatchedProfile(found);
         if (found) {
           api.get<TeamProfileHistory>(`/team-profiles/${found.id}/history`)

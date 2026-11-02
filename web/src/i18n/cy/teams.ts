@@ -315,6 +315,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.stats.totalPoints': 'Cyfanswm pwyntiau',
   'teams.stats.finalsReached': 'Rowndiau terfynol a gyrhaeddwyd',
   'teams.stats.noFinals': 'Dim',
+  'teams.stats.pastStats': 'Gweld ystadegau {name} o ddigwyddiadau cynharach',
   'teams.stats.eachRace': 'Pob ras',
   'teams.stats.raceAverage': '{race} · {average} ar gyfartaledd',
   'teams.stats.runsLine': { other: '{count} rhediad · gorau {best} · {points} pwynt i gyd' },

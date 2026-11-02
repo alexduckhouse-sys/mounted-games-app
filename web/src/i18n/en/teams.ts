@@ -314,6 +314,7 @@ export const teams = {
   'teams.stats.totalPoints': 'Total points',
   'teams.stats.finalsReached': 'Finals reached',
   'teams.stats.noFinals': 'None',
+  'teams.stats.pastStats': 'See {name}’s stats from earlier events',
   'teams.stats.eachRace': 'Each race',
   'teams.stats.raceAverage': '{race} · {average} avg',
   'teams.stats.runsLine': { one: '{count} run · best {best} · {points} pts in total', other: '{count} runs · best {best} · {points} pts in total' },

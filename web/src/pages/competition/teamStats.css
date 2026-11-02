@@ -54,3 +54,10 @@
 .tp-fact dd b { font: 700 22px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
 .tp-fact dd small { font: 500 13px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 .tp-note { margin: 8px 0 0; font: 500 15px/1.45 var(--mg-font); color: rgb(var(--mg-body)); }
+
+/* Before the team has raced: one flat row to its club profile's stats from earlier events. */
+.ts-past { display: flex; align-items: center; gap: 8px; min-height: 48px; margin-top: 16px; padding: 0 4px 0 0; border-top: 1px solid var(--fl-line); border-bottom: 1px solid var(--fl-line); font: 700 16px/1.3 var(--mg-font); color: rgb(var(--mg-heading)); text-decoration: none; }
+.ts-past svg { color: rgb(var(--mg-faint)); }
+.ts-past:hover { background: rgb(var(--mg-subtle)); }
+.ts-past:active { background: var(--fl-press); }
+.ts-past:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }

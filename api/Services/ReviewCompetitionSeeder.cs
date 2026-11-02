@@ -60,13 +60,9 @@ public static class ReviewCompetitionSeeder
         "Demo Windmill Open", "Demo World Festival", "Demo Valley Finals", "Demo Lakeside Games",
     };
 
-    private static readonly string[] TeamClubs =
-    {
-        "Central Warwickshire", "North Warwickshire", "Atherstone", "Rockwood Harriers",
-        "Oakley Hunt West", "Mid Glamorgan", "Berwyn & Dee", "Lancashire",
-        "Lothian & Borders", "Devon Daredevils", "Dorset", "Leicester Forest",
-        "Monmouthshire", "Cheshire", "Staffordshire", "Cotswold",
-    };
+    // Teams come from the history seeder's demo clubs, so each links to a club team profile with past results. A section
+    // with more teams than clubs gives the first clubs a second team, named "B".
+    private static IReadOnlyList<(string Name, string Short, string Region)> TeamClubs => HistorySeeder.DemoClubs;
 
     private static DateTime RoundDownTo5Minutes(DateTime t)
         => new(t.Year, t.Month, t.Day, t.Hour, t.Minute / 5 * 5, 0, DateTimeKind.Utc);
@@ -94,7 +90,7 @@ public static class ReviewCompetitionSeeder
             var eventIndex = -1;
             // Each team belongs to its real club (found by name, made once), not to a per-event host club.
             var clubsByName = new Dictionary<string, Club>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (name, icon, location, region, offset) in events)
+            foreach (var (name, icon, location, _, offset) in events)
             {
                 eventIndex++;
                 var existingId = await db.Competitions.Where(c => c.Name == name).Select(c => (int?)c.Id).FirstOrDefaultAsync();
@@ -168,18 +164,20 @@ public static class ReviewCompetitionSeeder
                     competition.Sections.Add(section);
                     var teams = Enumerable.Range(1, teamCount).Select(teamNumber =>
                     {
-                        var teamClub = TeamClubs[(teamNumber - 1) % TeamClubs.Length];
-                        if (!clubsByName.TryGetValue(teamClub, out var club))
+                        var teamClub = TeamClubs[(teamNumber - 1) % TeamClubs.Count];
+                        var round = (teamNumber - 1) / TeamClubs.Count;
+                        if (!clubsByName.TryGetValue(teamClub.Name, out var club))
                         {
-                            club = db.Clubs.SingleOrDefault(c => c.Name == teamClub) ?? new Club { Name = teamClub, Region = region };
-                            clubsByName[teamClub] = club;
+                            club = db.Clubs.FirstOrDefault(c => c.Name == teamClub.Name) ?? new Club { Name = teamClub.Name, Region = teamClub.Region };
+                            clubsByName[teamClub.Name] = club;
                         }
+                        var teamName = ageGroup == "Seniors" ? teamClub.Short : $"{teamClub.Short} {ageGroup}";
                         return new Team
                         {
                             Competition = competition,
                             Section = section,
                             Club = club,
-                            DisplayName = ageGroup == "Seniors" ? teamClub : $"{teamClub} {ageGroup}",
+                            DisplayName = round == 0 ? teamName : $"{teamName} {(char)('A' + round)}",
                             Suffix = teamNumber.ToString(),
                             BibColour = BibColours[(teamNumber - 1) % BibColours.Length],
                         };

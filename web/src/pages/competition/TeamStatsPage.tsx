@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { RunGraph, type GraphRun } from '../../components/RunGraph';
 import { ScoreFlash } from '../../components/ScoreFlash';
@@ -14,7 +14,10 @@ import { resultStatusLabel } from '../../lib/resultStatusText';
 import { displaySectionName } from '../../lib/section';
 import { computeTeamStats, type RaceRun, type RaceStat } from '../../lib/teamStats';
 import { buildToplist } from '../../lib/toplist';
+import { api } from '../../api';
+import type { TeamProfile } from '../seasons/teamProfileTypes';
 import { useCompetition } from './context';
+import { matchTeamProfile } from './teamProfileMatch';
 import './teamStats.css';
 
 
@@ -46,6 +49,16 @@ export function TeamStatsPage() {
     const list = buildToplist([], competition.sessions, competition.teams, team.competitionSectionId, null);
     return list.finals.filter((group) => group.rows.some((item) => item.teamId === team.id)).map((group) => group.label);
   }, [competition.sessions, competition.teams, team]);
+  // Before the team has raced here, point to its club profile's stats from earlier events, if there is one.
+  const [pastProfile, setPastProfile] = useState<TeamProfile | null>(null);
+  useEffect(() => {
+    if (!team || stats) return;
+    let cancelled = false;
+    api.get<TeamProfile[]>('/team-profiles')
+      .then((r) => { if (!cancelled && Array.isArray(r.data)) setPastProfile(matchTeamProfile(r.data, team)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [team, stats]);
   const nextState = team ? nextHeats(competition, new Set([team.id])).get(team.id) : undefined;
 
   const subtitle = [team?.displayName, sectionLabel].filter(Boolean).join(' · ');
@@ -90,7 +103,15 @@ export function TeamStatsPage() {
   return (
     <div className="mg-flat tp ts mx-auto w-full max-w-3xl">
       {!stats ? (
-        <p className="tp-note">{t('teams.team.statsLater', { name: team.displayName })}</p>
+        <>
+          <p className="tp-note">{t('teams.team.statsLater', { name: team.displayName })}</p>
+          {pastProfile && (
+            <Link to={`/team-profiles/${pastProfile.id}/stats`} className="ts-past">
+              <span className="fl-grow">{t('teams.stats.pastStats', { name: pastProfile.displayName })}</span>
+              <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0" />
+            </Link>
+          )}
+        </>
       ) : (
         <>
           <section aria-label={t('teams.stats.summary')} className="ts-summary">

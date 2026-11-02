@@ -318,3 +318,7 @@
 - Unchanged: names. `RiderNames.Display(..., viewer.SeesFullNames)` and `UseInitialOnly` are as before: site admins see full names, everyone else sees what each rider chose, and a rider who asked for initials only is not findable by surname. No referee's note is read.
 - Supersedes the 2026-10-26 entry above where it says riders, ponies and clubs still need a sign-in.
 - Files: `api/Services/Stats/StatsService.cs`, `api/Controllers/StatsController.cs`, `api/Dtos/StatsDtos.cs`, tests in `tests/MountedGames.Api.Tests/Stats/StatsEndpointsTests.cs`; the web sign-in prompt and its `site.stats.signIn*` keys are gone.
+
+## 2026-11-02: West Mids Pairs removed, production reseeded with demo data
+- The owner asked for fresh demo data on production with West Mids Pairs left out, superseding the 28 October note above. Competition 44 and its teams and results were deleted by hand (Neon backup branch `backup-before-reseed-20261102` taken first); the real accounts were kept. The review events and the history set were seeded on top. The importer (`CompetitionFileImport`) stays, but no seed includes that event.
+- Demo teams in the review events are entered by the history seeder's clubs so every team links to a club profile, and the history seed stocks every demo event's shop (PR #360).
