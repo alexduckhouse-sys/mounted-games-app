@@ -122,13 +122,14 @@ public sealed class StreamingApiFactory : ApiFactory
 
     public Task<LiveStream> StreamAsync(int id) => this.WithDbAsync(db => db.LiveStreams.AsNoTracking().SingleAsync(s => s.Id == id));
 
-    public async Task<HubConnection> ConnectAsync(int? competition = null, string? ip = null, bool trustedIp = true)
+    public async Task<HubConnection> ConnectAsync(int? competition = null, string? ip = null, bool trustedIp = true, string? token = null)
     {
         CreateClient();
         var connection = new HubConnectionBuilder().WithUrl(new Uri(Server.BaseAddress, "/hubs/live"), o =>
         {
             if (ip is not null) o.Headers[TestIpStartupFilter.Header] = ip;
             if (!trustedIp) o.Headers[TestIpStartupFilter.UntrustedHeader] = "1";
+            if (token is not null) o.AccessTokenProvider = () => Task.FromResult<string?>(token);
             o.HttpMessageHandlerFactory = _ => Server.CreateHandler();
             o.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
         }).Build();

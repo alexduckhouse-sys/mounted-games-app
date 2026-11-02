@@ -280,7 +280,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     onProtestsChanged: announceProtestsChanged,
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
-    onStreamTelemetry: (t) => setStreamTelemetry((cur) => ({ ...cur, [t.streamId]: t })),
+    // Staff get the full telemetry on their own channel and spectators a health-only subset; merge so the
+    // producer desk keeps battery/zoom even when a spectator-subset message for the same stream arrives.
+    onStreamTelemetry: (t) => setStreamTelemetry((cur) => ({ ...cur, [t.streamId]: { ...cur[t.streamId], ...t } })),
     onStreamCommand: (c) => setLastStreamCommand(c),
     onOverlayUpdated: overlayState.onOverlayUpdated,
     onSponsorControl: sponsorFeed.onSponsorControl,

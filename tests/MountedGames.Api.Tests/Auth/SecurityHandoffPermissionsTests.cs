@@ -116,11 +116,10 @@ public class SecurityHandoffPermissionsTests(ApiFactory f) : IClassFixture<ApiFa
     }
 
     [Fact]
-    public async Task CollaboratorsCanManageSectionsAndSupporterCodesOnlyInTheirEvent()
+    public async Task CollaboratorsManageSupporterCodesButOnlyTheOwnerDeletesASection()
     {
         var (staff, _, competition) = await CollaboratorAsync();
-        var section = await f.SeedSectionAsync(competition);
-        var team = await f.SeedTeamAsync(competition, section, await f.SeedClubAsync());
+        var team = await f.SeedTeamAsync(competition, await f.SeedSectionAsync(competition), await f.SeedClubAsync());
         var other = await f.SeedCompetitionAsync();
         var otherSection = await f.SeedSectionAsync(other);
         var otherTeam = await f.SeedTeamAsync(other, otherSection, await f.SeedClubAsync());
@@ -129,8 +128,11 @@ public class SecurityHandoffPermissionsTests(ApiFactory f) : IClassFixture<ApiFa
         Assert.Equal(HttpStatusCode.NoContent, (await staff.DeleteAsync($"/api/teams/{team}/supporter-key")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsync($"/api/teams/{otherTeam}/supporter-key", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await staff.DeleteAsync($"/api/competitions/{other}/sections/{otherSection}")).StatusCode);
+        // Deleting a section is owner/admin only: a collaborator is refused, the owning trainer is not.
         var emptySection = await f.SeedSectionAsync(competition);
-        Assert.Equal(HttpStatusCode.NoContent, (await staff.DeleteAsync($"/api/competitions/{competition}/sections/{emptySection}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.DeleteAsync($"/api/competitions/{competition}/sections/{emptySection}")).StatusCode);
+        var owner = await f.TrainerAsync();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync($"/api/competitions/{competition}/sections/{emptySection}")).StatusCode);
     }
 
     [Fact]

@@ -149,8 +149,26 @@ public class LiveBroadcaster : ILiveBroadcaster
     public Task SponsorControl(int competitionId, SponsorControlDto control)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("sponsorControl", control);
 
-    public Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry)
-        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamTelemetry", telemetry);
+    public async Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry)
+    {
+        // Spectators get only stream-health fields (frame rate, signal, mute). The publisher's device state
+        // (battery, zoom, bitrate, wind filter, quality) is sent to the competition's staff only.
+        await _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamTelemetry", new
+        {
+            streamId = telemetry.StreamId,
+            arenaName = telemetry.ArenaName,
+            fps = telemetry.Fps,
+            signal = telemetry.Signal,
+            audioMuted = telemetry.AudioMuted,
+            updatedAt = telemetry.UpdatedAt,
+        });
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var managerIds = await db.ManagerIdsAsync(competitionId);
+        var groups = managerIds.Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
+        if (groups.Length > 0)
+            await _hub.Clients.Groups(groups).SendAsync("streamTelemetry", telemetry);
+    }
 
     public Task StreamCommand(int competitionId, StreamCommandDto command)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamCommand", command);

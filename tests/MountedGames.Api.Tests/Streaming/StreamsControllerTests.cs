@@ -400,4 +400,47 @@ public class StreamsControllerTests : IClassFixture<StreamingApiFactory>
         var badCmd = await streamLinkClient.PostAsJsonAsync(Path(competition, attempt.StreamId, "/command"), new StreamCommandRequest("selfDestruct", "1"));
         Assert.Equal(HttpStatusCode.BadRequest, badCmd.StatusCode);
     }
+
+    [Fact]
+    public async Task HeartbeatTelemetry_SendsHealthToSpectators_ButDeviceStateOnlyToStaff()
+    {
+        var ownerAuth = await _f.LoginAsync(TestClients.TrainerEmail, TestClients.TrainerPassword);
+        using var owner = _f.WithToken(ownerAuth.Token);
+        var competition = await _f.SeedCompetitionAsync(ownerUserId: ownerAuth.User.Id);
+        var attempt = await _f.StartAsync(owner, competition, "Main Arena");
+
+        await using var spectator = await _f.ConnectAsync(competition);
+        await using var staff = await _f.ConnectAsync(competition, token: ownerAuth.Token);
+
+        var staffFull = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        staff.On<JsonElement>("streamTelemetry", p =>
+        {
+            if (p.TryGetProperty("batteryLevel", out var b) && b.ValueKind == JsonValueKind.Number) staffFull.TrySetResult(p);
+        });
+        var spectatorEvents = new List<JsonElement>();
+        spectator.On<JsonElement>("streamTelemetry", p => { lock (spectatorEvents) spectatorEvents.Add(p); });
+
+        var hb = await owner.PostAsJsonAsync(Path(competition, attempt.StreamId, "/heartbeat"), new StreamTelemetryRequest(
+            BatteryLevel: 0.82, BatteryCharging: true, Zoom: 2.0, MaxZoom: 4.0, Fps: 30, BitrateKbps: 2450,
+            Signal: "good", AudioMuted: true, WindFilter: true, QualityPreset: "720p", CaptureResolution: "3840x2160"));
+        Assert.Equal(HttpStatusCode.NoContent, hb.StatusCode);
+
+        // Staff get the publisher's full device state.
+        var full = await staffFull.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.Equal(0.82, full.GetProperty("batteryLevel").GetDouble());
+        Assert.Equal(2.0, full.GetProperty("zoom").GetDouble());
+
+        // Spectators only ever get stream health (frame rate, signal), never battery or zoom.
+        await Task.Delay(500);
+        List<JsonElement> seen;
+        lock (spectatorEvents) seen = spectatorEvents.ToList();
+        Assert.NotEmpty(seen);
+        Assert.All(seen, p =>
+        {
+            Assert.Equal(30, p.GetProperty("fps").GetInt32());
+            Assert.Equal("good", p.GetProperty("signal").GetString());
+            Assert.False(p.TryGetProperty("batteryLevel", out var b) && b.ValueKind == JsonValueKind.Number);
+            Assert.False(p.TryGetProperty("zoom", out var z) && z.ValueKind == JsonValueKind.Number);
+        });
+    }
 }
