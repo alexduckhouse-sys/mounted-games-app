@@ -60,6 +60,8 @@ Multi-model audit reports live in `audits/antigravity/`, `audits/claude/`, and `
 | `specs/stream-controls-backend.md` | Server spec for Stream controls (`Overlay · Auto · Replay · Camera`): auto rules, stored race recordings, viewer renderers |
 | `specs/simulcast-and-external-cameras.md` | Proposal (30 October 2026): simulcast to YouTube/Facebook, GoPro/DJI RTMP cameras, OBS route, safeguarding, cost and open questions. Spec only |
 | `specs/event-platform.md` | Scope for seasons, event tools, shops and operations |
+| `specs/before-the-day-hub-and-duty-wizard.md` | Before the day hub on `/operations` (#293) and the per-heat duties wizard (#289, #299) |
+| `specs/stream-recordings.md` | Proposed: keeping live streams to watch later (YouTube links first) |
 | `designs/*.html` & `designs/*-handoff.md` | Self-contained HTML design previews and handoff notes; open `.html` files in a browser rather than reading markup |
 
 ## Elsewhere
