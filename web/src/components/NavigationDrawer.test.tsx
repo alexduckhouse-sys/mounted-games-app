@@ -228,7 +228,7 @@ describe('NavigationDrawer: On the day', () => {
     mount({ competition: true, roles: ['Trainer'], meta: { createdByUserId: 'u1' } });
     const day = screen.getByRole('navigation', { name: 'On the day' });
     expect(screen.getByRole('heading', { name: 'On the day' })).toBeInTheDocument();
-    expect(links('On the day')).toEqual([['PA desk', '/competitions/4/commentary'], ['TV kiosk', '/competitions/4/tv'], ['Prize-giving', '/competitions/4/prize-giving']]);
+    expect(links('On the day')).toEqual([['PA desk', '/competitions/4/commentary'], ['Race recordings', '/competitions/4/recordings'], ['TV kiosk', '/competitions/4/tv'], ['Prize-giving', '/competitions/4/prize-giving']]);
     // It comes before the competition's own pages.
     expect(day.compareDocumentPosition(screen.getByRole('navigation', { name: 'This competition' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(within(day).getByRole('link', { name: 'TV kiosk' }));
@@ -253,7 +253,7 @@ describe('NavigationDrawer: On the day', () => {
 
   it('carries the chosen age group to the PA desk and TV kiosk', () => {
     mount({ competition: true, roles: ['Admin'], meta: {}, path: '/competitions/4/scoring?section=7', groups: [{ id: 7, name: 'Under 12' }] });
-    expect(links('On the day')).toEqual([['PA desk', '/competitions/4/commentary?section=7'], ['TV kiosk', '/competitions/4/tv?section=7'], ['Prize-giving', '/competitions/4/prize-giving?section=7'], ['Announcements', '/competitions/4/announcements']]);
+    expect(links('On the day')).toEqual([['PA desk', '/competitions/4/commentary?section=7'], ['Race recordings', '/competitions/4/recordings'], ['TV kiosk', '/competitions/4/tv?section=7'], ['Prize-giving', '/competitions/4/prize-giving?section=7'], ['Announcements', '/competitions/4/announcements']]);
   });
 
   it('is not there for a spectator, a signed-out visitor, or a trainer who does not run this competition', () => {

@@ -8,8 +8,13 @@
    The slim header here is only the 42px tab strip and its 1px rule. */
 @media (max-width: 767px) {
   .sx-page > .rf-hd { position: sticky; top: var(--mg-shell-h, 0px); z-index: 11; }
-  .sx-pin { position: sticky; top: calc(var(--mg-shell-h, 0px) + 43px); z-index: 10; display: flex; justify-content: center; padding: 6px 0; background: rgb(var(--mg-ground)); }
+  /* The tab strip's own 8px top margin would collapse out of the header and show a light band above it. */
+  .sx-page > .rf-hd .rf-tabs { margin-top: 0; }
+  .sx-body { padding-top: 0; }
+  /* The picture sits on the header colour, so the tab strip and the pinned picture read as one navy bar, not a light band between them. */
+  .sx-pin { position: sticky; top: calc(var(--mg-shell-h, 0px) + 43px); z-index: 10; display: flex; justify-content: center; padding: 8px 0 12px; margin-inline: -16px; background: rgb(var(--mg-header-bg)); }
   .sx-pin > * { width: 56%; }
+  .sx-chips { margin-top: 12px; }
 }
 .sx-notlive { display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; border-radius: 12px; background: rgb(var(--mg-header-deep)); color: #fff; font: 700 15px/1 var(--mg-font); }
 .sx-note-live { margin: 10px 2px 0; font: 500 13px/1.4 var(--mg-font); color: rgb(var(--mg-muted)); }

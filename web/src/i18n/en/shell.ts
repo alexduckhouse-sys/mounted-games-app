@@ -99,6 +99,7 @@ export const shell = {
   'shell.menu.general': 'General',
   'shell.menu.account': 'Account and management',
   'shell.menu.weather': 'Weather',
+  'shell.menu.raceRecordings': 'Race recordings',
   'shell.menu.teams': 'Teams',
   'shell.menu.following': 'Following',
   'shell.menu.eventShop': 'Event shop',

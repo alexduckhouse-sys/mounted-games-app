@@ -75,7 +75,11 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
     const current = buffer.current;
     // No video right now (between cameras): there is nothing of this race to keep.
     if (!current || !sameArena || !live) return;
-    void prepare((options) => current.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: RACE_RECORDING_SECONDS }), (clip) => { if (raceRef.current.length) tagSavedReplay(clip.id, 'race', raceRef.current); else tagSavedReplay(clip.id, 'race'); });
+    void prepare((options) => current.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: RACE_RECORDING_SECONDS }), (clip) => {
+      // Note which race this is for, so the recordings page can put it under the right heat.
+      const race = latest.card.raceId != null && latest.card.heatId != null ? { raceId: latest.card.raceId, heatId: latest.card.heatId } : undefined;
+      tagSavedReplay(clip.id, 'race', raceRef.current.length ? raceRef.current : undefined, race);
+    });
   }, [scoreCards, arena, prepare, live]);
 
   const instant = useCallback((seconds: number, label: string, onSaved?: (clip: SavedReplayClip) => void) => {

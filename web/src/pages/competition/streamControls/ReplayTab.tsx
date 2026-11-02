@@ -1,3 +1,5 @@
+import { ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Notice } from '../../../components/Notice';
 import { ReplayPreparation } from '../../../components/stream/ReplayPreparation';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -34,7 +36,8 @@ function Row({ clip, open, action, onToggle }: { clip: SavedReplayClip; open: bo
   );
 }
 
-export function ReplayTab({ clips, openId, onOpen, controller, instantLength, onInstantLength }: {
+export function ReplayTab({ competitionId, clips, openId, onOpen, controller, instantLength, onInstantLength }: {
+  competitionId: number;
   clips: SavedReplayClip[];
   openId: string | null;
   onOpen: (clipId: string | null) => void;
@@ -44,7 +47,6 @@ export function ReplayTab({ clips, openId, onOpen, controller, instantLength, on
 }) {
   const { t } = useLanguage();
   const newestFirst = [...clips].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const races = newestFirst.filter((clip) => clip.source === 'race');
   const saved = newestFirst.filter((clip) => clip.source !== 'race');
   const open = clips.find((clip) => clip.id === openId) ?? null;
   const minutes = Math.floor(controller.retainedSeconds / 60);
@@ -63,10 +65,11 @@ export function ReplayTab({ clips, openId, onOpen, controller, instantLength, on
       </RefineNote>
       {controller.warning && <Notice role="status">{controller.warning}</Notice>}
 
-      <RefineSection title={t('desk.stream.rt.raceRecordings')} />
       <RefineList as="div" label={t('desk.stream.rt.raceRecordings')}>
-        {races.length === 0 && <div className="rf-row"><span className="rf-t2">{t('desk.stream.rt.raceEmpty')}</span></div>}
-        {races.map((clip) => <Row key={clip.id} clip={clip} open={openId === clip.id} action={t('desk.stream.rt.watch')} onToggle={() => onOpen(openId === clip.id ? null : clip.id)} />)}
+        <Link to={`/competitions/${competitionId}/recordings`} className="rf-row">
+          <span className="rf-grow"><span className="rf-t1">{t('desk.stream.rt.raceRecordings')}</span><span className="rf-t2">{t('desk.stream.rt.raceRecordingsHint')}</span></span>
+          <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
+        </Link>
       </RefineList>
 
       <RefineSection title={t('desk.stream.rt.instantSaves')} />
