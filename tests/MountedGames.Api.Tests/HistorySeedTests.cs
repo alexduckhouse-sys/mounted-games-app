@@ -158,10 +158,38 @@ public class HistorySeedTests
         Assert.All(posts, p => Assert.True(p.ImageBase64 is null && p.PriceMinor > 0 && !p.IsDeleted));
         var items = await db.Set<CatalogueItem>().ToListAsync();
         Assert.All(items, i => Assert.True(i.ImageUrl is null && i.PriceMinor > 0 && i.IsActive));
-        var upcoming = await db.Competitions.SingleAsync(c => !c.IsArchived);
+        // Every seeded event's shop lists the whole catalogue.
+        var eventIds = await db.Competitions.Select(c => c.Id).ToListAsync();
         var listings = await db.Set<CompetitionListing>().ToListAsync();
-        Assert.Equal(items.Count, listings.Count);
-        Assert.All(listings, l => Assert.True(l.CompetitionId == upcoming.Id && l.Status == CommerceListingStatus.Approved));
+        Assert.Equal(items.Count * eventIds.Count, listings.Count);
+        Assert.Equal(result.Listings, listings.Count);
+        Assert.All(listings, l => Assert.Equal(CommerceListingStatus.Approved, l.Status));
+        Assert.All(eventIds, id => Assert.Equal(items.Count, listings.Count(l => l.CompetitionId == id)));
+    }
+
+    [Fact]
+    public async Task OnTopOfTheReviewEventsEveryShopIsStockedAndEveryTeamHasAProfile()
+    {
+        await using var db = await Database();
+        var reviewEvents = await ReviewCompetitionSeeder.SeedAsync(db, Today, Today);
+        await HistorySeeder.SeedAsync(db, Today);
+        db.ChangeTracker.Clear();
+
+        Assert.True(reviewEvents > 0);
+        var items = await db.Set<CatalogueItem>().CountAsync();
+        var demoIds = await db.Set<EventCommerceSettings>().Where(x => x.IsDemo).Select(x => x.CompetitionId).ToListAsync();
+        Assert.Equal(reviewEvents + 9, demoIds.Count);
+        foreach (var id in demoIds)
+            Assert.Equal(items, await db.Set<CompetitionListing>().CountAsync(l => l.CompetitionId == id));
+
+        // Review teams are entered by the history clubs, so each one's club has a team profile with past results.
+        var profileClubs = await db.Set<TeamProfile>().Select(p => p.ClubId).Distinct().ToListAsync();
+        var teams = await db.Teams.Where(t => !t.Competition!.IsArchived).ToListAsync();
+        Assert.NotEmpty(teams);
+        Assert.All(teams, t => Assert.Contains(t.ClubId, profileClubs));
+        Assert.Equal(12, await db.Clubs.CountAsync());
+        // No section has two teams with the same name, even with more teams than clubs.
+        Assert.All(teams.GroupBy(t => t.CompetitionSectionId), g => Assert.Equal(g.Count(), g.Select(t => t.DisplayName).Distinct().Count()));
     }
 
     [Fact]

@@ -315,6 +315,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.stats.totalPoints': 'Total de points',
   'teams.stats.finalsReached': 'Finales atteintes',
   'teams.stats.noFinals': 'Aucune',
+  'teams.stats.pastStats': 'Voir les statistiques de {name} lors des épreuves précédentes',
   'teams.stats.eachRace': 'Chaque course',
   'teams.stats.raceAverage': '{race} · {average} en moyenne',
   'teams.stats.runsLine': { one: '{count} passage · meilleur {best} · {points} pts au total', other: '{count} passages · meilleur {best} · {points} pts au total' },

@@ -1,12 +1,16 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { CompactPageBarProvider } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, team } from '../../test/factories';
 import type { CompetitionDetail } from '../../types';
 import { CompetitionContext } from './context';
 import { TeamStatsPage } from './TeamStatsPage';
+
+vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
+beforeEach(() => { vi.mocked(api.get).mockResolvedValue({ data: [] }); });
 
 const entries = [1, 2, 3].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
 const scored = (id: number, name: string, results: ReturnType<typeof result>[]) => race(id, { name, isComplete: true, results });
@@ -110,6 +114,22 @@ describe('TeamStatsPage', () => {
     mount(2, competition({ teams: comp.teams, sessions: [session(1, { heats: [heat(1, { entries, races: [race(1, { name: 'Mug Shuffle' })] })] })] }));
     expect(screen.getByText('Stats show once Rockwood has raced.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Race performance' })).toBeNull();
+  });
+
+  it('links to the club profile stats from earlier events before the team has raced', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [
+      { id: 7, clubId: 2, displayName: 'Other club', suffix: '' },
+      { id: 9, clubId: 1, displayName: 'Rockwood U14', suffix: '' },
+    ] });
+    mount(2, competition({ teams: comp.teams, sessions: [session(1, { heats: [heat(1, { entries, races: [race(1, { name: 'Mug Shuffle' })] })] })] }));
+    const link = await screen.findByRole('link', { name: 'See Rockwood U14’s stats from earlier events' });
+    expect(link).toHaveAttribute('href', '/team-profiles/9/stats');
+    expect(api.get).toHaveBeenCalledWith('/team-profiles');
+  });
+
+  it('does not look up past stats once the team has raced', () => {
+    mount();
+    expect(api.get).not.toHaveBeenCalled();
   });
 
   it('handles an unknown team', () => {

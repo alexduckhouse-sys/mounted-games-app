@@ -51,6 +51,11 @@ public static class HistorySeeder
         new("Leicester Forest", "Leicester Forest", "Leicestershire", "Purple"),
     };
 
+    /// <summary>The demo clubs (full name, short team name, region). The review events enter these clubs too, so every
+    /// demo team links to a club team profile with past results.</summary>
+    internal static IReadOnlyList<(string Name, string Short, string Region)> DemoClubs { get; }
+        = Clubs.Select(c => (c.Name, c.Short, c.Region)).ToArray();
+
     private static readonly string[] LegacyClubNames =
     {
         "Hollowbrook Pony Club", "Marlow Heath Pony Club", "Cranmere Riding Club", "Carrowmore Pony Club",
@@ -460,23 +465,29 @@ public static class HistorySeeder
         }
         await db.SaveChangesAsync();
 
-        // Shop: marketplace posts, and a catalogue listed on the upcoming event.
-        var upcomingComp = made.Single(m => m.Def == UpcomingEvent).Comp;
+        // Shop: marketplace posts, and the catalogue listed on every demo-marked event (these history events and any
+        // review events already seeded), so no demo event shop is empty.
         var posts = ShopPosts(today);
         db.ShopPosts.AddRange(posts);
         var items = CatalogueItems();
         db.Set<CatalogueItem>().AddRange(items);
-        foreach (var item in items)
-            db.Set<CompetitionListing>().Add(new CompetitionListing
+        var shopEventIds = await db.Set<EventCommerceSettings>().Where(x => x.IsDemo).Select(x => x.CompetitionId).ToListAsync();
+        var listings = 0;
+        foreach (var competitionId in shopEventIds)
+            foreach (var item in items)
             {
-                Competition = upcomingComp, CatalogueItem = item, SellerUserId = item.SellerUserId,
-                Status = CommerceListingStatus.Approved, ReviewedByUserId = OrganiserId, ReviewedAt = DateTime.UtcNow,
-            });
+                db.Set<CompetitionListing>().Add(new CompetitionListing
+                {
+                    CompetitionId = competitionId, CatalogueItem = item, SellerUserId = item.SellerUserId,
+                    Status = CommerceListingStatus.Approved, ReviewedByUserId = OrganiserId, ReviewedAt = DateTime.UtcNow,
+                });
+                listings++;
+            }
         await db.SaveChangesAsync();
 
         return new HistorySeedResult(
             removed, made.Count, clubs.Count, riders.Count, riders.Count + riders.Count(r => r.AltPony is not null),
-            teamCount, raceCount, resultCount, 1, profiles.Count, posts.Count, items.Count, items.Count);
+            teamCount, raceCount, resultCount, 1, profiles.Count, posts.Count, items.Count, listings);
     }
 
     // ----- teams, sessions, results -----
