@@ -1,9 +1,7 @@
 import type { Message } from '../messages';
 
 export const timing = {
-  "timing.start": "Start race · flag down",
   "timing.skip": "Score without start time",
-  "timing.storage": "The start time couldn’t be saved on this phone. Free some storage or score without a start time.",
   "timing.jump": "Jump to race",
   "timing.choose": "Choose a race",
   "timing.estimated": " (estimated)",

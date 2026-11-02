@@ -1,9 +1,7 @@
 import type { Message } from '../messages';
 
 export const timing = {
-  "timing.start": "Départ de la course · drapeau baissé",
   "timing.skip": "Saisir les scores sans heure de départ",
-  "timing.storage": "L’heure de départ n’a pas pu être enregistrée sur ce téléphone. Libérez de l’espace ou saisissez les scores sans heure de départ.",
   "timing.jump": "Aller à une course",
   "timing.choose": "Choisir une course",
   "timing.estimated": " (estimé)",

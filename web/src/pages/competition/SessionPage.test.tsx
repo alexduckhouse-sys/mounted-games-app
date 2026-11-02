@@ -1318,16 +1318,15 @@ it('clears the in-memory draft and undo action when a race is rerun', async () =
 // Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
 vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));
 
-it('keeps a flag-down tap and arena details with offline scores', async () => {
+it('keeps arena details with offline scores', async () => {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
   const data = scoringData(2);
   mount(data);
-  await userEvent.click(screen.getByRole('button', { name: 'Start race · flag down' }));
+  await opened('Bending');
   await tapRider('Rider 1', 1);
   await tapRider('Rider 2', 2);
   await completeRace();
   const queued = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]');
   expect(queued[0]).toMatchObject({ raceId: 1, sessionName: data.sessions[0].name, lanes: { 1: 1, 2: 2 } });
-  expect(Number.isFinite(Date.parse(queued[0].startedAt))).toBe(true);
   expect(Number.isFinite(Date.parse(queued[0].finishedAt))).toBe(true);
 });

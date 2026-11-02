@@ -4,7 +4,7 @@ import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { ChevronLeft, ChevronRight, CloudOff, Keyboard, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
 import { useT } from '../../i18n/LanguageContext';
-import { discardRaceStart, queueRaceStart, useRaceStart } from '../../offline/raceStartOutbox';
+import { discardRaceStart, useRaceStart } from '../../offline/raceStartOutbox';
 import { useScoringKeys } from '../../hooks/useScoringKeys';
 import type { ScoringKeyAction } from '../../lib/scoringKeys';
 import { ordinal } from '../../lib/toplist';
@@ -44,7 +44,6 @@ interface ScoringProps {
   qualifiers: number;
   pending: PendingPlace[];
   canScore: boolean;
-  viaScorerLink?: boolean;
   /** History uses signed-in organiser endpoints; scorer links must not enable it. */
   allowAudit?: boolean;
   queued: QueuedScore[];
@@ -136,7 +135,7 @@ async function attempt(action: () => Promise<void> | void): Promise<void> {
 }
 
 export function ScoringSection({
-  competitionId = null, heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued, viaScorerLink = false,
+  competitionId = null, heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason, allowAudit = false,
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints, onDeadHeat, onClearDeadHeat,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
@@ -145,8 +144,6 @@ export function ScoringSection({
 }: ScoringProps) {
   const t = useT();
   const localStart = useRaceStart(activeRace?.id, activeRace?.startIsExplicit ? activeRace.startedAt : null, activeRace?.isComplete, activeRace?.programmeRevision ?? 0);
-  const [skippedStart, setSkippedStart] = useState<number | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -246,9 +243,7 @@ export function ScoringSection({
   const allComplete = races.length > 0 && races.every((r) => r.isComplete || queuedByRace.has(r.id));
   const saved = Boolean(activeRace && (activeRace.isComplete || activeQueued));
   // A saved race is read only until the scorer chooses to edit it.
-  const needsStart = canScore && !saved && activeRace && !localStart
-    && !(activeRace.startIsExplicit && activeRace.startedAt) && skippedStart !== activeRace.id;
-  const live = canScore && (!saved || editing) && !needsStart;
+  const live = canScore && (!saved || editing);
   const canSave = racingRows.length > 0 && (doneCount >= racingRows.length || (isQualifier && placedCount >= Math.min(qualifiers, racingRows.length)));
   const fillRef = useFillScreen(Boolean(activeRace) && !allComplete, activeRace?.id);
   const lanes = activeRace ? raceLanes(heat, laneIdx, laneRules, laneHatbands) : [];
@@ -416,16 +411,7 @@ export function ScoringSection({
               </Notice>
             )}
 
-            {localStart?.error && <Notice>{localStart.error} <button type="button" className="underline" onClick={() => { if (discardRaceStart(activeRace.id, activeRace.programmeRevision ?? 0)) setSkippedStart(activeRace.id); }}>{t('timing.skip')}</button></Notice>}
-            {needsStart && <div className="space-y-2 px-3 py-2 text-center">
-              {startError && <Notice>{startError}</Notice>}
-              <button type="button" className="mg-btn mg-btn-primary" onClick={() => {
-                if (!queueRaceStart(activeRace.id, viaScorerLink, undefined, activeRace.programmeRevision ?? 0)) {
-                  setStartError(t('timing.storage'));
-                } else setStartError(null);
-              }}>{t('timing.start')}</button>
-              <button type="button" className="block w-full min-h-11 text-sm underline" onClick={() => { setSkippedStart(activeRace.id); setStartError(null); }}>{t('timing.skip')}</button>
-            </div>}
+            {localStart?.error && <Notice>{localStart.error} <button type="button" className="underline" onClick={() => discardRaceStart(activeRace.id, activeRace.programmeRevision ?? 0)}>{t('timing.skip')}</button></Notice>}
             <ul className="sc-rows">
               {rows.map((e) => {
                 const lane = displayLaneFor(heat, e, laneIdx, laneRules);
@@ -480,8 +466,6 @@ export function ScoringSection({
               </div>
             )}
 
-            {needsStart && <button type="button" className="sc-tool-btn" aria-label="Race tools" onClick={() => setToolsOpen(true)}><MoreHorizontal className="h-5 w-5" aria-hidden="true" /></button>}
-            {needsStart && onUndo && <button type="button" className="sc-tool-btn" aria-label={undoLabel} onClick={onUndo}><Undo2 className="h-5 w-5" aria-hidden="true" /></button>}
             {review.length > 0 && (
               <section className="sc-review" aria-label="Finishing order">
                 <h4 className="sc-review-title">Check the order</h4>

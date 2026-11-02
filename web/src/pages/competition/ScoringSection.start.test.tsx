@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { heat, race } from '../../test/factories';
 import { ScoringSection } from './ScoringSection';
@@ -13,17 +13,10 @@ function setup() {
     pending={[]} canScore queued={[]} onClickTeam={vi.fn()} onToggleElim={vi.fn()} onReset={vi.fn()} onSubmit={vi.fn()}
     correctionReason="" onCorrectionReason={vi.fn()} />);
 }
-it('unlocks offline after saving the start and stays unlocked after reload', () => {
-  const view = setup();
-  expect(screen.getByRole('button', { name: /Test team, lane/ })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Start race · flag down' }));
-  expect(raceStartFor(1)).toBeTruthy();
-  expect(screen.getByRole('button', { name: /Test team, lane/ })).not.toBeDisabled();
-  view.unmount(); setup();
+it('opens a race for scoring straight away, with no start button', () => {
+  setup();
   expect(screen.queryByRole('button', { name: 'Start race · flag down' })).toBeNull();
-});
-it('allows a missed start to be scored without inventing a timestamp', () => {
-  setup(); fireEvent.click(screen.getByRole('button', { name: 'Score without start time' }));
-  expect(raceStartFor(1)).toBeUndefined();
+  expect(screen.queryByRole('button', { name: 'Score without start time' })).toBeNull();
   expect(screen.getByRole('button', { name: /Test team, lane/ })).not.toBeDisabled();
+  expect(raceStartFor(1)).toBeUndefined();
 });
