@@ -4,9 +4,14 @@ MG App manages Mounted Games competitions on phones at events: organisers handle
 
 Read `APP_DESIGN.md` before changing behaviour, `docs/designs/design-decisions.md` for the house style and per-page UI/UX rules (25–27 October 2026; every UI PR ticks its "Before you open a UI pull request" checklist), and `PRODUCT_DETAILS.md` for the lifecycle. `docs/README.md` says which docs are current. Check implementation where older documentation disagrees.
 
+**First-time-right UI:** follow `docs/designs/design-decisions.md` strictly:
+1. **No pill-button soup:** At most ONE filled primary pill per view. Use `<RefineChoiceRow>` (dropdown row), `<RefineSwitchRow>` (switch), `<Stepper>` / `<RefineQty>` (numbers), `<RefineDateTimeRow>` (date/time), `.ops-addbar` (`+ Add …` grey bar), and `.ops-danger-link` (red underlined text for destructive actions).
+2. **No phone overstacking (`390×844`):** Never stack buttons on top of each other or add new strips/pills above the main list or scoring lanes. Secondary tools go inside the existing `⋯` menu (`RaceToolsSheet` / `<RefineMenu>`) or a `<Sheet>`. At most 2 buttons side-by-side in an action row, and 1 control on the right of each `.rf-row`.
+3. **No pointless tiny text:** Never add small grey helper sentences (`.sp-note`, `<RefineNote>`, `text-xs`, or Sheet `description`) that just repeat what the heading or label already says.
+
 Each area has its own guide, loaded when you work there: `api/CLAUDE.md` (glossary, change recipes, scoring rules), `web/CLAUDE.md` (pages, hub events, offline, tests) and `tests/CLAUDE.md` (API test helpers). Each has an `AGENTS.md` symlink for Codex.
 
-Audited workspace skills in `.agents/skills/` (also symlinked into `~/.claude/skills/` and `~/.gemini/config/plugins/shared-from-claude/skills/`):
+Audited workspace skills in `.agents/skills/` (Claude reads them through the `.claude/skills` link; Codex and Antigravity read `.agents/skills` directly). General versions for any repo are the `audit-*` skills in `~/.claude/skills/`:
 - `mg-security-audit` — OWASP, auth, MasterAdmin/locks/blocks, IDOR, child safeguarding (`UseInitialOnly`), GDPR PII redaction, CSP/`/embed/`, SignalR and rate-limit audit runbook.
 - `mg-ui-ux-audit` — Slick minimalist visual polish, responsive phone (`390×844`) & desktop (`1440×900`), 5 themes, Lite mode, WCAG 2.2 AA, `docs/designs/design-decisions.md` and copywriting (`humanise`) audit runbook.
 - `mg-animations-audit` — Framer Motion & CSS motion, `250ms→600ms` hold-to-eliminate, climbing rows, saved tick, celebrations, stream overlays, Follow-Cam replay, `prefers-reduced-motion`, 60fps and new micro-animation opportunities runbook.
